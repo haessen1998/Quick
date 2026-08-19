@@ -1,0 +1,13 @@
+[Desktop Entry]
+Version=1.0
+Name=My Product
+Comment=A Quick application
+# The Exec line includes %u to pass the URL to the application
+Exec=/usr/local/bin/quick.exe %u
+Terminal=false
+Type=Application
+Icon=quick.exe
+Categories=Utility;
+StartupWMClass=quick.exe
+
+ 
