@@ -1,15 +1,21 @@
-import { useEffect, useRef, useState } from "react"
+import { lazy, Suspense, useEffect, useRef, useState } from "react"
 import {
   ArrowRight,
+  ArrowLeftRight,
   Blocks,
-  BookOpen,
   CheckCircle2,
   CircleUserRound,
+  Clock3,
+  FileCheck2,
+  Files,
   Gauge,
+  GitBranch,
   Home,
   LayoutDashboard,
   Moon,
   CaseSensitive,
+  Network,
+  ShieldCheck,
   Settings,
   Sparkles,
   Sun,
@@ -40,9 +46,17 @@ import {
 } from "@/components/ui/sidebar"
 import { cn } from "@/lib/utils"
 import { getInitialTheme, type AppTheme } from "@/lib/theme"
-import StringToolsPage from "@/pages/StringToolsPage"
+import { getInitialProxySettings, saveProxySettings, type ProxySettings } from "@/lib/proxy"
 
-type PageId = "home" | "dashboard" | "strings" | "components" | "settings"
+const CryptoPage = lazy(() => import("@/pages/CryptoPage"))
+const DataConversionPage = lazy(() => import("@/pages/DataConversionPage"))
+const NetworkPage = lazy(() => import("@/pages/NetworkPage"))
+const StringToolsPage = lazy(() => import("@/pages/StringToolsPage"))
+const TextWorkbenchPage = lazy(() => import("@/pages/TextWorkbenchPage"))
+const TimeIdentifiersPage = lazy(() => import("@/pages/TimeIdentifiersPage"))
+const ValidationPage = lazy(() => import("@/pages/ValidationPage"))
+
+type PageId = "home" | "dashboard" | "formatter" | "converter" | "time-ids" | "validation" | "crypto" | "network" | "text-workbench" | "components" | "settings"
 
 type PageDefinition = {
   id: PageId
@@ -54,7 +68,13 @@ type PageDefinition = {
 const pages: PageDefinition[] = [
   { id: "home", label: "首页", description: "Wails 欢迎页", icon: Home },
   { id: "dashboard", label: "概览", description: "运行状态与数据", icon: LayoutDashboard },
-  { id: "strings", label: "字符串处理", description: "格式化、压缩与编码", icon: CaseSensitive },
+  { id: "formatter", label: "字符串格式化", description: "JSON、YAML、XML、HTML、CSS 与 JavaScript", icon: CaseSensitive },
+  { id: "converter", label: "数据转换", description: "格式、编码、代码模型与进制互转", icon: ArrowLeftRight },
+  { id: "time-ids", label: "时间与标识符", description: "时间戳、时区、Cron 与 ID 生成", icon: Clock3 },
+  { id: "validation", label: "校验工具", description: "JSONPath、XPath 与正则表达式", icon: FileCheck2 },
+  { id: "crypto", label: "加密与验证", description: "哈希、AES、RSA 与 JWT", icon: ShieldCheck },
+  { id: "network", label: "网络工具", description: "Ping、DNS、端口、CIDR 与 HTTP", icon: Network },
+  { id: "text-workbench", label: "文本工作台", description: "Markdown 预览与文本差异比较", icon: Files },
   { id: "components", label: "组件测试", description: "交互组件预览", icon: Blocks },
   { id: "settings", label: "设置", description: "应用偏好选项", icon: Settings },
 ]
@@ -66,8 +86,8 @@ function AppSidebar({ activePage, onNavigate }: { activePage: PageId; onNavigate
 
   return (
     <Sidebar>
-      <SidebarHeader className="border-b border-sidebar-border">
-        <div className={cn("flex h-10 items-center gap-3 overflow-hidden px-1", !open && "md:justify-center")}>
+      <SidebarHeader className="h-14 border-b border-sidebar-border px-2 py-0">
+        <div className={cn("flex h-full items-center gap-3 overflow-hidden px-1", !open && "md:justify-center")}>
           <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-sm font-bold text-primary-foreground">
             Q
           </div>
@@ -109,11 +129,11 @@ function AppSidebar({ activePage, onNavigate }: { activePage: PageId; onNavigate
             "app-interactive flex h-9 items-center gap-3 overflow-hidden rounded-lg px-2.5 text-sm text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
             !open && "md:justify-center md:px-0",
           )}
-          data-wml-openURL="https://ui.shadcn.com/docs/components/sidebar"
-          aria-label="Sidebar 文档"
+          data-wml-openurl="https://github.com/haessen1998/Quick"
+          aria-label="Quick GitHub 仓库"
         >
-          <BookOpen className="size-4 shrink-0" />
-          <span className={cn("truncate", !open && "md:hidden")}>Sidebar 文档</span>
+          <GitBranch className="size-4 shrink-0" />
+          <span className={cn("truncate", !open && "md:hidden")}>GitHub 仓库</span>
         </a>
         <div className={cn("flex items-center gap-3 overflow-hidden px-2 py-1", !open && "md:justify-center md:px-0")}>
           <CircleUserRound className="size-7 shrink-0 text-sidebar-foreground/65" />
@@ -163,10 +183,10 @@ function HomePage({ time }: { time: string }) {
     <section className="home-page">
       <main className="home-container">
         <header className="brand">
-          <a className="brand-mark" data-wml-openURL="https://v3.wails.io" aria-label="Wails website">
+          <a className="brand-mark" data-wml-openurl="https://v3.wails.io" aria-label="Wails website">
             <img src="/wails.png" className="brand-logo" alt="Wails logo" />
           </a>
-          <a className="brand-badge" data-wml-openURL="https://reactjs.org" aria-label="React">
+          <a className="brand-badge" data-wml-openurl="https://reactjs.org" aria-label="React">
             <img src="/react.svg" alt="React logo" />
           </a>
         </header>
@@ -207,7 +227,7 @@ function HomePage({ time }: { time: string }) {
           <Gauge aria-hidden="true" />
           <span>{time}</span>
         </span>
-        <a className="footer-docs" data-wml-openURL="https://v3.wails.io" aria-label="Wails documentation">
+        <a className="footer-docs" data-wml-openurl="https://v3.wails.io" aria-label="Wails documentation">
           Docs
           <ArrowRight aria-hidden="true" />
         </a>
@@ -238,8 +258,8 @@ function PageShell({ page, children }: { page: PageDefinition; children: React.R
 function DashboardPage({ page }: { page: PageDefinition }) {
   const metrics = [
     { label: "前端状态", value: "运行中", detail: "Vite · 9345", icon: CheckCircle2 },
-    { label: "页面数量", value: "4", detail: "1 个首页，3 个测试页", icon: LayoutDashboard },
-    { label: "组件数量", value: "2", detail: "Button · Sidebar", icon: Blocks },
+    { label: "页面数量", value: "11", detail: "开发工具与应用设置", icon: LayoutDashboard },
+    { label: "工具类别", value: "7", detail: "格式、转换、时间、校验、加密、网络、文本", icon: Blocks },
   ]
 
   return (
@@ -325,10 +345,14 @@ function SettingsPage({
   page,
   theme,
   onThemeChange,
+  proxy,
+  onProxyChange,
 }: {
   page: PageDefinition
   theme: AppTheme
   onThemeChange: (theme: AppTheme) => void
+  proxy: ProxySettings
+  onProxyChange: (proxy: ProxySettings) => void
 }) {
   const [autoStart, setAutoStart] = useState(true)
   const [notifications, setNotifications] = useState(false)
@@ -384,6 +408,31 @@ function SettingsPage({
 
       <article className="rounded-xl border bg-card text-card-foreground shadow-sm">
         <div className="border-b p-6">
+          <h2 className="font-medium">网络代理</h2>
+          <p className="mt-1 text-sm text-muted-foreground">应用于网络工具中的 HTTP 请求；Ping、DNS 与 TCP 检测不经过 HTTP 代理。</p>
+        </div>
+        <div className="space-y-4 p-6">
+          <div className="grid gap-3 sm:grid-cols-3">
+            {([
+              { mode: "system", label: "系统/环境代理", description: "跟随 HTTP_PROXY 等系统环境" },
+              { mode: "custom", label: "指定代理", description: "使用自定义代理 URL" },
+              { mode: "none", label: "不使用代理", description: "HTTP 请求直接连接" },
+            ] as const).map((option) => (
+              <button key={option.mode} type="button" className={cn("app-interactive rounded-xl border p-4 text-left transition-colors hover:bg-muted", proxy.mode === option.mode && "border-primary bg-muted ring-1 ring-primary")} onClick={() => onProxyChange({ ...proxy, mode: option.mode })}>
+                <span className="block text-sm font-medium">{option.label}</span>
+                <span className="mt-1 block text-xs text-muted-foreground">{option.description}</span>
+              </button>
+            ))}
+          </div>
+          <label className="block space-y-2 text-sm">
+            <span>代理地址</span>
+            <input className="h-10 w-full rounded-lg border border-input bg-transparent px-3 outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50" disabled={proxy.mode !== "custom"} value={proxy.url} onChange={(event) => onProxyChange({ ...proxy, url: event.target.value })} placeholder="http://127.0.0.1:7890 或 socks5://127.0.0.1:1080" />
+          </label>
+        </div>
+      </article>
+
+      <article className="rounded-xl border bg-card text-card-foreground shadow-sm">
+        <div className="border-b p-6">
           <h2 className="font-medium">通用设置</h2>
           <p className="mt-1 text-sm text-muted-foreground">这些选项仅用于演示页面交互。</p>
         </div>
@@ -428,6 +477,7 @@ function App() {
     document.documentElement.classList.toggle("dark", initialTheme === "dark")
     return initialTheme
   })
+  const [proxy, setProxy] = useState<ProxySettings>(() => getInitialProxySettings())
   const currentPage = pages.find((page) => page.id === activePage) ?? pages[0]
 
   useEffect(() => {
@@ -448,6 +498,10 @@ function App() {
     window.localStorage.setItem("quick-theme", theme)
   }, [theme])
 
+  useEffect(() => {
+    saveProxySettings(proxy)
+  }, [proxy])
+
   const changeTheme = (nextTheme: AppTheme) => {
     setTheme(nextTheme)
     toast.success(nextTheme === "dark" ? "已切换到深色主题" : "已切换到浅色主题")
@@ -464,17 +518,21 @@ function App() {
             <div className="truncate text-sm font-medium">{currentPage.label}</div>
             <div className="truncate text-xs text-muted-foreground">{currentPage.description}</div>
           </div>
-          <div className="ml-auto hidden items-center gap-2 rounded-full border bg-background/70 px-3 py-1 text-xs text-muted-foreground sm:flex">
-            <span className="size-1.5 rounded-full bg-emerald-500" />
-            Wails connected
-          </div>
         </header>
 
-        {activePage === "home" && <HomePage time={time} />}
-        {activePage === "dashboard" && <DashboardPage page={currentPage} />}
-        {activePage === "strings" && <StringToolsPage />}
-        {activePage === "components" && <ComponentsPage page={currentPage} />}
-        {activePage === "settings" && <SettingsPage page={currentPage} theme={theme} onThemeChange={changeTheme} />}
+        <Suspense fallback={<div className="page-shell text-sm text-muted-foreground">正在加载工具…</div>}>
+          {activePage === "home" && <HomePage time={time} />}
+          {activePage === "dashboard" && <DashboardPage page={currentPage} />}
+          {activePage === "formatter" && <StringToolsPage />}
+          {activePage === "converter" && <DataConversionPage />}
+          {activePage === "time-ids" && <TimeIdentifiersPage />}
+          {activePage === "validation" && <ValidationPage />}
+          {activePage === "crypto" && <CryptoPage />}
+          {activePage === "network" && <NetworkPage proxy={proxy} />}
+          {activePage === "text-workbench" && <TextWorkbenchPage />}
+          {activePage === "components" && <ComponentsPage page={currentPage} />}
+          {activePage === "settings" && <SettingsPage page={currentPage} theme={theme} onThemeChange={changeTheme} proxy={proxy} onProxyChange={setProxy} />}
+        </Suspense>
       </SidebarInset>
       <Toaster theme={theme} position="top-right" richColors closeButton />
     </SidebarProvider>
