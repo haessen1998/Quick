@@ -61,8 +61,13 @@ function textToUnicode(input: string) {
 }
 
 function unicodeToText(input: string) {
-  if (!/^(?:\\u[0-9a-fA-F]{4}|\s)+$/.test(input.trim())) throw new Error("请输入由 \\uXXXX 组成的 Unicode 转义文本")
-  return JSON.parse(`"${input.replace(/\s+/g, "")}"`)
+  let matched = false
+  const decoded = input.replace(/\\u([0-9a-fA-F]{4})/g, (_escape, hex: string) => {
+    matched = true
+    return String.fromCharCode(Number.parseInt(hex, 16))
+  })
+  if (!matched) throw new Error("未找到有效的 \\uXXXX Unicode 转义")
+  return decoded
 }
 
 function parseByteList(input: string, radix: number) {
@@ -170,7 +175,7 @@ const modules: ConversionModule[] = [
   {
     id: "encoding", label: "字符串编码", description: "转义、URL、Base64 与 Unicode 双向转换", icon: TextQuote,
     sources: encodingFormats, targets: encodingFormats, defaultSource: "text", defaultTarget: "base64",
-    samples: { text: "Quick 你好", escaped: 'Hello\\n\\u4f60\\u597d \\"Quick\\"', url: "Quick%20%E4%BD%A0%E5%A5%BD", base64: "UXVpY2sg5L2g5aW9", unicode: "\\u0051\\u0075\\u0069\\u0063\\u006b\\u0020\\u4f60\\u597d" },
+    samples: { text: "Quick 你好", escaped: 'Hello\\n\\u4f60\\u597d \\"Quick\\"', url: "Quick%20%E4%BD%A0%E5%A5%BD", base64: "UXVpY2sg5L2g5aW9", unicode: "Quick：\\u4f60\\u597d，状态：\\u2705，出发：\\ud83d\\ude80" },
     convert: (input, source, target) => {
       const text = source === "text" ? input : source === "escaped" ? unescapeString(input) : source === "url" ? decodeURIComponent(input) : source === "base64" ? decodeBase64(input) : unicodeToText(input)
       return target === "text" ? text : target === "escaped" ? escapeString(text) : target === "url" ? encodeURIComponent(text) : target === "base64" ? encodeBase64(text) : textToUnicode(text)
