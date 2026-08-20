@@ -1,59 +1,97 @@
-# Welcome to Your New Wails3 Project!
+# Quick
 
-Congratulations on generating your Wails3 application! This README will guide you through the next steps to get your project up and running.
+Quick 是一个基于 Wails 3、Go、React 和 shadcn/ui 构建的跨平台开发者工具箱。
 
-## Getting Started
+项目以本地优先为原则，把日常开发中零散、高频的格式化、转换、校验、网络和加密操作集中到一个轻量桌面应用中。功能会随着实际使用持续补充。
 
-1. Navigate to your project directory in the terminal.
+## 功能
 
-2. To run your application in development mode, use the following command:
+- 字符串格式化：JSON、YAML、XML、HTML、CSS、JavaScript 的格式化与压缩。
+- 数据转换：命名风格、JSON/YAML/XML/CSV/TOML、字符串编码、字节、代码模型和进制转换。
+- 时间与标识符：Unix 时间戳、时区、日期差值、Cron、UUID、ULID、雪花 ID 和随机内容生成。
+- 校验工具：JSONPath、XPath 和支持常用 flags 的正则表达式匹配。
+- 加密与验证：MD5、SHA、HMAC、AES-GCM、RSA 和 JWT。
+- 网络工具：Ping、DNS、TCP 端口、CIDR、HTTP/cURL 双向转换及本地进程查询。
+- 文本工作台：Markdown 安全预览，以及行级、单词级和字符级文本差异比较。
+- 浅色与深色主题、HTTP 代理策略。
 
-   ```
-   wails3 dev
-   ```
+## 技术栈
 
-   This will start your application and enable hot-reloading for both frontend and backend changes.
+- [Wails 3](https://v3.wails.io/) + Go
+- React 18 + TypeScript + Vite
+- Tailwind CSS 4 + shadcn/ui
+- Wails 自动生成的 TypeScript 前后端绑定
 
-3. To build your application for production, use:
+## 环境要求
 
-   ```
-   wails3 build
-   ```
+- Go 1.25 或兼容版本
+- Wails CLI `v3.0.0-beta.9`
+- Node.js 和 npm
+- 对应平台的 Wails 构建依赖
 
-   This will create a production-ready executable in the `build` directory.
+可以使用下面的命令检查 Wails 环境：
 
-## Exploring Wails3 Features
+```powershell
+wails3 doctor
+```
 
-Now that you have your project set up, it's time to explore the features that Wails3 offers:
+## 本地开发
 
-1. **Check out the examples**: The best way to learn is by example. Visit the `examples` directory in the `v3/examples` directory to see various sample applications.
+```powershell
+git clone https://github.com/haessen1998/Quick.git
+cd Quick
+npm install --prefix frontend
+wails3 task dev
+```
 
-2. **Run an example**: To run any of the examples, navigate to the example's directory and use:
+开发服务器默认使用 `127.0.0.1:9245`。完整功能需要在 Wails 桌面窗口中运行；直接用浏览器访问 Vite 地址只能预览前端界面。
 
-   ```
-   go run .
-   ```
+## 构建与打包
 
-   Note: Some examples may be under development during the alpha phase.
+构建当前平台的应用：
 
-3. **Explore the documentation**: Visit the [Wails3 documentation](https://v3.wails.io/) for in-depth guides and API references.
+```powershell
+wails3 task build
+```
 
-4. **Join the community**: Have questions or want to share your progress? Join the [Wails Discord](https://discord.gg/JDdSxwjhGf) or visit the [Wails discussions on GitHub](https://github.com/wailsapp/wails/discussions).
+生成当前平台的分发包：
 
-## Project Structure
+```powershell
+wails3 task package
+```
 
-Take a moment to familiarize yourself with your project structure:
+产物默认写入 `bin/`。平台相关任务和签名配置位于 `build/` 目录。
 
-- `frontend/`: Contains your frontend code (HTML, CSS, JavaScript/TypeScript)
-- `main.go`: The entry point of your Go backend
-- `app.go`: Define your application structure and methods here
-- `wails.json`: Configuration file for your Wails project
+## 常用检查
 
-## Next Steps
+```powershell
+# 前端类型检查与生产构建
+npm run build --prefix frontend
 
-1. Modify the frontend in the `frontend/` directory to create your desired UI.
-2. Add backend functionality in `main.go`.
-3. Use `wails3 dev` to see your changes in real-time.
-4. When ready, build your application with `wails3 build`.
+# Go 测试
+go test ./...
 
-Happy coding with Wails3! If you encounter any issues or have questions, don't hesitate to consult the documentation or reach out to the Wails community.
+# 重新生成 Wails TypeScript 绑定
+wails3 generate bindings -clean -ts -i
+```
+
+## 项目结构
+
+```text
+Quick/
+├─ frontend/                 React 前端、组件和生成绑定
+├─ build/                    跨平台构建、打包和签名配置
+├─ main.go                   Wails 应用入口
+├─ networkservice.go         网络与本地进程后台服务
+├─ process_windows.go        Windows 进程查询实现
+├─ process_unix.go           macOS/Linux 进程查询实现
+└─ Taskfile.yml              开发、构建和打包任务入口
+```
+
+## 项目状态
+
+Quick 目前处于持续开发阶段，功能和界面仍会迭代。欢迎通过 [Issues](https://github.com/haessen1998/Quick/issues) 提交问题或建议。
+
+## License
+
+本项目采用仓库中 [LICENSE](./LICENSE) 文件所声明的许可证。

@@ -123,6 +123,114 @@ body {
     text-align: left;
 }
 
+.quick-hero {
+    max-width: 48rem;
+}
+.quick-hero-kicker {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+    color: var(--legacy-muted);
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+}
+.quick-hero-kicker svg { width: 1rem; height: 1rem; color: #ff4d67; }
+.quick-hero-heading { margin: 0; line-height: 1; overflow: visible; }
+.quick-hero-title {
+    color: var(--text);
+    font-size: clamp(4.5rem, 12vw, 9rem);
+    font-weight: 950;
+    letter-spacing: 0.045em;
+}
+.glitch-text {
+    position: relative;
+    display: inline-block;
+    line-height: 1;
+    vertical-align: top;
+    white-space: nowrap;
+    user-select: none;
+}
+.glitch-text::before,
+.glitch-text::after {
+    content: attr(data-text);
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    color: inherit;
+    pointer-events: none;
+    clip-path: inset(0 0 0 0);
+}
+.glitch-text::before {
+    left: -5px;
+    text-shadow: var(--glitch-before-shadow);
+    animation: quick-glitch var(--glitch-before-duration) infinite linear alternate-reverse;
+}
+.glitch-text::after {
+    left: 5px;
+    text-shadow: var(--glitch-after-shadow);
+    animation: quick-glitch var(--glitch-after-duration) infinite linear alternate-reverse;
+}
+.glitch-text--hover::before,
+.glitch-text--hover::after {
+    opacity: 0;
+    animation: none;
+}
+.glitch-text--hover:hover::before,
+.glitch-text--hover:hover::after {
+    opacity: 1;
+}
+.glitch-text--hover:hover::before { animation: quick-glitch var(--glitch-before-duration) infinite linear alternate-reverse; }
+.glitch-text--hover:hover::after { animation: quick-glitch var(--glitch-after-duration) infinite linear alternate-reverse; }
+@keyframes quick-glitch {
+    0% { clip-path: inset(0 0 82% 0); }
+    10% { clip-path: inset(12% 0 65% 0); }
+    20% { clip-path: inset(28% 0 52% 0); }
+    30% { clip-path: inset(45% 0 36% 0); }
+    40% { clip-path: inset(62% 0 20% 0); }
+    50% { clip-path: inset(80% 0 2% 0); }
+    60% { clip-path: inset(55% 0 25% 0); }
+    70% { clip-path: inset(35% 0 45% 0); }
+    80% { clip-path: inset(70% 0 10% 0); }
+    90% { clip-path: inset(8% 0 72% 0); }
+    100% { clip-path: inset(0); }
+}
+.quick-hero-subtitle {
+    max-width: 40rem;
+    margin: 1.5rem 0 0;
+    color: var(--legacy-muted);
+    font-size: clamp(1rem, 2vw, 1.15rem);
+    line-height: 1.8;
+}
+.quick-hero-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 1.4rem;
+}
+.quick-hero-tags span {
+    padding: 0.35rem 0.65rem;
+    border: 1px solid var(--glass-border);
+    border-radius: 999px;
+    background: var(--glass);
+    color: var(--legacy-muted);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.68rem;
+    letter-spacing: 0.08em;
+    backdrop-filter: blur(10px);
+}
+.quick-hero-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-top: 2rem;
+}
+.quick-hero-actions [data-slot="button"] { height: 2.5rem; padding-inline: 1rem; }
+@media (prefers-reduced-motion: reduce) {
+    .glitch-text::before, .glitch-text::after { animation: none !important; opacity: 0 !important; }
+}
+
 /* ----- Application shell -------------------------------------------------- */
 .app-topbar {
     position: sticky;
@@ -171,6 +279,7 @@ body {
     flex: 1;
     padding: clamp(1.5rem, 4vw, 3rem);
     background: var(--background);
+    --wails-draggable: no-drag;
 }
 
 /* ----- Brand row ----------------------------------------------------------- */
@@ -389,6 +498,9 @@ input[type="text"] {
         padding: max(var(--s-3), env(safe-area-inset-top)) var(--s-3) 0;
     }
     .home-container { align-items: center; text-align: center; margin: 0 auto; }
+    .quick-hero-subtitle { margin-left: auto; margin-right: auto; }
+    .quick-hero-tags, .quick-hero-actions { justify-content: center; }
+    .quick-hero-title { font-size: clamp(3.8rem, 20vw, 6rem); }
     /* Stack the title onto two lines ("Wails +" / "Javascript") like the target. */
     .title-accent { display: block; }
     .subtitle { margin-left: auto; margin-right: auto; }

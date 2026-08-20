@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Braces, CheckCircle2, Copy, FileKey2, KeyRound, LockKeyhole, Play, RefreshCw, ShieldCheck, Sparkles } from "lucide-react"
+import { Braces, CheckCircle2, Copy, Eye, EyeOff, FileKey2, KeyRound, LockKeyhole, Play, RefreshCw, ShieldCheck, Sparkles } from "lucide-react"
 import { md5 } from "hash-wasm"
 import { decodeJwt, decodeProtectedHeader, jwtVerify, SignJWT } from "jose"
 import { toast } from "sonner"
@@ -10,6 +10,12 @@ const inputClass = "app-interactive w-full rounded-lg border border-input bg-bac
 const textAreaClass = `${inputClass} resize-none font-mono leading-6`
 const encoder = new TextEncoder()
 const decoder = new TextDecoder()
+
+function SecretInput({ value, onChange, placeholder, disabled = false }: { value: string; onChange: (value: string) => void; placeholder: string; disabled?: boolean }) {
+  const [visible, setVisible] = useState(false)
+  const Icon = visible ? EyeOff : Eye
+  return <div className="relative"><input className={`${inputClass} pr-10`} type={visible ? "text" : "password"} disabled={disabled} value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} /><button type="button" className="app-interactive absolute inset-y-0 right-0 flex w-10 items-center justify-center text-muted-foreground hover:text-foreground disabled:opacity-40" disabled={disabled} onClick={() => setVisible((current) => !current)} aria-label={visible ? `隐藏${placeholder}` : `显示${placeholder}`}><Icon className="size-4" /></button></div>
+}
 
 function bytesToBase64(value: ArrayBuffer | Uint8Array) {
   const bytes = value instanceof Uint8Array ? value : new Uint8Array(value)
@@ -170,7 +176,7 @@ export default function CryptoPage() {
             <div className="mt-3 grid gap-3 sm:grid-cols-[10rem_auto_1fr_auto]">
               <select className={inputClass} value={hashAlgorithm} onChange={(event) => setHashAlgorithm(event.target.value)}><option>MD5</option><option>SHA-1</option><option>SHA-256</option><option>SHA-512</option></select>
               <label className="flex items-center gap-2 rounded-lg border px-3 text-sm"><input type="checkbox" checked={hmacEnabled} onChange={(event) => setHmacEnabled(event.target.checked)} />HMAC</label>
-              <input className={inputClass} disabled={!hmacEnabled} value={hmacSecret} onChange={(event) => setHmacSecret(event.target.value)} placeholder="HMAC 密钥" />
+              <SecretInput disabled={!hmacEnabled} value={hmacSecret} onChange={setHmacSecret} placeholder="HMAC 密钥" />
               <Button onClick={runHash}><Play />计算</Button>
             </div>
             <div className="mt-3 flex gap-2"><div className="min-h-10 min-w-0 flex-1 rounded-lg border bg-muted/40 p-3 font-mono text-xs break-all">{hashOutput || "等待计算"}</div><Button variant="outline" size="icon" disabled={!hashOutput} onClick={() => copy(hashOutput)}><Copy /></Button></div>
@@ -178,7 +184,7 @@ export default function CryptoPage() {
 
           <article className="rounded-xl border bg-card p-5 shadow-sm">
             <div className="flex items-center gap-2 font-medium"><LockKeyhole className="size-4" />AES-256-GCM 加密/解密</div>
-            <div className="mt-4 grid gap-3 sm:grid-cols-[9rem_1fr_auto]"><select className={inputClass} value={aesMode} onChange={(event) => setAesMode(event.target.value as typeof aesMode)}><option value="encrypt">加密</option><option value="decrypt">解密</option></select><input className={inputClass} type="password" value={aesPassword} onChange={(event) => setAesPassword(event.target.value)} placeholder="密码" /><Button onClick={runAes}><Play />执行</Button></div>
+            <div className="mt-4 grid gap-3 sm:grid-cols-[9rem_1fr_auto]"><select className={inputClass} value={aesMode} onChange={(event) => setAesMode(event.target.value as typeof aesMode)}><option value="encrypt">加密</option><option value="decrypt">解密</option></select><SecretInput value={aesPassword} onChange={setAesPassword} placeholder="AES 密码" /><Button onClick={runAes}><Play />执行</Button></div>
             <textarea className={`${textAreaClass} mt-3 h-28`} value={aesInput} onChange={(event) => setAesInput(event.target.value)} placeholder={aesMode === "encrypt" ? "明文" : "加密载荷"} />
             <textarea className={`${textAreaClass} mt-3 h-24 bg-muted/30`} readOnly value={aesOutput} placeholder="输出" />
             <p className="mt-2 text-xs text-muted-foreground">PBKDF2-SHA256（210,000 次）派生密钥；每次使用随机 Salt 与 IV，并带 GCM 完整性验证。</p>
@@ -199,7 +205,7 @@ export default function CryptoPage() {
 
           <article className="rounded-xl border bg-card p-5 shadow-sm xl:col-span-2">
             <div className="flex items-center gap-2 font-medium"><Braces className="size-4" />JWT 解析、签名与验证</div>
-            <div className="mt-4 grid gap-3 sm:grid-cols-[9rem_1fr_auto]"><select className={inputClass} value={jwtMode} onChange={(event) => setJwtMode(event.target.value as typeof jwtMode)}><option value="parse">仅解析</option><option value="sign">HS256 签名</option><option value="verify">HS256 验证</option></select><input className={inputClass} type="password" value={jwtSecret} onChange={(event) => setJwtSecret(event.target.value)} placeholder="HS256 密钥" /><Button onClick={runJwt}><CheckCircle2 />执行</Button></div>
+            <div className="mt-4 grid gap-3 sm:grid-cols-[9rem_1fr_auto]"><select className={inputClass} value={jwtMode} onChange={(event) => setJwtMode(event.target.value as typeof jwtMode)}><option value="parse">仅解析</option><option value="sign">HS256 签名</option><option value="verify">HS256 验证</option></select><SecretInput value={jwtSecret} onChange={setJwtSecret} placeholder="HS256 密钥" /><Button onClick={runJwt}><CheckCircle2 />执行</Button></div>
             <div className="mt-3 grid gap-3 lg:grid-cols-2"><textarea className={`${textAreaClass} h-40`} value={jwtInput} onChange={(event) => setJwtInput(event.target.value)} placeholder="JSON 载荷或 JWT" /><textarea className={`${textAreaClass} h-40 bg-muted/30`} readOnly value={jwtOutput} placeholder="结果" /></div>
             <p className="mt-2 text-xs text-muted-foreground">“仅解析”不会验证签名；安全判断请使用“验证”。</p>
           </article>

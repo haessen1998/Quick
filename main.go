@@ -18,15 +18,10 @@ import (
 var assets embed.FS
 
 func init() {
-	// Register a custom event whose associated data type is string.
-	// This is not required, but the binding generator will pick up registered events
-	// and provide a strongly typed JS/TS API for them.
 	application.RegisterEvent[string]("time")
 }
 
-// main function serves as the application's entry point. It initializes the application, creates a window,
-// and starts a goroutine that emits a time-based event every second. It subsequently runs the application and
-// logs any error that might occur.
+// main function serves as the application's entry point. It initializes and runs the application.
 func main() {
 
 	// Create a new Wails application by providing the necessary options.
@@ -36,9 +31,8 @@ func main() {
 	// 'Mac' options tailor the application when running an macOS.
 	app := application.New(application.Options{
 		Name:        "Quick",
-		Description: "A demo of using raw HTML & CSS",
+		Description: "A local-first cross-platform developer toolkit",
 		Services: []application.Service{
-			application.NewService(&GreetService{}),
 			application.NewService(&NetworkService{}),
 		},
 		Assets: application.AssetOptions{
@@ -68,13 +62,11 @@ func main() {
 		URL:              "/",
 	})
 
-	// Create a goroutine that emits an event containing the current time every second.
-	// The frontend can listen to this event and update the UI accordingly.
 	go func() {
-		for {
-			now := time.Now().Format(time.RFC1123)
-			app.Event.Emit("time", now)
-			time.Sleep(time.Second)
+		ticker := time.NewTicker(time.Second)
+		defer ticker.Stop()
+		for now := range ticker.C {
+			app.Event.Emit("time", now.Format(time.RFC1123))
 		}
 	}()
 
