@@ -15,3 +15,15 @@ export interface NetworkResult {
     "output": string;
     "durationMs": number;
 }
+
+export interface ProcessInfo {
+    "pid": number;
+    "name": string;
+    "ports": number[] | null;
+}
+
+export interface ProcessResult {
+    "success": boolean;
+    "processes": ProcessInfo[] | null;
+    "output": string;
+}

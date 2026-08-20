@@ -17,10 +17,18 @@ export function DNSQuery(host: string, recordType: string, timeoutMS: number): $
     return $Call.ByID(2527201294, host, recordType, timeoutMS);
 }
 
+export function FindProcesses(searchType: string, query: string): $CancellablePromise<$models.ProcessResult> {
+    return $Call.ByID(2282008253, searchType, query);
+}
+
 export function HTTPRequest(method: string, targetURL: string, headersText: string, body: string, proxyMode: string, proxyURL: string, timeoutMS: number): $CancellablePromise<$models.HTTPResult> {
     return $Call.ByID(3965602664, method, targetURL, headersText, body, proxyMode, proxyURL, timeoutMS);
 }
 
 export function Ping(host: string, timeoutMS: number): $CancellablePromise<$models.NetworkResult> {
     return $Call.ByID(25732155, host, timeoutMS);
+}
+
+export function TerminateProcess(pid: number): $CancellablePromise<$models.NetworkResult> {
+    return $Call.ByID(1693724511, pid);
 }

@@ -79,7 +79,7 @@ function Sidebar({ className, children, ...props }: React.ComponentProps<"aside"
         data-slot="sidebar"
         data-state={open ? "expanded" : "collapsed"}
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex w-64 shrink-0 -translate-x-full flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-[width,transform] duration-200 ease-out md:relative md:translate-x-0",
+          "fixed inset-y-0 left-0 z-50 flex h-svh w-64 shrink-0 -translate-x-full flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-[width,transform] duration-200 ease-out md:sticky md:top-0 md:self-start md:translate-x-0",
           mobileOpen && "translate-x-0",
           open ? "md:w-60" : "md:w-16",
           className,
@@ -93,7 +93,7 @@ function Sidebar({ className, children, ...props }: React.ComponentProps<"aside"
 }
 
 function SidebarHeader({ className, ...props }: React.ComponentProps<"div">) {
-  return <div data-slot="sidebar-header" className={cn("flex flex-col gap-2 p-3", className)} {...props} />
+  return <div data-slot="sidebar-header" className={cn("flex shrink-0 flex-col gap-2 p-3", className)} {...props} />
 }
 
 function SidebarContent({ className, ...props }: React.ComponentProps<"div">) {
@@ -101,7 +101,7 @@ function SidebarContent({ className, ...props }: React.ComponentProps<"div">) {
 }
 
 function SidebarFooter({ className, ...props }: React.ComponentProps<"div">) {
-  return <div data-slot="sidebar-footer" className={cn("flex flex-col gap-2 border-t border-sidebar-border p-3", className)} {...props} />
+  return <div data-slot="sidebar-footer" className={cn("flex shrink-0 flex-col gap-2 border-t border-sidebar-border p-3", className)} {...props} />
 }
 
 function SidebarGroup({ className, ...props }: React.ComponentProps<"div">) {

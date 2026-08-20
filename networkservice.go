@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"regexp"
 	"sort"
 	"strconv"
@@ -36,6 +37,18 @@ type HTTPResult struct {
 	DurationMS int64               `json:"durationMs"`
 }
 
+type ProcessInfo struct {
+	PID   int    `json:"pid"`
+	Name  string `json:"name"`
+	Ports []int  `json:"ports"`
+}
+
+type ProcessResult struct {
+	Success   bool          `json:"success"`
+	Processes []ProcessInfo `json:"processes"`
+	Output    string        `json:"output"`
+}
+
 func normalizeHost(host string) (string, error) {
 	host = strings.TrimSpace(host)
 	if host == "" || len(host) > 253 || !validHostPattern.MatchString(host) {
@@ -52,6 +65,62 @@ func timeoutDuration(timeoutMS int) time.Duration {
 		timeoutMS = 60000
 	}
 	return time.Duration(timeoutMS) * time.Millisecond
+}
+
+func (n *NetworkService) FindProcesses(searchType string, query string) ProcessResult {
+	searchType = strings.ToLower(strings.TrimSpace(searchType))
+	query = strings.TrimSpace(query)
+	if searchType != "pid" && searchType != "port" && searchType != "name" {
+		return ProcessResult{Success: false, Output: "search type must be pid, port, or name"}
+	}
+	if query == "" {
+		return ProcessResult{Success: false, Output: "search query is required"}
+	}
+	processes, err := listLocalProcesses()
+	if err != nil {
+		return ProcessResult{Success: false, Output: err.Error()}
+	}
+	var numericQuery int
+	if searchType != "name" {
+		numericQuery, err = strconv.Atoi(query)
+		if err != nil || numericQuery < 1 || (searchType == "port" && numericQuery > 65535) {
+			return ProcessResult{Success: false, Output: "请输入有效的 PID 或 1–65535 端口"}
+		}
+	}
+	matches := make([]ProcessInfo, 0)
+	for _, process := range processes {
+		matched := searchType == "pid" && process.PID == numericQuery
+		if searchType == "name" {
+			matched = strings.Contains(strings.ToLower(process.Name), strings.ToLower(query))
+		}
+		if searchType == "port" {
+			for _, port := range process.Ports {
+				if port == numericQuery {
+					matched = true
+					break
+				}
+			}
+		}
+		if matched {
+			matches = append(matches, process)
+		}
+	}
+	sort.Slice(matches, func(i, j int) bool { return matches[i].PID < matches[j].PID })
+	return ProcessResult{Success: true, Processes: matches, Output: fmt.Sprintf("找到 %d 个进程", len(matches))}
+}
+
+func (n *NetworkService) TerminateProcess(pid int) NetworkResult {
+	if pid <= 4 || pid == os.Getpid() {
+		return NetworkResult{Success: false, Output: "refusing to terminate a system process or Quick itself"}
+	}
+	process, err := os.FindProcess(pid)
+	if err != nil {
+		return NetworkResult{Success: false, Output: err.Error()}
+	}
+	if err = process.Kill(); err != nil {
+		return NetworkResult{Success: false, Output: err.Error()}
+	}
+	return NetworkResult{Success: true, Output: fmt.Sprintf("process %d terminated", pid)}
 }
 
 func (n *NetworkService) Ping(host string, timeoutMS int) NetworkResult {
