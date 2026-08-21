@@ -4,15 +4,17 @@
         <key>CFBundlePackageType</key>
             <string>APPL</string>
         <key>CFBundleName</key>
-            <string>My Product</string>
+            <string>Quick</string>
+        <key>CFBundleDisplayName</key>
+            <string>Quick</string>
         <key>CFBundleExecutable</key>
-            <string>quick.exe</string>
+            <string>quick</string>
         <key>CFBundleIdentifier</key>
             <string>vip.haessen.quick</string>
         <key>CFBundleVersion</key>
             <string>0.1.0</string>
         <key>CFBundleGetInfoString</key>
-            <string>This is a comment</string>
+            <string>A local-first developer toolbox</string>
         <key>CFBundleShortVersionString</key>
             <string>0.1.0</string>
         <key>CFBundleIconFile</key>
@@ -21,9 +23,13 @@
             <string>appicon</string>
         <key>LSMinimumSystemVersion</key>
             <string>12.0.0</string>
+        <key>LSApplicationCategoryType</key>
+            <string>public.app-category.developer-tools</string>
         <key>NSHighResolutionCapable</key>
             <string>true</string>
         <key>NSHumanReadableCopyright</key>
-            <string>© 2026, My Company</string>
+            <string>© 2026, haessen</string>
+        <key>NSLocalNetworkUsageDescription</key>
+            <string>Quick uses the local network for developer-requested diagnostics and MCP connections.</string>
     </dict>
 </plist>

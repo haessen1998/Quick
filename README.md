@@ -77,6 +77,28 @@ git push origin v0.1.0
 
 MSIX 商店包不会发布到 GitHub Release，因为未经过 Microsoft Store 签名的包不适合直接提供给最终用户。若以后需要在商店之外分发 Windows 安装包，再单独接入受信任的代码签名服务。
 
+## macOS 发布包
+
+macOS 版本使用 Apple Developer ID 在 Mac App Store 之外分发。发布任务会构建同时支持 Apple Silicon 和 Intel Mac 的 Universal App，开启 Hardened Runtime 并使用 `Developer ID Application` 证书签名，对 App 和最终 DMG 分别提交 Apple 公证并 staple 票据，最后生成带版本号的 DMG 和 SHA-256 校验文件。
+
+首次在发布 Mac 上配置公证凭据：
+
+```bash
+xcrun notarytool store-credentials quick-notary \
+  --apple-id "<APPLE_ID>" \
+  --team-id "FRR4S244RD"
+```
+
+`notarytool` 会通过终端安全提示输入 Apple 专用密码，不要把密码写入命令、代码或仓库。
+
+然后执行：
+
+```bash
+wails3 task darwin:release:universal
+```
+
+产物为 `bin/Quick-<version>-macos-universal.dmg` 及同名 `.sha256` 文件。发布前需先更新 `build/config.yml` 中的版本，并确保 `build/darwin/Info.plist` 的版本已同步。
+
 ## 常用检查
 
 ```powershell

@@ -6,6 +6,10 @@ includes:
 vars:
   # Docker image for cross-compilation (used when building on non-macOS)
   CROSS_IMAGE: wails-cross
+  # Public Developer ID identity used for direct distribution outside the Mac App Store.
+  SIGN_IDENTITY: "Developer ID Application: Haessen Yu (FRR4S244RD)"
+  KEYCHAIN_PROFILE: "quick-notary"
+  ENTITLEMENTS: "build/darwin/entitlements.plist"
 
 tasks:
   build:
@@ -134,6 +138,46 @@ tasks:
     cmds:
       - task: create:dmg
 
+  release:universal:
+    summary: Builds, signs, notarizes, and packages a universal macOS release
+    desc: |
+      Creates a universal Apple Silicon + Intel application, signs it with the
+      configured Developer ID, notarizes and staples both the application and
+      final disk image, then creates a versioned DMG and SHA-256 checksum.
+    platforms: [darwin]
+    deps:
+      - task: package:universal
+    preconditions:
+      - sh: security find-identity -v -p codesigning | grep -F '{{.SIGN_IDENTITY}}' >/dev/null
+        msg: "Developer ID identity '{{.SIGN_IDENTITY}}' is not available in the keychain."
+      - sh: xcrun notarytool history --keychain-profile '{{.KEYCHAIN_PROFILE}}' >/dev/null
+        msg: "Notary profile '{{.KEYCHAIN_PROFILE}}' is not configured. Run: xcrun notarytool store-credentials '{{.KEYCHAIN_PROFILE}}' --apple-id <APPLE_ID> --team-id FRR4S244RD"
+    cmds:
+      - >-
+        wails3 tool sign --input "{{.BIN_DIR}}/{{.APP_NAME}}.app"
+        --identity "{{.SIGN_IDENTITY}}"
+        --entitlements "{{.ENTITLEMENTS}}"
+        --notarize
+        --keychain-profile "{{.KEYCHAIN_PROFILE}}"
+        --verbose
+      - task: create:dmg
+      - >-
+        codesign --force --sign "{{.SIGN_IDENTITY}}" --timestamp
+        "{{.BIN_DIR}}/{{.APP_NAME}}.dmg"
+      - >-
+        xcrun notarytool submit "{{.BIN_DIR}}/{{.APP_NAME}}.dmg"
+        --keychain-profile "{{.KEYCHAIN_PROFILE}}"
+        --wait
+      - xcrun stapler staple "{{.BIN_DIR}}/{{.APP_NAME}}.dmg"
+      - xcrun stapler validate "{{.BIN_DIR}}/{{.APP_NAME}}.dmg"
+      - |
+        set -euo pipefail
+        VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/Info.plist")
+        RELEASE_NAME="Quick-${VERSION}-macos-universal.dmg"
+        mv "{{.BIN_DIR}}/{{.APP_NAME}}.dmg" "{{.BIN_DIR}}/$RELEASE_NAME"
+        cd "{{.BIN_DIR}}"
+        shasum -a 256 "$RELEASE_NAME" > "$RELEASE_NAME.sha256"
+
   create:dmg:
     summary: Creates a configurable `.dmg` from the `.app` bundle
     platforms: [darwin]
@@ -199,22 +243,32 @@ tasks:
     summary: Signs the application bundle with Developer ID
     desc: |
       Signs the .app bundle for distribution.
-      Uses signing identity from `wails3 setup` (stored in ~/.config/wails/defaults.yaml).
+      Uses the project signing identity above (or an explicit CLI override).
       Override with: task darwin:sign -- --identity "Developer ID Application: ..."
     deps:
       - task: package
     cmds:
-      - wails3 tool sign --input "{{.BIN_DIR}}/{{.APP_NAME}}.app" {{.CLI_ARGS}}
+      - >-
+        wails3 tool sign --input "{{.BIN_DIR}}/{{.APP_NAME}}.app"
+        --identity "{{.SIGN_IDENTITY}}"
+        --entitlements "{{.ENTITLEMENTS}}"
+        {{.CLI_ARGS}}
 
   sign:notarize:
     summary: Signs and notarizes the application bundle
     desc: |
       Signs the .app bundle and submits it for notarization.
-      Uses signing identity and keychain profile from `wails3 setup`.
+      Uses the project signing identity and keychain profile above.
 
       First-time setup:
-        wails3 setup
+        xcrun notarytool store-credentials quick-notary --apple-id <APPLE_ID> --team-id FRR4S244RD
     deps:
       - task: package
     cmds:
-      - wails3 tool sign --input "{{.BIN_DIR}}/{{.APP_NAME}}.app" --notarize {{.CLI_ARGS}}
+      - >-
+        wails3 tool sign --input "{{.BIN_DIR}}/{{.APP_NAME}}.app"
+        --identity "{{.SIGN_IDENTITY}}"
+        --entitlements "{{.ENTITLEMENTS}}"
+        --notarize
+        --keychain-profile "{{.KEYCHAIN_PROFILE}}"
+        {{.CLI_ARGS}}
