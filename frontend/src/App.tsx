@@ -102,7 +102,7 @@ const pages: PageDefinition[] = [
   { id: "settings", label: "设置", description: "应用偏好选项", icon: Settings },
 ]
 
-const appVersion = "v0.1.0"
+const appVersion = import.meta.env.VITE_APP_VERSION || "v0.1.0"
 
 function AppSidebar({ activePage, onNavigate }: { activePage: PageId; onNavigate: (page: PageId) => void }) {
   const { open } = useSidebar()

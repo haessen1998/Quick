@@ -62,6 +62,21 @@ wails3 task package
 
 产物默认写入 `bin/`。平台相关任务和签名配置位于 `build/` 目录。
 
+## Windows Microsoft Store 包
+
+Windows 商店版本使用 MSIX。推送形如 `v0.1.0` 的版本 Tag，或手动运行 `Windows Store MSIX` GitHub Actions 工作流时，会完成测试、构建并生成供 Partner Center 直接上传的未签名 `.msix`。Microsoft Store 会在认证通过后使用 Microsoft 证书重新签名。
+
+商店产品为 [QuickDev](https://apps.microsoft.com/detail/9P084NQXKDMQ)，Store ID 是 `9P084NQXKDMQ`。Partner Center 分配的包标识已固化在构建配置中，不需要配置 GitHub Secret、仓库变量或签名证书。工作流产物保留 30 天；下载并解压 Actions 产物后，把其中的 `.msix` 直接上传到 Partner Center。
+
+发布新版本前先更新 `build/config.yml` 中的版本，然后创建并推送 Tag：
+
+```powershell
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+MSIX 商店包不会发布到 GitHub Release，因为未经过 Microsoft Store 签名的包不适合直接提供给最终用户。若以后需要在商店之外分发 Windows 安装包，再单独接入受信任的代码签名服务。
+
 ## 常用检查
 
 ```powershell

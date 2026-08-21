@@ -3,13 +3,14 @@
 		"file_version": "0.1.0"
 	},
 	"info": {
-		"0000": {
+		"0409": {
+			"FileVersion": "0.1.0",
 			"ProductVersion": "0.1.0",
-			"CompanyName": "My Company",
-			"FileDescription": "A Quick application",
-			"LegalCopyright": "© 2026, My Company",
+			"CompanyName": "haessen",
+			"FileDescription": "A local-first developer toolbox",
+			"LegalCopyright": "© 2026, haessen",
 			"ProductName": "Quick",
-			"Comments": "This is a comment"
+			"Comments": "Quick developer toolbox"
 		}
 	}
 }
