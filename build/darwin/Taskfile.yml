@@ -157,6 +157,7 @@ tasks:
         wails3 tool sign --input "{{.BIN_DIR}}/{{.APP_NAME}}.app"
         --identity "{{.SIGN_IDENTITY}}"
         --entitlements "{{.ENTITLEMENTS}}"
+        --hardened-runtime
         --notarize
         --keychain-profile "{{.KEYCHAIN_PROFILE}}"
         --verbose
@@ -269,6 +270,7 @@ tasks:
         wails3 tool sign --input "{{.BIN_DIR}}/{{.APP_NAME}}.app"
         --identity "{{.SIGN_IDENTITY}}"
         --entitlements "{{.ENTITLEMENTS}}"
+        --hardened-runtime
         --notarize
         --keychain-profile "{{.KEYCHAIN_PROFILE}}"
         {{.CLI_ARGS}}

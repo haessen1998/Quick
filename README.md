@@ -99,6 +99,17 @@ wails3 task darwin:release:universal
 
 产物为 `bin/Quick-<version>-macos-universal.dmg` 及同名 `.sha256` 文件。发布前需先更新 `build/config.yml` 中的版本，并确保 `build/darwin/Info.plist` 的版本已同步。
 
+GitHub Actions 可以在推送版本 Tag 时自动执行相同流程，并将公证后的 Universal DMG 发布到 GitHub Release。先在仓库的 `Settings > Secrets and variables > Actions` 中配置：
+
+- `APPLE_CERTIFICATE_P12_BASE64`：包含私钥的 Developer ID Application `.p12` 文件的 Base64 内容。
+- `APPLE_CERTIFICATE_PASSWORD`：导出 `.p12` 时设置的密码。
+- `APPLE_NOTARY_APPLE_ID`：用于 Apple 公证的 Apple ID。
+- `APPLE_NOTARY_PASSWORD`：该 Apple ID 的应用专用密码。
+
+在 macOS 上可用 `base64 < DeveloperIDApplication.p12 | pbcopy` 将证书编码并复制到剪贴板。证书、私钥和密码只能保存为 GitHub Actions Secret，不应提交到仓库。
+
+以上 Secrets 配置完成后，先手动运行一次 `macOS Release` 工作流验证签名和公证。验证成功后再推送 `v0.1.0` Tag；同一个 Tag 会生成 Windows Store MSIX 构建产物，并创建包含 macOS DMG 与校验文件的 GitHub Release。
+
 ## 常用检查
 
 ```powershell

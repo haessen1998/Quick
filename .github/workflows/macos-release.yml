@@ -1,0 +1,198 @@
+name: macOS Release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: macos-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build, notarize, and release macOS DMG
+    runs-on: macos-15
+    env:
+      WAILS_VERSION: v3.0.0-beta.9
+      APPLE_TEAM_ID: FRR4S244RD
+      SIGN_IDENTITY: "Developer ID Application: Haessen Yu (FRR4S244RD)"
+      KEYCHAIN_PROFILE: quick-notary
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Resolve and validate release version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          version="$(sed -n 's/^[[:space:]]*version: "\([^"]*\)".*/\1/p' build/config.yml | head -n 1)"
+          if [[ -z "$version" ]]; then
+            echo "Unable to read info.version from build/config.yml" >&2
+            exit 1
+          fi
+
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            tag_version="${GITHUB_REF_NAME#v}"
+            if [[ "$tag_version" != "$version" ]]; then
+              echo "Tag version $tag_version does not match build/config.yml version $version" >&2
+              exit 1
+            fi
+          fi
+
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $version" build/darwin/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $version" build/darwin/Info.plist
+
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "artifact=Quick-$version-macos-universal.dmg" >> "$GITHUB_OUTPUT"
+          echo "VITE_APP_VERSION=v$version" >> "$GITHUB_ENV"
+
+      - name: Require Apple signing credentials
+        shell: bash
+        env:
+          CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          NOTARY_APPLE_ID: ${{ secrets.APPLE_NOTARY_APPLE_ID }}
+          NOTARY_PASSWORD: ${{ secrets.APPLE_NOTARY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          for name in CERTIFICATE_P12_BASE64 CERTIFICATE_PASSWORD NOTARY_APPLE_ID NOTARY_PASSWORD; do
+            if [[ -z "${!name:-}" ]]; then
+              echo "Missing required GitHub Actions secret for $name" >&2
+              exit 1
+            fi
+          done
+
+      - name: Install Wails
+        shell: bash
+        run: go install github.com/wailsapp/wails/v3/cmd/wails3@"$WAILS_VERSION"
+
+      - name: Install frontend dependencies
+        run: npm ci --prefix frontend
+
+      - name: Test frontend
+        run: npm run build --prefix frontend
+
+      - name: Test Go code
+        run: go test ./...
+
+      - name: Import Developer ID and configure notarization
+        shell: bash
+        env:
+          CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          NOTARY_APPLE_ID: ${{ secrets.APPLE_NOTARY_APPLE_ID }}
+          NOTARY_PASSWORD: ${{ secrets.APPLE_NOTARY_PASSWORD }}
+        run: |
+          set -euo pipefail
+
+          certificate_path="$RUNNER_TEMP/developer-id-application.p12"
+          keychain_path="$RUNNER_TEMP/quick-signing.keychain-db"
+          keychain_password="$(openssl rand -hex 32)"
+
+          printf '%s' "$CERTIFICATE_P12_BASE64" | base64 -D > "$certificate_path"
+          security create-keychain -p "$keychain_password" "$keychain_path"
+          security set-keychain-settings -lut 21600 "$keychain_path"
+          security unlock-keychain -p "$keychain_password" "$keychain_path"
+          security import "$certificate_path" \
+            -k "$keychain_path" \
+            -P "$CERTIFICATE_PASSWORD" \
+            -T /usr/bin/codesign \
+            -T /usr/bin/security
+          security set-key-partition-list \
+            -S apple-tool:,apple:,codesign: \
+            -s \
+            -k "$keychain_password" \
+            "$keychain_path"
+          security list-keychains -d user -s \
+            "$keychain_path" \
+            "$HOME/Library/Keychains/login.keychain-db"
+          security default-keychain -d user -s "$keychain_path"
+
+          security find-identity -v -p codesigning "$keychain_path" | grep -F "$SIGN_IDENTITY"
+          xcrun notarytool store-credentials "$KEYCHAIN_PROFILE" \
+            --apple-id "$NOTARY_APPLE_ID" \
+            --team-id "$APPLE_TEAM_ID" \
+            --password "$NOTARY_PASSWORD"
+
+          rm -f "$certificate_path"
+
+      - name: Build signed and notarized Universal DMG
+        shell: bash
+        run: wails3 task darwin:release:universal
+
+      - name: Verify release artifact
+        shell: bash
+        env:
+          ARTIFACT: ${{ steps.version.outputs.artifact }}
+        run: |
+          set -euo pipefail
+
+          app_path="bin/quick.app"
+          binary_path="$app_path/Contents/MacOS/quick"
+          dmg_path="bin/$ARTIFACT"
+
+          lipo -verify_arch x86_64 arm64 "$binary_path"
+          codesign --verify --deep --strict --verbose=2 "$app_path"
+          xcrun stapler validate "$app_path"
+          spctl --assess --type execute --verbose=4 "$app_path"
+          hdiutil verify "$dmg_path"
+          xcrun stapler validate "$dmg_path"
+          (cd bin && shasum -a 256 -c "$ARTIFACT.sha256")
+
+      - name: Upload macOS release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Quick-${{ steps.version.outputs.version }}-macos-release
+          path: |
+            bin/${{ steps.version.outputs.artifact }}
+            bin/${{ steps.version.outputs.artifact }}.sha256
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
+
+      - name: Publish GitHub Release
+        if: github.ref_type == 'tag'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT: ${{ steps.version.outputs.artifact }}
+        run: |
+          set -euo pipefail
+
+          files=("bin/$ARTIFACT" "bin/$ARTIFACT.sha256")
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "${files[@]}" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" "${files[@]}" \
+              --verify-tag \
+              --generate-notes \
+              --title "Quick $GITHUB_REF_NAME"
+          fi
+
+      - name: Remove temporary signing keychain
+        if: always()
+        shell: bash
+        run: |
+          security delete-keychain "$RUNNER_TEMP/quick-signing.keychain-db" || true
+          rm -f "$RUNNER_TEMP/developer-id-application.p12"
