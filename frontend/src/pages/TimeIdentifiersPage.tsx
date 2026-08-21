@@ -6,6 +6,7 @@ import { ulid } from "ulid"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
+import { useAssistantCapability } from "@/lib/assistant-capabilities"
 
 const inputClass = "app-interactive h-10 w-full rounded-lg border border-input bg-background px-3 text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/40"
 const outputClass = "min-h-10 rounded-lg border bg-muted/40 px-3 py-2 font-mono text-sm break-all"
@@ -24,6 +25,21 @@ function generateSnowflake() {
   const random = new Uint32Array(1)
   crypto.getRandomValues(random)
   return ((timestamp << 22n) | BigInt(random[0] & 0x3fffff)).toString()
+}
+
+function generateIdentifier(kind: string, length: number) {
+  return kind === "uuid" || kind === "guid" ? crypto.randomUUID()
+    : kind === "ulid" ? ulid()
+    : kind === "snowflake" ? generateSnowflake()
+    : kind === "number" ? secureRandom(length, "0123456789")
+    : kind === "password" ? secureRandom(length, "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^&*_-+=")
+    : kind === "string" ? secureRandom(length, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789")
+    : (() => { throw new Error(`不支持的生成类型：${kind}`) })()
+}
+
+function nextCronRuns(value: string, zone: string) {
+  const expression = CronExpressionParser.parse(value, { tz: zone })
+  return Array.from({ length: 6 }, () => DateTime.fromJSDate(expression.next().toDate()).setZone(zone).toFormat("yyyy-LL-dd HH:mm:ss ZZZZ"))
 }
 
 export default function TimeIdentifiersPage() {
@@ -78,13 +94,7 @@ export default function TimeIdentifiersPage() {
 
   const runGenerator = () => {
     try {
-      const value = generator === "uuid" || generator === "guid" ? crypto.randomUUID()
-        : generator === "ulid" ? ulid()
-        : generator === "snowflake" ? generateSnowflake()
-        : generator === "number" ? secureRandom(length, "0123456789")
-        : generator === "password" ? secureRandom(length, "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^&*_-+=")
-        : secureRandom(length, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789")
-      setGenerated(value)
+      setGenerated(generateIdentifier(generator, length))
     } catch (error) {
       toast.error("生成失败", { description: error instanceof Error ? error.message : String(error) })
     }
@@ -92,8 +102,7 @@ export default function TimeIdentifiersPage() {
 
   const parseCron = () => {
     try {
-      const expression = CronExpressionParser.parse(cron, { tz: cronZone })
-      setCronResults(Array.from({ length: 6 }, () => DateTime.fromJSDate(expression.next().toDate()).setZone(cronZone).toFormat("yyyy-LL-dd HH:mm:ss ZZZZ")))
+      setCronResults(nextCronRuns(cron, cronZone))
       setCronError("")
     } catch (error) {
       setCronResults([])
@@ -105,6 +114,76 @@ export default function TimeIdentifiersPage() {
     await navigator.clipboard.writeText(value)
     toast.success("已复制")
   }
+
+  useAssistantCapability({
+    page: "time-ids",
+    getContext: () => ({ timestamp, timestampUnit, dateInput, sourceZone, targetZone, diffStart, diffEnd, generator, length, generated: generated ? "已生成（值不暴露给助手）" : "", cron, cronZone, cronResults, cronError }),
+    actions: {
+      run: (values) => {
+        const operation = String(values.operation ?? "")
+        try {
+          if (operation === "timestamp-to-date") {
+            const nextTimestamp = String(values.value ?? "")
+            const unit = values.unit === "milliseconds" ? "milliseconds" : "seconds"
+            const numeric = Number(nextTimestamp)
+            if (!Number.isFinite(numeric)) throw new Error("请输入有效时间戳")
+            const result = DateTime.fromMillis(unit === "seconds" ? numeric * 1000 : numeric)
+            if (!result.isValid) throw new Error("时间戳超出有效范围")
+            setTimestamp(nextTimestamp); setTimestampUnit(unit)
+            return { success: true, result: `${result.toFormat("yyyy-LL-dd HH:mm:ss.SSS ZZZZ")}\n${result.toUTC().toISO()}`, executed: true }
+          }
+          if (operation === "date-to-timestamp") {
+            const value = String(values.value ?? "")
+            const zone = String(values.sourceZone ?? "Asia/Shanghai")
+            const result = DateTime.fromISO(value, { zone })
+            if (!result.isValid) throw new Error(result.invalidExplanation || "请输入有效日期时间")
+            setDateInput(value); setSourceZone(zone)
+            return { success: true, result: { seconds: Math.floor(result.toMillis() / 1000), milliseconds: result.toMillis() }, executed: true }
+          }
+          if (operation === "timezone") {
+            const value = String(values.value ?? "")
+            const from = String(values.sourceZone ?? "Asia/Shanghai")
+            const to = String(values.targetZone ?? "UTC")
+            const parsed = DateTime.fromISO(value, { zone: from })
+            if (!parsed.isValid) throw new Error(parsed.invalidExplanation || "请输入有效日期时间")
+            const converted = parsed.setZone(to)
+            if (!converted.isValid) throw new Error(converted.invalidExplanation || "无效时区")
+            setDateInput(value); setSourceZone(from); setTargetZone(to)
+            return { success: true, result: converted.toFormat("yyyy-LL-dd HH:mm:ss ZZZZ"), executed: true }
+          }
+          if (operation === "difference") {
+            const start = String(values.start ?? "")
+            const end = String(values.end ?? "")
+            const startValue = DateTime.fromISO(start); const endValue = DateTime.fromISO(end)
+            if (!startValue.isValid || !endValue.isValid) throw new Error("请输入有效起止时间")
+            const milliseconds = endValue.toMillis() - startValue.toMillis()
+            setDiffStart(start); setDiffEnd(end)
+            return { success: true, result: { milliseconds, seconds: milliseconds / 1000, minutes: milliseconds / 60000, hours: milliseconds / 3600000, days: milliseconds / 86400000 }, executed: true }
+          }
+          if (operation === "generate") {
+            const kind = String(values.generator ?? "uuid")
+            const nextLength = Number(values.length ?? 24)
+            const result = generateIdentifier(kind, nextLength)
+            setGenerator(kind); setLength(nextLength); setGenerated(result)
+            toast.success(`页面助手已生成${kind === "password" ? "密码" : "标识符"}`)
+            return kind === "password" ? { success: true, result: "密码已生成，仅显示在 Quick 页面", sensitive: true, executed: true } : { success: true, result, executed: true }
+          }
+          if (operation === "cron") {
+            const value = String(values.cron ?? "")
+            const zone = String(values.zone ?? "Asia/Shanghai")
+            const result = nextCronRuns(value, zone)
+            setCron(value); setCronZone(zone); setCronResults(result); setCronError("")
+            return { success: true, result, executed: true }
+          }
+          throw new Error(`不支持的时间操作：${operation}`)
+        } catch (caught) {
+          const message = caught instanceof Error ? caught.message : String(caught)
+          if (operation === "cron") { setCronResults([]); setCronError(message) }
+          return { success: false, error: message, executed: true }
+        }
+      },
+    },
+  })
 
   return (
     <section className="page-shell">

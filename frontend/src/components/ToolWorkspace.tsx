@@ -3,6 +3,8 @@ import { ArrowRightLeft, Check, Clipboard, Eraser, Play, Sparkles, TriangleAlert
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
+import { useAssistantCapability } from "@/lib/assistant-capabilities"
+import type { PageId } from "@/lib/pages"
 import { cn } from "@/lib/utils"
 
 export type TextTool = {
@@ -20,13 +22,14 @@ type ToolWorkspaceProps = {
   description: string
   tools: TextTool[]
   outputPlaceholder?: string
+  assistantPage: PageId
 }
 
 export function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error)
 }
 
-export function ToolWorkspace({ title, description, tools, outputPlaceholder = "处理结果会显示在这里…" }: ToolWorkspaceProps) {
+export function ToolWorkspace({ title, description, tools, assistantPage, outputPlaceholder = "处理结果会显示在这里…" }: ToolWorkspaceProps) {
   const [activeToolId, setActiveToolId] = useState(tools[0]?.id ?? "")
   const activeTool = useMemo(() => tools.find((tool) => tool.id === activeToolId) ?? tools[0], [activeToolId, tools])
   const [input, setInput] = useState(tools[0]?.sample ?? "")
@@ -35,6 +38,59 @@ export function ToolWorkspace({ title, description, tools, outputPlaceholder = "
   const [processing, setProcessing] = useState(false)
   const [copied, setCopied] = useState(false)
   const groups = useMemo(() => Array.from(new Set(tools.map((tool) => tool.group))), [tools])
+
+  const executeTool = async (tool: TextTool, value: string, fromAssistant = false) => {
+    setActiveToolId(tool.id)
+    setInput(value)
+    setProcessing(true)
+    setError("")
+    try {
+      const result = await tool.run(value)
+      setOutput(result)
+      toast.success(`${tool.label}完成`)
+      return { success: true, operation: tool.id, label: tool.label, result: result.slice(0, 16000), truncated: result.length > 16000, executed: true }
+    } catch (caughtError) {
+      const message = getErrorMessage(caughtError)
+      setOutput("")
+      setError(message)
+      toast.error(`${tool.label}失败`, { description: message })
+      if (fromAssistant) return { success: false, operation: tool.id, error: message, executed: true }
+      throw caughtError
+    } finally {
+      setProcessing(false)
+    }
+  }
+
+  useAssistantCapability({
+    page: assistantPage,
+    getContext: () => ({
+      operation: activeTool?.id ?? "",
+      operationLabel: activeTool?.label ?? "",
+      input: input.slice(0, 8000),
+      output: output.slice(0, 8000),
+      error,
+    }),
+    actions: {
+      fill: (values) => {
+        const operation = String(values.operation ?? "")
+        const nextTool = tools.find((tool) => tool.id === operation)
+        if (!nextTool) throw new Error(`不支持的格式化操作：${operation}`)
+        const nextInput = String(values.input ?? "")
+        setActiveToolId(nextTool.id)
+        setInput(nextInput)
+        setOutput("")
+        setError("")
+        toast.success(`页面助手已填写：${nextTool.label}`)
+        return { success: true, operation: nextTool.id, label: nextTool.label, inputLength: nextInput.length, executed: false }
+      },
+      run: (values) => {
+        const operation = String(values.operation ?? "")
+        const nextTool = tools.find((tool) => tool.id === operation)
+        if (!nextTool) throw new Error(`不支持的格式化操作：${operation}`)
+        return executeTool(nextTool, String(values.input ?? ""), true)
+      },
+    },
+  })
 
   if (!activeTool) return null
 
@@ -46,20 +102,7 @@ export function ToolWorkspace({ title, description, tools, outputPlaceholder = "
   }
 
   const processInput = async () => {
-    setProcessing(true)
-    setError("")
-    try {
-      const result = await activeTool.run(input)
-      setOutput(result)
-      toast.success(`${activeTool.label}完成`)
-    } catch (caughtError) {
-      const message = getErrorMessage(caughtError)
-      setOutput("")
-      setError(message)
-      toast.error(`${activeTool.label}失败`, { description: message })
-    } finally {
-      setProcessing(false)
-    }
+    try { await executeTool(activeTool, input) } catch { /* Error state and toast are handled by executeTool. */ }
   }
 
   const copyOutput = async () => {

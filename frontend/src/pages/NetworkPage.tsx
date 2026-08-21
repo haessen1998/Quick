@@ -2,8 +2,9 @@ import { useMemo, useState } from "react"
 import { Activity, Braces, Copy, Globe2, Network, Play, Power, Router, Search, Sparkles, TerminalSquare } from "lucide-react"
 import { toast } from "sonner"
 
-import { NetworkService } from "../../bindings/changeme"
+import { NetworkService } from "../../bindings/changeme/services"
 import { Button } from "@/components/ui/button"
+import { useAssistantCapability } from "@/lib/assistant-capabilities"
 import type { ProxySettings } from "@/lib/proxy"
 
 type Mode = "ping" | "dns" | "port" | "cidr" | "http" | "process"
@@ -103,11 +104,115 @@ export default function NetworkPage({ proxy }: { proxy: ProxySettings }) {
   const [body, setBody] = useState("")
   const [curl, setCurl] = useState("")
   const [processSearchType, setProcessSearchType] = useState<"port" | "pid" | "name">("port")
-  const [processQuery, setProcessQuery] = useState("8080")
+  const [processQuery, setProcessQuery] = useState("")
   const [processes, setProcesses] = useState<ProcessInfo[]>([])
+  const [processCanTerminate, setProcessCanTerminate] = useState(false)
   const [output, setOutput] = useState("")
   const [running, setRunning] = useState(false)
   const curlPreview = useMemo(() => httpToCurl({ method, url, headers, body }), [method, url, headers, body])
+
+  useAssistantCapability({
+    page: "network",
+    getContext: () => mode === "http"
+      ? { mode, method, url, hasHeaders: Boolean(headers.trim()), bodyLength: body.length, hasCurl: Boolean(curl.trim()), requestSentByAssistant: false, output: output.slice(0, 4000) }
+      : mode === "process"
+        ? { mode, searchType: processSearchType, query: processQuery, resultCount: processes.length, canTerminate: processCanTerminate, output: output.slice(0, 2000) }
+        : { mode, host: mode === "cidr" ? undefined : host, port: mode === "port" ? port : undefined, recordType: mode === "dns" ? recordType : undefined, cidr: mode === "cidr" ? cidr : undefined, output: output.slice(0, 4000) },
+    actions: {
+      fill_http: (values) => {
+        const nextMethod = String(values.method ?? "GET").toUpperCase()
+        if (!["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"].includes(nextMethod)) throw new Error(`不支持的 HTTP 方法：${nextMethod}`)
+        const nextURL = String(values.url ?? "").trim()
+        if (!/^https?:\/\//i.test(nextURL)) throw new Error("HTTP URL 必须以 http:// 或 https:// 开头")
+        setMode("http")
+        setMethod(nextMethod)
+        setURL(nextURL)
+        setHeaders(String(values.headers ?? ""))
+        setBody(String(values.body ?? ""))
+        setOutput("")
+        toast.success("页面助手已填写 HTTP 请求；尚未发送")
+        return { success: true, method: nextMethod, url: nextURL, executed: false, confirmationRequired: true }
+      },
+      run: async (values) => {
+        const operation = String(values.operation ?? "")
+        setOutput("")
+        try {
+          if (operation === "http-prepare") {
+            const nextMethod = String(values.method ?? "GET").toUpperCase()
+            const nextURL = String(values.url ?? "").trim()
+            if (!["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"].includes(nextMethod)) throw new Error(`不支持的 HTTP 方法：${nextMethod}`)
+            if (!/^https?:\/\//i.test(nextURL)) throw new Error("HTTP URL 必须以 http:// 或 https:// 开头")
+            setMode("http"); setMethod(nextMethod); setURL(nextURL); setHeaders(String(values.headers ?? "")); setBody(String(values.body ?? ""))
+            toast.success("HTTP 请求已准备；尚未发送")
+            return { success: true, operation, method: nextMethod, url: nextURL, executed: false, confirmationRequired: true }
+          }
+          if (operation === "curl-to-http") {
+            const command = String(values.curl ?? "")
+            const request = curlToHTTP(command)
+            setMode("http"); setCurl(command); setMethod(request.method); setURL(request.url); setHeaders(request.headers); setBody(request.body)
+            toast.success("cURL 已转换；请求尚未发送")
+            return { success: true, operation, method: request.method, url: request.url, hasHeaders: Boolean(request.headers), bodyLength: request.body.length, executed: true, requestSent: false }
+          }
+          if (operation === "http-to-curl") {
+            const request = { method: String(values.method ?? "GET"), url: String(values.url ?? ""), headers: String(values.headers ?? ""), body: String(values.body ?? "") }
+            if (!/^https?:\/\//i.test(request.url)) throw new Error("HTTP URL 必须以 http:// 或 https:// 开头")
+            const result = httpToCurl(request)
+            setMode("http"); setMethod(request.method); setURL(request.url); setHeaders(request.headers); setBody(request.body); setCurl(result)
+            return { success: true, operation, result, executed: true, requestSent: false }
+          }
+          if (operation === "cidr") {
+            const value = String(values.cidr ?? "")
+            const result = calculateCIDR(value)
+            setMode("cidr"); setCIDR(value); setOutput(result)
+            return { success: true, operation, result, executed: true }
+          }
+          if (operation === "process-search") {
+            const searchType = String(values.searchType ?? "name") as "port" | "pid" | "name"
+            const query = String(values.query ?? "").trim()
+            if (!query) throw new Error("助手查询本地进程必须提供端口、PID 或程序名；显示全部请在页面手动操作")
+            if (!["port", "pid", "name"].includes(searchType)) throw new Error(`不支持的进程查询类型：${searchType}`)
+            setMode("process"); setProcessSearchType(searchType); setProcessQuery(query); setRunning(true)
+            const result = await NetworkService.FindProcesses(searchType, query) as unknown as ProcessResult
+            if (!result.success) throw new Error(result.output)
+            setProcesses(result.processes ?? []); setProcessCanTerminate(true); setOutput(result.output)
+            return { success: true, operation, count: result.processes?.length ?? 0, processes: (result.processes ?? []).slice(0, 100), truncated: (result.processes?.length ?? 0) > 100, executed: true, terminationAvailableOnlyInPage: true }
+          }
+          const nextHost = String(values.host ?? "").trim()
+          if (!nextHost) throw new Error("请输入主机名或 IP")
+          setHost(nextHost); setRunning(true)
+          if (operation === "ping") {
+            setMode("ping")
+            const result = await NetworkService.Ping(nextHost, 5000) as unknown as NetworkResult
+            const formatted = `${result.success ? "成功" : "失败"} · ${result.durationMs} ms\n\n${result.output}`
+            setOutput(formatted)
+            return { success: result.success, operation, output: result.output, durationMs: result.durationMs, executed: true }
+          }
+          if (operation === "dns") {
+            const nextRecordType = String(values.recordType ?? "A").toUpperCase()
+            setMode("dns"); setRecordType(nextRecordType)
+            const result = await NetworkService.DNSQuery(nextHost, nextRecordType, 5000) as unknown as NetworkResult
+            setOutput(`${result.success ? "成功" : "失败"} · ${result.durationMs} ms\n\n${result.output}`)
+            return { success: result.success, operation, output: result.output, durationMs: result.durationMs, executed: true }
+          }
+          if (operation === "port") {
+            const nextPort = Number(values.port)
+            if (!Number.isInteger(nextPort) || nextPort < 1 || nextPort > 65535) throw new Error("端口必须在 1–65535 之间")
+            setMode("port"); setPort(nextPort)
+            const result = await NetworkService.CheckPort(nextHost, nextPort, 5000) as unknown as NetworkResult
+            setOutput(`${result.success ? "成功" : "失败"} · ${result.durationMs} ms\n\n${result.output}`)
+            return { success: result.success, operation, output: result.output, durationMs: result.durationMs, executed: true }
+          }
+          throw new Error(`不支持的网络操作：${operation}`)
+        } catch (caught) {
+          const message = caught instanceof Error ? caught.message : String(caught)
+          setOutput(message)
+          return { success: false, operation, error: message, executed: !["http-prepare"].includes(operation) }
+        } finally {
+          setRunning(false)
+        }
+      },
+    },
+  })
 
   const executeHTTP = async (request: HTTPRequest) => {
     const result = await NetworkService.HTTPRequest(request.method, request.url, request.headers, request.body, proxy.mode, proxy.url, 15000) as unknown as HTTPResult
@@ -143,11 +248,12 @@ export default function NetworkPage({ proxy }: { proxy: ProxySettings }) {
     try {
       const result = await NetworkService.FindProcesses(processSearchType, processQuery) as unknown as ProcessResult
       if (!result.success) throw new Error(result.output)
-      setProcesses(result.processes ?? []); setOutput(result.output)
-    } catch (caught) { const message = caught instanceof Error ? caught.message : String(caught); setOutput(message); toast.error("进程查询失败", { description: message }) } finally { setRunning(false) }
+      setProcesses(result.processes ?? []); setProcessCanTerminate(Boolean(processQuery.trim())); setOutput(result.output)
+    } catch (caught) { const message = caught instanceof Error ? caught.message : String(caught); setProcessCanTerminate(false); setOutput(message); toast.error("进程查询失败", { description: message }) } finally { setRunning(false) }
   }
 
   const terminateProcess = async (process: ProcessInfo) => {
+    if (!processCanTerminate) return
     if (!window.confirm(`确定要强制关闭 ${process.name}（PID ${process.pid}）吗？未保存的数据可能丢失。`)) return
     try {
       const result = await NetworkService.TerminateProcess(process.pid) as unknown as NetworkResult
@@ -173,7 +279,7 @@ export default function NetworkPage({ proxy }: { proxy: ProxySettings }) {
             {mode === "dns" && <div className="grid gap-3 sm:grid-cols-[1fr_8rem_auto]"><input className={inputClass} value={host} onChange={(event) => setHost(event.target.value)} placeholder="域名" /><select className={inputClass} value={recordType} onChange={(event) => setRecordType(event.target.value)}>{["A", "AAAA", "CNAME", "MX", "NS", "TXT"].map((value) => <option key={value}>{value}</option>)}</select><Button onClick={run} disabled={running}><Search />查询</Button></div>}
             {mode === "port" && <div className="grid gap-3 sm:grid-cols-[1fr_8rem_auto]"><input className={inputClass} value={host} onChange={(event) => setHost(event.target.value)} /><input className={inputClass} type="number" min={1} max={65535} value={port} onChange={(event) => setPort(Number(event.target.value))} /><Button onClick={run} disabled={running}><Router />连接</Button></div>}
             {mode === "cidr" && <div className="grid gap-3 sm:grid-cols-[1fr_auto]"><input className={inputClass} value={cidr} onChange={(event) => setCIDR(event.target.value)} placeholder="192.168.1.10/24" /><Button onClick={run}><Play />计算</Button></div>}
-            {mode === "process" && <div className="space-y-4"><div className="grid gap-3 sm:grid-cols-[9rem_1fr_auto]"><select className={inputClass} value={processSearchType} onChange={(event) => { const next = event.target.value as typeof processSearchType; setProcessSearchType(next); setProcessQuery(next === "port" ? "8080" : next === "pid" ? "1" : "Quick") }}><option value="port">按端口</option><option value="pid">按 PID</option><option value="name">按程序名</option></select><input className={inputClass} value={processQuery} onChange={(event) => setProcessQuery(event.target.value)} placeholder={processSearchType === "name" ? "程序名，例如 Quick" : processSearchType.toUpperCase()} /><Button onClick={findProcesses} disabled={running}><Search />搜索</Button></div><div className="overflow-hidden rounded-lg border"><div className="grid grid-cols-[6rem_1fr_1fr_5rem] bg-muted/50 px-3 py-2 text-xs font-medium text-muted-foreground"><span>PID</span><span>程序</span><span>本地 TCP 端口</span><span></span></div>{processes.length ? processes.map((process) => <div key={process.pid} className="grid grid-cols-[6rem_1fr_1fr_5rem] items-center border-t px-3 py-2 text-sm"><code>{process.pid}</code><span className="truncate" title={process.name}>{process.name}</span><span className="truncate text-muted-foreground">{process.ports.join(", ") || "—"}</span><Button variant="destructive" size="sm" onClick={() => terminateProcess(process)}><Power />关闭</Button></div>) : <div className="border-t p-6 text-center text-sm text-muted-foreground">搜索后显示本地进程；关闭操作会要求再次确认。</div>}</div></div>}
+            {mode === "process" && <div className="space-y-4"><div className="grid gap-3 sm:grid-cols-[9rem_1fr_auto]"><select className={inputClass} value={processSearchType} onChange={(event) => { setProcessSearchType(event.target.value as typeof processSearchType); setProcessQuery(""); setProcessCanTerminate(false) }}><option value="port">按端口</option><option value="pid">按 PID</option><option value="name">按程序名</option></select><input className={inputClass} value={processQuery} onChange={(event) => { setProcessQuery(event.target.value); setProcessCanTerminate(false) }} placeholder={processSearchType === "name" ? "程序名；留空显示全部" : `${processSearchType.toUpperCase()}；留空显示全部`} /><Button onClick={findProcesses} disabled={running}><Search />{processQuery.trim() ? "搜索" : "显示全部"}</Button></div><div className="max-h-[32rem] overflow-auto rounded-lg border"><div className="sticky top-0 z-10 grid min-w-[36rem] grid-cols-[6rem_1fr_1fr_5rem] bg-muted px-3 py-2 text-xs font-medium text-muted-foreground shadow-[0_1px_0_var(--border)]"><span>PID</span><span>程序</span><span>本地 TCP 端口</span><span></span></div>{processes.length ? processes.map((process) => <div key={process.pid} className="grid min-w-[36rem] grid-cols-[6rem_1fr_1fr_5rem] items-center border-t px-3 py-2 text-sm"><code>{process.pid}</code><span className="truncate" title={process.name}>{process.name}</span><span className="truncate text-muted-foreground">{process.ports.join(", ") || "—"}</span><Button variant="destructive" size="sm" disabled={!processCanTerminate} title={processCanTerminate ? "关闭此进程" : "输入条件并搜索后才可关闭"} onClick={() => terminateProcess(process)}><Power />关闭</Button></div>) : <div className="border-t p-6 text-center text-sm text-muted-foreground">留空可显示全部进程；只有带条件的搜索结果允许关闭。</div>}</div></div>}
             {mode === "http" && <div className="space-y-4"><div className="grid gap-3 sm:grid-cols-[8rem_1fr_auto]"><select className={inputClass} value={method} onChange={(event) => setMethod(event.target.value)}>{["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"].map((value) => <option key={value}>{value}</option>)}</select><input className={inputClass} value={url} onChange={(event) => setURL(event.target.value)} placeholder="https://example.com" /><Button onClick={run} disabled={running}><Play />发送 HTTP</Button></div><div className="grid gap-3 md:grid-cols-2"><textarea className={`${inputClass} h-28 resize-none font-mono`} value={headers} onChange={(event) => setHeaders(event.target.value)} placeholder="Header: value" /><textarea className={`${inputClass} h-28 resize-none font-mono`} value={body} onChange={(event) => setBody(event.target.value)} placeholder="请求体（可选）" /></div><div className="grid gap-3 lg:grid-cols-2"><div className="space-y-2"><div className="flex items-center justify-between text-xs text-muted-foreground"><span>HTTP → cURL</span><Button variant="outline" size="sm" onClick={() => setCurl(curlPreview)}>写入编辑器</Button></div><pre className="h-32 overflow-auto whitespace-pre-wrap break-all rounded-lg border bg-muted/30 p-3 text-xs">{curlPreview}</pre></div><div className="space-y-2"><div className="flex items-center justify-between text-xs text-muted-foreground"><span>cURL → HTTP</span><div className="flex gap-2"><Button variant="outline" size="sm" onClick={() => importCurl(false)}>转换</Button><Button size="sm" onClick={() => importCurl(true)} disabled={running}>转换并执行</Button></div></div><textarea className={`${inputClass} h-32 resize-none font-mono text-xs`} value={curl} onChange={(event) => setCurl(event.target.value)} placeholder="粘贴 curl 命令…" /></div></div><div className="flex items-center gap-2 rounded-lg border bg-muted/30 p-3 text-xs"><span className="min-w-0 flex-1">代理：{proxy.mode === "system" ? "系统/环境" : proxy.mode === "custom" ? proxy.url || "自定义（未填写）" : "不使用"}</span><Button variant="ghost" size="icon-xs" onClick={async () => { await navigator.clipboard.writeText(curlPreview); toast.success("cURL 命令已复制") }}><Copy /></Button></div></div>}
           </div>
           {mode !== "process" && <pre className="min-h-52 max-h-[32rem] overflow-auto whitespace-pre-wrap break-words bg-muted/20 p-4 font-mono text-sm leading-6">{running ? "执行中…" : output || "执行后显示结果"}</pre>}

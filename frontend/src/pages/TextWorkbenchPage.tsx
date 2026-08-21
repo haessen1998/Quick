@@ -1,10 +1,10 @@
 import { useMemo, useState } from "react"
 import { Columns2, Eye, FileText, Sparkles } from "lucide-react"
-import DOMPurify from "dompurify"
 import { diffChars, diffLines, diffWordsWithSpace } from "diff"
-import { marked } from "marked"
 
 import { Button } from "@/components/ui/button"
+import { MarkdownRenderer } from "@/components/MarkdownRenderer"
+import { useAssistantCapability } from "@/lib/assistant-capabilities"
 
 type Granularity = "line" | "word" | "char"
 type InlinePart = { value: string; changed: boolean }
@@ -53,8 +53,32 @@ export default function TextWorkbenchPage() {
   const [right, setRight] = useState("Quick\nWails 3\nReact + shadcn/ui\n新内容\n")
   const [granularity, setGranularity] = useState<Granularity>("word")
   const [ignoreWhitespace, setIgnoreWhitespace] = useState(false)
-  const preview = useMemo(() => DOMPurify.sanitize(marked.parse(markdown, { gfm: true, breaks: true }) as string), [markdown])
   const rows = useMemo(() => buildDiffRows(left, right, granularity, ignoreWhitespace), [left, right, granularity, ignoreWhitespace])
+
+  useAssistantCapability({
+    page: "text-workbench",
+    getContext: () => mode === "markdown"
+      ? { mode, markdown: markdown.slice(0, 8000) }
+      : { mode, left: left.slice(0, 6000), right: right.slice(0, 6000), granularity, ignoreWhitespace, changedRows: rows.filter((row) => row.kind !== "same").length },
+    actions: {
+      fill: (values) => {
+        const nextMode = String(values.mode ?? "")
+        if (nextMode === "markdown") {
+          const value = String(values.markdown ?? "")
+          setMode("markdown"); setMarkdown(value)
+          return { success: true, mode: nextMode, characters: value.length, previewReady: true, executed: true }
+        }
+        if (nextMode !== "diff") throw new Error(`不支持的文本工作台模式：${nextMode}`)
+        const nextLeft = String(values.left ?? "")
+        const nextRight = String(values.right ?? "")
+        const nextGranularity = (["line", "word", "char"].includes(String(values.granularity)) ? String(values.granularity) : "word") as Granularity
+        const nextIgnoreWhitespace = Boolean(values.ignoreWhitespace)
+        const nextRows = buildDiffRows(nextLeft, nextRight, nextGranularity, nextIgnoreWhitespace)
+        setMode("diff"); setLeft(nextLeft); setRight(nextRight); setGranularity(nextGranularity); setIgnoreWhitespace(nextIgnoreWhitespace)
+        return { success: true, mode: nextMode, granularity: nextGranularity, changedRows: nextRows.filter((row) => row.kind !== "same").length, totalRows: nextRows.length, executed: true }
+      },
+    },
+  })
 
   return (
     <section className="page-shell">
@@ -65,7 +89,7 @@ export default function TextWorkbenchPage() {
         {mode === "markdown" ? (
           <div className="grid overflow-hidden rounded-xl border bg-card shadow-sm lg:grid-cols-2">
             <label className="border-b lg:border-r lg:border-b-0"><div className="flex h-11 items-center gap-2 border-b px-4 text-sm font-medium"><FileText className="size-4" />Markdown</div><textarea className="app-interactive h-[36rem] w-full resize-none overflow-auto bg-transparent p-4 font-mono text-sm leading-6 outline-none" value={markdown} onChange={(event) => setMarkdown(event.target.value)} spellCheck={false} /></label>
-            <div><div className="flex h-11 items-center gap-2 border-b px-4 text-sm font-medium"><Eye className="size-4" />预览</div><article className="markdown-preview h-[36rem] overflow-auto p-6" dangerouslySetInnerHTML={{ __html: preview }} /></div>
+            <div><div className="flex h-11 items-center gap-2 border-b px-4 text-sm font-medium"><Eye className="size-4" />预览</div><div className="h-[36rem] overflow-auto p-6"><MarkdownRenderer value={markdown} /></div></div>
           </div>
         ) : (
           <div className="overflow-hidden rounded-xl border bg-card shadow-sm">

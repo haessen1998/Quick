@@ -8,6 +8,7 @@ import { parse as parseYaml, stringify as stringifyYaml } from "yaml"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
+import { useAssistantCapability } from "@/lib/assistant-capabilities"
 import { cn } from "@/lib/utils"
 
 type Option = { id: string; label: string }
@@ -226,6 +227,34 @@ export default function DataConversionPage() {
   const run = () => { try { setOutput(module.convert(input, source, target)); setError("") } catch (caught) { setOutput(""); setError(caught instanceof Error ? caught.message : String(caught)) } }
   const swappable = module.sources.some((option) => option.id === target) && module.targets.some((option) => option.id === source)
   const swap = () => { if (swappable) { setSource(target); setTarget(source); setInput(output || module.samples[target] || ""); setOutput(input); setError("") } }
+
+  useAssistantCapability({
+    page: "converter",
+    getContext: () => ({ module: moduleId, source, target, input: input.slice(0, 8000), output: output.slice(0, 8000), error }),
+    actions: {
+      convert: (values) => {
+        const nextModule = modules.find((item) => item.id === String(values.module ?? ""))
+        if (!nextModule) throw new Error(`未知转换模块：${String(values.module ?? "")}`)
+        const nextSource = String(values.source ?? "")
+        const nextTarget = String(values.target ?? "")
+        if (!nextModule.sources.some((item) => item.id === nextSource)) throw new Error(`${nextModule.label} 不支持来源 ${nextSource}`)
+        if (!nextModule.targets.some((item) => item.id === nextTarget)) throw new Error(`${nextModule.label} 不支持目标 ${nextTarget}`)
+        if (nextSource === nextTarget) throw new Error("来源与目标不能相同")
+        const nextInput = String(values.input ?? "")
+        setModuleId(nextModule.id); setSource(nextSource); setTarget(nextTarget); setInput(nextInput)
+        try {
+          const result = nextModule.convert(nextInput, nextSource, nextTarget)
+          setOutput(result); setError("")
+          toast.success(`页面助手已完成：${nextModule.label}`)
+          return { success: true, module: nextModule.id, source: nextSource, target: nextTarget, result: result.slice(0, 16000), truncated: result.length > 16000, executed: true }
+        } catch (caught) {
+          const message = caught instanceof Error ? caught.message : String(caught)
+          setOutput(""); setError(message)
+          return { success: false, module: nextModule.id, error: message, executed: true }
+        }
+      },
+    },
+  })
 
   return (
     <section className="page-shell">

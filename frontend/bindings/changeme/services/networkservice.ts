@@ -10,25 +10,25 @@ import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wails
 import * as $models from "./models.js";
 
 export function CheckPort(host: string, port: number, timeoutMS: number): $CancellablePromise<$models.NetworkResult> {
-    return $Call.ByID(687753802, host, port, timeoutMS);
+    return $Call.ByID(931730466, host, port, timeoutMS);
 }
 
 export function DNSQuery(host: string, recordType: string, timeoutMS: number): $CancellablePromise<$models.NetworkResult> {
-    return $Call.ByID(2527201294, host, recordType, timeoutMS);
+    return $Call.ByID(305925670, host, recordType, timeoutMS);
 }
 
 export function FindProcesses(searchType: string, query: string): $CancellablePromise<$models.ProcessResult> {
-    return $Call.ByID(2282008253, searchType, query);
+    return $Call.ByID(2587336789, searchType, query);
 }
 
 export function HTTPRequest(method: string, targetURL: string, headersText: string, body: string, proxyMode: string, proxyURL: string, timeoutMS: number): $CancellablePromise<$models.HTTPResult> {
-    return $Call.ByID(3965602664, method, targetURL, headersText, body, proxyMode, proxyURL, timeoutMS);
+    return $Call.ByID(3551720352, method, targetURL, headersText, body, proxyMode, proxyURL, timeoutMS);
 }
 
 export function Ping(host: string, timeoutMS: number): $CancellablePromise<$models.NetworkResult> {
-    return $Call.ByID(25732155, host, timeoutMS);
+    return $Call.ByID(2504155155, host, timeoutMS);
 }
 
 export function TerminateProcess(pid: number): $CancellablePromise<$models.NetworkResult> {
-    return $Call.ByID(1693724511, pid);
+    return $Call.ByID(328954167, pid);
 }

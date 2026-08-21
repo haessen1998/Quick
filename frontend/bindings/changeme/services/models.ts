@@ -10,6 +10,37 @@ export interface HTTPResult {
     "durationMs": number;
 }
 
+export interface MCPProxySession {
+    "success": boolean;
+    "id": string;
+    "endpoint": string;
+    "token": string;
+    "error": string;
+}
+
+export interface MCPStdioCallResult {
+    "success": boolean;
+    "resultJson": string;
+    "durationMs": number;
+    "error": string;
+}
+
+export interface MCPStdioConnectResult {
+    "success": boolean;
+    "sessionId": string;
+    "name": string;
+    "version": string;
+    "instructions": string;
+    "capabilities": string[] | null;
+    "error": string;
+}
+
+export interface MCPStdioToolsResult {
+    "success": boolean;
+    "toolsJson": string;
+    "error": string;
+}
+
 export interface NetworkResult {
     "success": boolean;
     "output": string;

@@ -1,4 +1,4 @@
-package main
+package services
 
 import (
 	"os"
@@ -28,5 +28,15 @@ func TestFindProcessesRejectsInvalidPort(t *testing.T) {
 	result := (&NetworkService{}).FindProcesses("port", "70000")
 	if result.Success {
 		t.Fatal("expected invalid port to be rejected")
+	}
+}
+
+func TestFindProcessesWithEmptyQueryReturnsAll(t *testing.T) {
+	result := (&NetworkService{}).FindProcesses("name", "")
+	if !result.Success {
+		t.Fatalf("empty query should list all processes: %s", result.Output)
+	}
+	if len(result.Processes) == 0 {
+		t.Fatal("expected at least one local process")
 	}
 }

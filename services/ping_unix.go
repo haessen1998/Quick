@@ -1,15 +1,14 @@
-//go:build windows
+//go:build !windows
 
-package main
+package services
 
 import (
 	"context"
 	"os/exec"
-	"strconv"
 )
 
 func runPing(ctx context.Context, host string, timeoutMS int) (string, error) {
-	command := exec.CommandContext(ctx, "ping", "-n", "1", "-w", strconv.Itoa(timeoutMS), host)
+	command := exec.CommandContext(ctx, "ping", "-c", "1", host)
 	output, err := command.CombinedOutput()
 	return string(output), err
 }

@@ -1,4 +1,4 @@
-package main
+package services
 
 import (
 	"bufio"
@@ -73,12 +73,13 @@ func (n *NetworkService) FindProcesses(searchType string, query string) ProcessR
 	if searchType != "pid" && searchType != "port" && searchType != "name" {
 		return ProcessResult{Success: false, Output: "search type must be pid, port, or name"}
 	}
-	if query == "" {
-		return ProcessResult{Success: false, Output: "search query is required"}
-	}
 	processes, err := listLocalProcesses()
 	if err != nil {
 		return ProcessResult{Success: false, Output: err.Error()}
+	}
+	if query == "" {
+		sort.Slice(processes, func(i, j int) bool { return processes[i].PID < processes[j].PID })
+		return ProcessResult{Success: true, Processes: processes, Output: fmt.Sprintf("显示全部 %d 个进程；输入搜索条件后才可关闭进程", len(processes))}
 	}
 	var numericQuery int
 	if searchType != "name" {

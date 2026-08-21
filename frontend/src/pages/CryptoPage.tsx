@@ -5,6 +5,7 @@ import { decodeJwt, decodeProtectedHeader, jwtVerify, SignJWT } from "jose"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
+import { useAssistantCapability } from "@/lib/assistant-capabilities"
 
 const inputClass = "app-interactive w-full rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/40"
 const textAreaClass = `${inputClass} resize-none font-mono leading-6`
@@ -162,6 +163,64 @@ export default function CryptoPage() {
     }
     const verified = await jwtVerify(jwtInput, secret, { algorithms: ["HS256"] })
     setJwtOutput(JSON.stringify({ protectedHeader: verified.protectedHeader, payload: verified.payload }, null, 2))
+  })
+
+  useAssistantCapability({
+    page: "crypto",
+    getContext: () => ({
+      hash: { algorithm: hashAlgorithm, hmac: hmacEnabled, input: hashInput.slice(0, 4000), output: hashOutput },
+      aes: { mode: aesMode, inputLength: aesInput.length, hasPassword: Boolean(aesPassword), hasOutput: Boolean(aesOutput) },
+      rsa: { usage: rsaUsage, action: rsaAction, inputLength: rsaInput.length, hasPublicKey: Boolean(publicKey), hasPrivateKey: Boolean(privateKey), hasSignature: Boolean(rsaSignature), outputStatus: rsaOutput ? "已有结果" : "" },
+      jwt: { mode: jwtMode, inputLength: jwtInput.length, hasSecret: Boolean(jwtSecret), output: jwtMode === "parse" ? jwtOutput.slice(0, 8000) : jwtOutput ? "已有敏感结果（不暴露）" : "" },
+      error,
+    }),
+    actions: {
+      run: async (values) => {
+        const operation = String(values.operation ?? "")
+        const nextInput = String(values.input ?? "")
+        const algorithm = String(values.algorithm ?? "SHA-256")
+        setError("")
+        try {
+          if (operation === "hash") {
+            if (!["MD5", "SHA-1", "SHA-256", "SHA-512"].includes(algorithm)) throw new Error(`不支持的 Hash 算法：${algorithm}`)
+            const result = await hashText(nextInput, algorithm)
+            setHashInput(nextInput); setHashAlgorithm(algorithm); setHmacEnabled(false); setHashOutput(result)
+            return { success: true, operation, algorithm, result, executed: true }
+          }
+          if (operation === "jwt-parse") {
+            const result = JSON.stringify({ header: decodeProtectedHeader(nextInput), payload: decodeJwt(nextInput) }, null, 2)
+            setJwtMode("parse"); setJwtInput(nextInput); setJwtOutput(result)
+            return { success: true, operation, result, executed: true }
+          }
+          if (operation === "rsa-generate-encryption" || operation === "rsa-generate-signing") {
+            const usage = operation === "rsa-generate-encryption" ? "encrypt" : "sign"
+            const keys = await generateRsa(usage)
+            setRsaUsage(usage); setPublicKey(keys.publicKey); setPrivateKey(keys.privateKey); setRsaOutput(`${usage === "encrypt" ? "RSA-OAEP" : "RSA-PSS"} 2048 位密钥已生成`)
+            toast.success("RSA 密钥已生成，仅显示在 Quick 页面")
+            return { success: true, operation, result: "密钥已生成，仅显示在 Quick 页面", sensitive: true, executed: true }
+          }
+          if (operation === "hmac") {
+            setHashInput(nextInput); setHashAlgorithm(algorithm === "MD5" ? "SHA-256" : algorithm); setHmacEnabled(true); setHashOutput("")
+          } else if (operation === "aes-encrypt" || operation === "aes-decrypt") {
+            setAesMode(operation === "aes-encrypt" ? "encrypt" : "decrypt"); setAesInput(nextInput); setAesOutput("")
+          } else if (operation.startsWith("rsa-")) {
+            const action = operation.slice(4) as "encrypt" | "decrypt" | "sign" | "verify"
+            if (!["encrypt", "decrypt", "sign", "verify"].includes(action)) throw new Error(`不支持的 RSA 操作：${operation}`)
+            setRsaAction(action); setRsaUsage(action === "encrypt" || action === "decrypt" ? "encrypt" : "sign"); setRsaInput(nextInput); setRsaOutput("")
+            if (typeof values.signature === "string") setRsaSignature(values.signature)
+            if (typeof values.publicKey === "string") setPublicKey(values.publicKey)
+          } else if (operation === "jwt-sign" || operation === "jwt-verify") {
+            setJwtMode(operation === "jwt-sign" ? "sign" : "verify"); setJwtInput(nextInput); setJwtOutput("")
+          } else throw new Error(`不支持的加密操作：${operation}`)
+          toast.success("页面助手已准备加密操作；请检查密钥并手动执行")
+          return { success: true, operation, executed: false, confirmationRequired: true, message: "非敏感字段已填写；密钥或密码需由用户在页面输入并确认执行" }
+        } catch (caught) {
+          const message = caught instanceof Error ? caught.message : String(caught)
+          setError(message)
+          return { success: false, operation, error: message, executed: operation === "hash" || operation === "jwt-parse" }
+        }
+      },
+    },
   })
 
   return (

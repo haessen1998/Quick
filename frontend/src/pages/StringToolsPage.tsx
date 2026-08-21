@@ -68,5 +68,5 @@ const tools: TextTool[] = [
 ]
 
 export default function StringToolsPage() {
-  return <ToolWorkspace title="字符串格式化" description="格式化、校验与压缩 JSON、YAML、XML、HTML、CSS 和 JavaScript。" tools={tools} />
+  return <ToolWorkspace title="字符串格式化" description="格式化、校验与压缩 JSON、YAML、XML、HTML、CSS 和 JavaScript。" tools={tools} assistantPage="formatter" />
 }

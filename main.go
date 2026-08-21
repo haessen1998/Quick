@@ -1,6 +1,7 @@
 package main
 
 import (
+	"changeme/services"
 	"embed"
 
 	"log"
@@ -33,7 +34,9 @@ func main() {
 		Name:        "Quick",
 		Description: "A local-first cross-platform developer toolkit",
 		Services: []application.Service{
-			application.NewService(&NetworkService{}),
+			application.NewService(&services.NetworkService{}),
+			application.NewService(&services.MCPProxyService{}),
+			application.NewService(&services.MCPStdioService{}),
 		},
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets),

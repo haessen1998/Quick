@@ -3,6 +3,7 @@ import { Braces, CheckCircle2, CodeXml, Play, Regex, Sparkles, TriangleAlert } f
 import { JSONPath } from "jsonpath-plus"
 
 import { Button } from "@/components/ui/button"
+import { useAssistantCapability } from "@/lib/assistant-capabilities"
 import { cn } from "@/lib/utils"
 
 type Mode = "jsonpath" | "xpath" | "regex"
@@ -33,6 +34,18 @@ function evaluateXPath(xml: string, expression: string) {
   return values.length ? values.join("\n") : "未匹配到节点"
 }
 
+function evaluate(mode: Mode, expression: string, input: string, flags: string) {
+  if (mode === "jsonpath") return JSON.stringify(JSONPath({ path: expression, json: JSON.parse(input), wrap: true }), null, 2)
+  if (mode === "xpath") return evaluateXPath(input, expression)
+  const uniqueFlags = Array.from(new Set(flags.replace(/[^gimsuy]/g, "").split(""))).join("")
+  const regex = new RegExp(expression, uniqueFlags)
+  const serialize = (match: RegExpExecArray) => ({ value: match[0], index: match.index, groups: match.groups ?? {}, captures: match.slice(1) })
+  const matches = uniqueFlags.includes("g")
+    ? Array.from(input.matchAll(regex), serialize)
+    : (() => { const match = regex.exec(input); return match ? [serialize(match)] : [] })()
+  return JSON.stringify(matches, null, 2)
+}
+
 export default function ValidationPage() {
   const [mode, setMode] = useState<Mode>("jsonpath")
   const [expression, setExpression] = useState("$.store.books[?(@.price < 20)].title")
@@ -50,24 +63,36 @@ export default function ValidationPage() {
 
   const run = () => {
     try {
-      const result = mode === "jsonpath"
-        ? JSON.stringify(JSONPath({ path: expression, json: JSON.parse(input), wrap: true }), null, 2)
-        : mode === "xpath"
-          ? evaluateXPath(input, expression)
-          : (() => {
-              const uniqueFlags = Array.from(new Set(flags.replace(/[^gimsuy]/g, "").split(""))).join("")
-              const regex = new RegExp(expression, uniqueFlags)
-              const serialize = (match: RegExpExecArray) => ({ value: match[0], index: match.index, groups: match.groups ?? {}, captures: match.slice(1) })
-              const matches = uniqueFlags.includes("g")
-                ? Array.from(input.matchAll(regex), serialize)
-                : (() => { const match = regex.exec(input); return match ? [serialize(match)] : [] })()
-              return JSON.stringify(matches, null, 2)
-            })()
+      const result = evaluate(mode, expression, input, flags)
       setOutput(result); setError("")
     } catch (caught) {
       setOutput(""); setError(caught instanceof Error ? caught.message : String(caught))
     }
   }
+
+  useAssistantCapability({
+    page: "validation",
+    getContext: () => ({ mode, expression, flags: mode === "regex" ? flags : undefined, input: input.slice(0, 8000), output: output.slice(0, 8000), error }),
+    actions: {
+      run: (values) => {
+        const nextMode = String(values.mode ?? "") as Mode
+        if (!(["jsonpath", "xpath", "regex"] as string[]).includes(nextMode)) throw new Error(`不支持的校验模式：${nextMode}`)
+        const nextExpression = String(values.expression ?? "")
+        const nextInput = String(values.input ?? "")
+        const nextFlags = String(values.flags ?? "gi").replace(/[^gimsuy]/g, "")
+        setMode(nextMode); setExpression(nextExpression); setInput(nextInput); setFlags(nextFlags)
+        try {
+          const result = evaluate(nextMode, nextExpression, nextInput, nextFlags)
+          setOutput(result); setError("")
+          return { success: true, mode: nextMode, result: result.slice(0, 16000), truncated: result.length > 16000, executed: true }
+        } catch (caught) {
+          const message = caught instanceof Error ? caught.message : String(caught)
+          setOutput(""); setError(message)
+          return { success: false, mode: nextMode, error: message, executed: true }
+        }
+      },
+    },
+  })
 
   const modes = [
     { id: "jsonpath" as const, label: "JSONPath", icon: Braces },
