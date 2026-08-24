@@ -26,12 +26,13 @@ tasks:
           ARCH: '{{.ARCH}}'
           DEV: '{{.DEV}}'
           OUTPUT: '{{.OUTPUT}}'
-          EXTRA_TAGS: '{{.EXTRA_TAGS}}'
+          EXTRA_TAGS: '{{.MCP_BUILD_TAGS}}'
           OBFUSCATED: '{{.OBFUSCATED}}'
           GARBLE_ARGS: '{{.GARBLE_ARGS}}'
     vars:
       DEFAULT_OUTPUT: '{{.BIN_DIR}}/{{.APP_NAME}}'
       OUTPUT: '{{ .OUTPUT | default .DEFAULT_OUTPUT }}'
+      MCP_BUILD_TAGS: 'mcp{{if .EXTRA_TAGS}},{{.EXTRA_TAGS}}{{end}}'
       # Determine target architecture (defaults to host ARCH if not specified)
       TARGET_ARCH: '{{.ARCH | default ARCH}}'
       # Check if a C compiler is available (gcc or clang) — cross-platform via wails3 tool

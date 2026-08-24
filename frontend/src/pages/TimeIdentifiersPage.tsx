@@ -165,7 +165,7 @@ export default function TimeIdentifiersPage() {
             const nextLength = Number(values.length ?? 24)
             const result = generateIdentifier(kind, nextLength)
             setGenerator(kind); setLength(nextLength); setGenerated(result)
-            toast.success(`页面助手已生成${kind === "password" ? "密码" : "标识符"}`)
+            toast.success(`小Q已生成${kind === "password" ? "密码" : "标识符"}`)
             return kind === "password" ? { success: true, result: "密码已生成，仅显示在 Quick 页面", sensitive: true, executed: true } : { success: true, result, executed: true }
           }
           if (operation === "cron") {

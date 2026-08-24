@@ -190,7 +190,7 @@ function SchemaField({ name, schema, required, value, onChange }: {
 export default function MCPInspectorPage({ proxy, profiles }: { proxy: ProxySettings; profiles: MCPServerProfile[] }) {
   const [selectedProfileID, setSelectedProfileID] = useState(profiles[0]?.id ?? "")
   const [transportType, setTransportType] = useState<MCPTransportType>(profiles[0]?.transport ?? "streamable-http")
-  const [serverURL, setServerURL] = useState("http://127.0.0.1:3000/mcp")
+  const [serverURL, setServerURL] = useState(profiles[0]?.url ?? "http://127.0.0.1:9099/mcp")
   const [headersText, setHeadersText] = useState("")
   const [connectionMode, setConnectionMode] = useState<MCPConnectionMode>("quick-proxy")
   const [command, setCommand] = useState("")
@@ -546,7 +546,7 @@ export default function MCPInspectorPage({ proxy, profiles }: { proxy: ProxySett
                 ) : (
                   <label className="block space-y-1.5 text-xs font-medium">
                     <span>Server URL</span>
-                    <input className={INPUT_CLASS} value={serverURL} disabled={connected || connecting} onChange={(event) => { setServerURL(event.target.value); setSelectedProfileID("") }} placeholder={transportType === "sse" ? "http://127.0.0.1:3000/sse" : "http://127.0.0.1:3000/mcp"} />
+                    <input className={INPUT_CLASS} value={serverURL} disabled={connected || connecting} onChange={(event) => { setServerURL(event.target.value); setSelectedProfileID("") }} placeholder={transportType === "sse" ? "http://127.0.0.1:3001/sse" : "http://127.0.0.1:9099/mcp"} />
                   </label>
                 )}
               </div>

@@ -53,7 +53,7 @@ function SidebarProvider({
     <SidebarContext.Provider value={{ open, mobileOpen, setMobileOpen, toggleSidebar }}>
       <div
         data-slot="sidebar-wrapper"
-        className={cn("flex min-h-svh w-full bg-background", className)}
+        className={cn("flex h-svh min-h-0 w-full overflow-hidden bg-background", className)}
         {...props}
       >
         {children}
@@ -79,7 +79,7 @@ function Sidebar({ className, children, ...props }: React.ComponentProps<"aside"
         data-slot="sidebar"
         data-state={open ? "expanded" : "collapsed"}
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex h-svh w-64 shrink-0 -translate-x-full flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-[width,transform] duration-200 ease-out md:sticky md:top-0 md:self-start md:translate-x-0",
+          "fixed bottom-0 left-0 top-[var(--window-safe-top)] z-50 flex h-[calc(100svh-var(--window-safe-top))] w-64 shrink-0 -translate-x-full flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-[width,transform] duration-200 ease-out md:sticky md:top-[var(--window-safe-top)] md:self-start md:translate-x-0",
           mobileOpen && "translate-x-0",
           open ? "md:w-60" : "md:w-16",
           className,
@@ -189,7 +189,7 @@ function SidebarInset({ className, ...props }: React.ComponentProps<"main">) {
   return (
     <main
       data-slot="sidebar-inset"
-      className={cn("relative flex min-h-svh min-w-0 flex-1 flex-col bg-background", className)}
+      className={cn("relative mt-[var(--window-safe-top)] flex h-[calc(100svh-var(--window-safe-top))] min-h-0 min-w-0 flex-1 flex-col overflow-y-auto overscroll-contain bg-background [scrollbar-gutter:stable]", className)}
       {...props}
     />
   )

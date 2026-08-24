@@ -1,4 +1,4 @@
-export type AIProviderId = "openai" | "anthropic" | "google" | "compatible"
+export type AIProviderId = "openai" | "azure" | "anthropic" | "google" | "open-responses" | "compatible"
 
 export type AIProfile = {
   id: string
@@ -7,6 +7,9 @@ export type AIProfile = {
   model: string
   apiKey: string
   baseURL: string
+  resourceName: string
+  apiVersion: string
+  useDeploymentBasedUrls: boolean
   systemPrompt: string
 }
 
@@ -16,6 +19,7 @@ export type MCPConnectionMode = "quick-proxy" | "direct"
 export type MCPServerProfile = {
   id: string
   name: string
+  enabled: boolean
   transport: MCPTransportType
   url: string
   headers: string
@@ -42,6 +46,9 @@ export function createAIProfile(overrides: Partial<AIProfile> = {}): AIProfile {
     model: "gpt-5-mini",
     apiKey: "",
     baseURL: "",
+    resourceName: "",
+    apiVersion: "",
+    useDeploymentBasedUrls: false,
     systemPrompt: DEFAULT_SYSTEM_PROMPT,
     ...overrides,
   }
@@ -51,8 +58,9 @@ export function createMCPServerProfile(overrides: Partial<MCPServerProfile> = {}
   return {
     id: createID("mcp"),
     name: "新的 MCP Server",
+    enabled: true,
     transport: "streamable-http",
-    url: "http://127.0.0.1:3000/mcp",
+    url: "http://127.0.0.1:9099/mcp",
     headers: "",
     connectionMode: "quick-proxy",
     command: "",
@@ -64,15 +72,19 @@ export function createMCPServerProfile(overrides: Partial<MCPServerProfile> = {}
 }
 
 const DEFAULT_AI_PROFILES: AIProfile[] = [
-  createAIProfile({ id: "ai-openai", name: "OpenAI", provider: "openai", model: "gpt-5-mini" }),
-  createAIProfile({ id: "ai-anthropic", name: "Claude", provider: "anthropic", model: "claude-sonnet-4-6" }),
-  createAIProfile({ id: "ai-gemini", name: "Gemini", provider: "google", model: "gemini-2.5-flash" }),
-  createAIProfile({ id: "ai-compatible", name: "OpenAI Compatible", provider: "compatible", model: "model-name" }),
+  createAIProfile({ id: "ai-openai", name: "OpenAI 示例", provider: "openai", model: "gpt-5-mini" }),
 ]
 
 const DEFAULT_MCP_SERVERS: MCPServerProfile[] = [
-  createMCPServerProfile({ id: "mcp-local-http", name: "本地 MCP", url: "http://127.0.0.1:3000/mcp" }),
+  createMCPServerProfile({ id: "mcp-wails3-app", name: "Quick App MCP", url: "http://127.0.0.1:9099/mcp" }),
 ]
+
+const LEGACY_AI_DEFAULTS = [
+  { id: "ai-openai", name: "OpenAI", provider: "openai", model: "gpt-5-mini" },
+  { id: "ai-anthropic", name: "Claude", provider: "anthropic", model: "claude-sonnet-4-6" },
+  { id: "ai-gemini", name: "Gemini", provider: "google", model: "gemini-2.5-flash" },
+  { id: "ai-compatible", name: "OpenAI Compatible", provider: "compatible", model: "model-name" },
+] as const
 
 function loadList<T>(key: string, fallback: T[], validate: (value: unknown) => value is T) {
   try {
@@ -89,7 +101,16 @@ function isAIProfile(value: unknown): value is AIProfile {
   const profile = value as Partial<AIProfile>
   return typeof profile.id === "string" && typeof profile.name === "string" && typeof profile.model === "string"
     && typeof profile.apiKey === "string" && typeof profile.baseURL === "string" && typeof profile.systemPrompt === "string"
-    && ["openai", "anthropic", "google", "compatible"].includes(profile.provider ?? "")
+    && ["openai", "azure", "anthropic", "google", "open-responses", "compatible"].includes(profile.provider ?? "")
+}
+
+function normalizeAIProfile(profile: AIProfile): AIProfile {
+  return {
+    ...profile,
+    resourceName: typeof profile.resourceName === "string" ? profile.resourceName : "",
+    apiVersion: typeof profile.apiVersion === "string" ? profile.apiVersion : "",
+    useDeploymentBasedUrls: typeof profile.useDeploymentBasedUrls === "boolean" ? profile.useDeploymentBasedUrls : false,
+  }
 }
 
 function isMCPServerProfile(value: unknown): value is MCPServerProfile {
@@ -103,7 +124,13 @@ function isMCPServerProfile(value: unknown): value is MCPServerProfile {
 }
 
 export function getInitialAIProfiles() {
-  return loadList(AI_STORAGE_KEY, DEFAULT_AI_PROFILES, isAIProfile)
+  const profiles = loadList(AI_STORAGE_KEY, DEFAULT_AI_PROFILES, isAIProfile).map(normalizeAIProfile)
+  const isUntouchedLegacyDefaults = profiles.length === LEGACY_AI_DEFAULTS.length && LEGACY_AI_DEFAULTS.every((legacy) => {
+    const profile = profiles.find((item) => item.id === legacy.id)
+    return profile?.name === legacy.name && profile.provider === legacy.provider && profile.model === legacy.model
+      && !profile.apiKey && !profile.baseURL && profile.systemPrompt === DEFAULT_SYSTEM_PROMPT
+  })
+  return isUntouchedLegacyDefaults ? DEFAULT_AI_PROFILES.map((item) => ({ ...item })) : profiles
 }
 
 export function saveAIProfiles(profiles: AIProfile[]) {
@@ -111,7 +138,16 @@ export function saveAIProfiles(profiles: AIProfile[]) {
 }
 
 export function getInitialMCPServers() {
-  return loadList(MCP_STORAGE_KEY, DEFAULT_MCP_SERVERS, isMCPServerProfile)
+  return loadList(MCP_STORAGE_KEY, DEFAULT_MCP_SERVERS, isMCPServerProfile).map((profile) => {
+    const enabled = typeof profile.enabled === "boolean" ? profile.enabled : true
+    if (profile.id === "mcp-local-http" && profile.url === "http://127.0.0.1:3000/mcp") {
+      return { ...profile, id: "mcp-wails3-app", name: "Quick App MCP", enabled, url: "http://127.0.0.1:9099/mcp" }
+    }
+    if (profile.id === "mcp-wails3-app" && profile.name === "Wails 3 应用 MCP" && profile.url === "http://127.0.0.1:9099/mcp") {
+      return { ...profile, name: "Quick App MCP", enabled }
+    }
+    return { ...profile, enabled }
+  })
 }
 
 export function saveMCPServers(profiles: MCPServerProfile[]) {

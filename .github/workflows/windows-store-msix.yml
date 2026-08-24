@@ -19,6 +19,9 @@ jobs:
     runs-on: windows-latest
     env:
       WAILS_VERSION: v3.0.0-beta.9
+      WAILS_MCP: "1"
+      WAILS_MCP_HOST: "127.0.0.1"
+      WAILS_MCP_PORT: "9099"
       # Public package identity assigned to QuickDev (Store ID 9P084NQXKDMQ).
       STORE_IDENTITY_NAME: haessen.QuickDev
       STORE_PUBLISHER: CN=248AC9D1-95E3-40D3-B8EF-1D38B72432B7
@@ -85,7 +88,7 @@ jobs:
         run: npm run build --prefix frontend
 
       - name: Test Go code
-        run: go test ./...
+        run: go test -tags mcp ./...
 
       - name: Build Windows executable
         run: wails3 build GOOS=windows

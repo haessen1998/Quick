@@ -16,6 +16,8 @@ import {
   Network,
   Pencil,
   Plus,
+  PanelRightClose,
+  PanelRightOpen,
   ShieldCheck,
   Settings,
   Sparkles,
@@ -29,6 +31,7 @@ import { Events, WML } from "@wailsio/runtime"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
+import { Switch } from "@/components/ui/switch"
 import { GlobalAssistant } from "@/components/GlobalAssistant"
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { GlitchText } from "@/components/GlitchText"
@@ -51,8 +54,8 @@ import {
 } from "@/components/ui/sidebar"
 import { cn } from "@/lib/utils"
 import { AssistantCapabilityProvider } from "@/lib/assistant-capabilities"
-import { AssistantConversationProvider } from "@/lib/assistant-conversation"
 import { getInitialAssistantSettings, saveAssistantSettings, type AssistantSettings } from "@/lib/assistant-settings"
+import { AI_PROVIDER_OPTIONS, getAIProviderOption, isAIProfileReady } from "@/lib/ai-provider"
 import type { PageId } from "@/lib/pages"
 import { getInitialTheme, type AppTheme } from "@/lib/theme"
 import { getInitialProxySettings, saveProxySettings, type ProxySettings } from "@/lib/proxy"
@@ -225,16 +228,26 @@ const SETTINGS_TEXTAREA_CLASS = "h-24 w-full resize-none rounded-lg border borde
 function AIProfileEditor({ profile, isNew, onChange, onSave, onClose }: { profile: AIProfile; isNew: boolean; onChange: (profile: AIProfile) => void; onSave: () => void; onClose: () => void }) {
   const [showKey, setShowKey] = useState(false)
   const patch = (changes: Partial<AIProfile>) => onChange({ ...profile, ...changes })
+  const provider = getAIProviderOption(profile.provider)
+  const changeProvider = (providerID: AIProfile["provider"]) => {
+    const next = getAIProviderOption(providerID)
+    patch({ provider: providerID, model: next.model, apiKey: "", baseURL: "", resourceName: "", apiVersion: "", useDeploymentBasedUrls: false })
+    setShowKey(false)
+  }
   return (
     <Dialog open onOpenChange={(open) => { if (!open) onClose() }}>
       <DialogContent>
         <DialogHeader><DialogTitle>{isNew ? "新增 AI 配置" : "修改 AI 配置"}</DialogTitle><DialogDescription>保存后可在 AI 对话页直接选择。</DialogDescription></DialogHeader>
         <div className="grid gap-4 p-5 sm:grid-cols-2">
           <label className="space-y-1.5 text-xs font-medium"><span>名称</span><input autoFocus className={SETTINGS_INPUT_CLASS} value={profile.name} onChange={(event) => patch({ name: event.target.value })} /></label>
-          <label className="space-y-1.5 text-xs font-medium"><span>Provider</span><select className={SETTINGS_INPUT_CLASS} value={profile.provider} onChange={(event) => patch({ provider: event.target.value as AIProfile["provider"] })}><option value="openai">OpenAI</option><option value="anthropic">Anthropic</option><option value="google">Google Gemini</option><option value="compatible">OpenAI Compatible</option></select></label>
-          <label className="space-y-1.5 text-xs font-medium"><span>模型</span><input className={SETTINGS_INPUT_CLASS} value={profile.model} onChange={(event) => patch({ model: event.target.value })} /></label>
-          <label className="space-y-1.5 text-xs font-medium"><span>Base URL</span><input className={SETTINGS_INPUT_CLASS} value={profile.baseURL} onChange={(event) => patch({ baseURL: event.target.value })} placeholder="官方 Provider 可留空" /></label>
-          <label className="space-y-1.5 text-xs font-medium sm:col-span-2"><span>API Key</span><span className="relative block"><input type={showKey ? "text" : "password"} className={`${SETTINGS_INPUT_CLASS} pr-10`} value={profile.apiKey} onChange={(event) => patch({ apiKey: event.target.value })} autoComplete="off" /><button type="button" className="absolute right-0 top-0 flex size-9 items-center justify-center text-muted-foreground" onClick={() => setShowKey((value) => !value)} aria-label={showKey ? "隐藏 API Key" : "显示 API Key"}>{showKey ? <EyeOff className="size-4" /> : <Eye className="size-4" />}</button></span></label>
+          <label className="space-y-1.5 text-xs font-medium"><span>Provider</span><select className={SETTINGS_INPUT_CLASS} value={profile.provider} onChange={(event) => changeProvider(event.target.value as AIProfile["provider"])}>{AI_PROVIDER_OPTIONS.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
+          <label className="space-y-1.5 text-xs font-medium"><span>{provider.modelLabel}</span><input className={SETTINGS_INPUT_CLASS} value={profile.model} onChange={(event) => patch({ model: event.target.value })} placeholder={provider.modelPlaceholder} /></label>
+          <label className="space-y-1.5 text-xs font-medium"><span>{provider.endpointLabel}{provider.endpointRequired && <span className="font-normal text-muted-foreground">（必填）</span>}</span><input className={SETTINGS_INPUT_CLASS} value={profile.baseURL} onChange={(event) => patch({ baseURL: event.target.value })} placeholder={provider.endpointPlaceholder} spellCheck={false} /></label>
+          {profile.provider === "azure" && <label className="space-y-1.5 text-xs font-medium"><span>Resource Name <span className="font-normal text-muted-foreground">（与 Base URL 二选一）</span></span><input className={SETTINGS_INPUT_CLASS} value={profile.resourceName} onChange={(event) => patch({ resourceName: event.target.value })} placeholder="your-resource-name" spellCheck={false} /></label>}
+          {profile.provider === "azure" && <label className="space-y-1.5 text-xs font-medium"><span>API Version <span className="font-normal text-muted-foreground">（可选）</span></span><input className={SETTINGS_INPUT_CLASS} value={profile.apiVersion} onChange={(event) => patch({ apiVersion: event.target.value })} placeholder={profile.useDeploymentBasedUrls ? "例如 2025-04-01-preview" : "默认 v1"} spellCheck={false} /></label>}
+          {profile.provider === "azure" && <div className="flex items-center gap-3 rounded-lg border bg-muted/20 px-3 py-2"><div className="min-w-0 flex-1"><div className="text-xs font-medium">部署路径兼容模式</div><p className="mt-0.5 text-[10px] leading-4 text-muted-foreground">使用旧版 /deployments/ 路径，需要匹配的 API Version。</p></div><Switch checked={Boolean(profile.useDeploymentBasedUrls)} onCheckedChange={(checked) => patch({ useDeploymentBasedUrls: checked })} aria-label="部署路径兼容模式" /></div>}
+          <label className="space-y-1.5 text-xs font-medium sm:col-span-2"><span>API Key{provider.apiKeyOptional && <span className="font-normal text-muted-foreground">（可选）</span>}</span><span className="relative block"><input type={showKey ? "text" : "password"} className={`${SETTINGS_INPUT_CLASS} pr-10`} value={profile.apiKey} onChange={(event) => patch({ apiKey: event.target.value })} autoComplete="off" /><button type="button" className="absolute right-0 top-0 flex size-9 items-center justify-center text-muted-foreground" onClick={() => setShowKey((value) => !value)} aria-label={showKey ? "隐藏 API Key" : "显示 API Key"}>{showKey ? <EyeOff className="size-4" /> : <Eye className="size-4" />}</button></span></label>
+          <p className="rounded-lg bg-muted/35 p-3 text-[11px] leading-5 text-muted-foreground sm:col-span-2">{provider.description} · {provider.protocol}</p>
           <label className="space-y-1.5 text-xs font-medium sm:col-span-2"><span>系统提示词</span><textarea className={SETTINGS_TEXTAREA_CLASS} value={profile.systemPrompt} onChange={(event) => patch({ systemPrompt: event.target.value })} /></label>
         </div>
         <DialogFooter><DialogClose asChild><Button type="button" variant="outline">取消</Button></DialogClose><Button type="button" disabled={!profile.name.trim() || !profile.model.trim()} onClick={onSave}>保存配置</Button></DialogFooter>
@@ -253,6 +266,10 @@ function MCPProfileEditor({ profile, isNew, onChange, onSave, onClose }: { profi
         <div className="grid gap-4 p-5 sm:grid-cols-2">
           <label className="space-y-1.5 text-xs font-medium"><span>名称</span><input autoFocus className={SETTINGS_INPUT_CLASS} value={profile.name} onChange={(event) => patch({ name: event.target.value })} /></label>
           <label className="space-y-1.5 text-xs font-medium"><span>Transport</span><select className={SETTINGS_INPUT_CLASS} value={profile.transport} onChange={(event) => patch({ transport: event.target.value as MCPServerProfile["transport"] })}><option value="streamable-http">Streamable HTTP</option><option value="sse">SSE（旧版兼容）</option><option value="stdio">STDIO</option></select></label>
+          <div className="flex items-center gap-3 rounded-lg border bg-muted/20 px-3 py-2 sm:col-span-2">
+            <div className="min-w-0 flex-1"><div className="text-xs font-medium">启用此配置</div><p className="mt-0.5 text-[11px] text-muted-foreground">启用后可在 MCP 测试页选择，并注册到小Q。</p></div>
+            <Switch checked={profile.enabled} onCheckedChange={(checked) => patch({ enabled: checked })} aria-label="启用 MCP 配置" />
+          </div>
           {profile.transport === "stdio" ? <>
             <label className="space-y-1.5 text-xs font-medium"><span>命令</span><input className={`${SETTINGS_INPUT_CLASS} font-mono`} value={profile.command} onChange={(event) => patch({ command: event.target.value })} placeholder="npx、uvx 或可执行文件路径" /></label>
             <label className="space-y-1.5 text-xs font-medium"><span>参数（JSON 数组）</span><input className={`${SETTINGS_INPUT_CLASS} font-mono`} value={profile.argsJSON} onChange={(event) => patch({ argsJSON: event.target.value })} placeholder={'["server.js"]'} /></label>
@@ -344,40 +361,30 @@ function SettingsPage({
           </div>
           <div className="rounded-xl border bg-background p-4">
             <div className="flex items-center gap-2 text-sm font-medium"><Settings className="size-4" />长期配置</div>
-            <p className="mt-2 text-xs leading-5 text-muted-foreground">主题、网络代理、AI/MCP 列表和页面助手偏好保存在当前设备的 WebView localStorage 中，重新启动 Quick 后仍可使用。</p>
+            <p className="mt-2 text-xs leading-5 text-muted-foreground">主题、网络代理、AI/MCP 列表和小Q偏好保存在当前设备的 WebView localStorage 中，重新启动 Quick 后仍可使用。</p>
           </div>
         </div>
       </article>
 
       <article className="rounded-xl border bg-card text-card-foreground shadow-sm">
         <div className="border-b p-6">
-          <h2 className="font-medium">页面助手</h2>
-          <p className="mt-1 text-sm text-muted-foreground">配置跨页面助手调用 Quick 和 MCP 扩展能力时的行为。</p>
+          <h2 className="font-medium">小Q</h2>
+          <p className="mt-1 text-sm text-muted-foreground">配置小Q调用 Quick、网络和 MCP 扩展能力时的行为。</p>
         </div>
         <div className="p-6">
           <div className="flex items-center gap-4 rounded-xl border bg-background p-4">
-            <span className={cn("flex size-10 shrink-0 items-center justify-center rounded-lg border", assistantSettings.autoApproveMCP ? "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-200" : "bg-muted/30 text-muted-foreground")}><ShieldCheck className="size-4" /></span>
+            <span className={cn("flex size-10 shrink-0 items-center justify-center rounded-lg border", assistantSettings.autoApproveOperations ? "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-200" : "bg-muted/30 text-muted-foreground")}><ShieldCheck className="size-4" /></span>
             <div className="min-w-0 flex-1">
-              <div className="text-sm font-medium">自动审核 MCP 调用</div>
-              <p className="mt-1 text-xs leading-5 text-muted-foreground">开启后，页面助手调用已保存 MCP 的 Tool 时不再显示逐次确认框。</p>
+              <div className="text-sm font-medium">操作自动审核</div>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">只读操作始终自动执行；开启后，小Q还可自动发送明确的 HTTP 请求、关闭已带条件搜索到的进程，以及调用未知或可能有副作用的 MCP Tool。</p>
             </div>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={assistantSettings.autoApproveMCP}
-              aria-label="自动审核 MCP 调用"
-              className={cn("app-interactive relative h-6 w-11 shrink-0 rounded-full border transition-colors focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/40", assistantSettings.autoApproveMCP ? "border-primary bg-primary" : "border-input bg-muted")}
-              onClick={() => {
-                const enabled = !assistantSettings.autoApproveMCP
-                onAssistantSettingsChange({ ...assistantSettings, autoApproveMCP: enabled })
-                if (enabled) toast.warning("已开启 MCP 自动审核", { description: "页面助手调用 MCP Tool 时将不再逐次确认。" })
-                else toast.success("已关闭 MCP 自动审核")
-              }}
-            >
-              <span className={cn("pointer-events-none absolute left-0.5 top-0.5 size-5 rounded-full bg-background shadow-sm transition-transform", assistantSettings.autoApproveMCP && "translate-x-5")} />
-            </button>
+            <Switch checked={assistantSettings.autoApproveOperations} aria-label="操作自动审核" onCheckedChange={(enabled) => {
+              onAssistantSettingsChange({ ...assistantSettings, autoApproveOperations: enabled })
+              if (enabled) toast.warning("已开启操作自动审核", { description: "小Q可执行明确请求的高风险操作，请仅在可信环境中开启。" })
+              else toast.success("已关闭操作自动审核")
+            }} />
           </div>
-          {assistantSettings.autoApproveMCP && <div className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/8 p-3 text-xs leading-5 text-amber-800 dark:text-amber-200">风险提示：MCP Tool 可能写入文件、发送网络请求或执行系统命令。自动审核只建议用于你完全信任的 Server。</div>}
+          {assistantSettings.autoApproveOperations && <div className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/8 p-3 text-xs leading-5 text-amber-800 dark:text-amber-200">风险提示：HTTP 请求、关闭进程和第三方 MCP Tool 可能造成外部副作用。自动审核只建议用于可信环境和可信 Server。</div>}
         </div>
       </article>
 
@@ -461,8 +468,8 @@ function SettingsPage({
           </div>
           <div className="overflow-x-auto rounded-xl border bg-background">
             <table className="w-full min-w-[44rem] text-left text-sm">
-              <thead className="border-b bg-muted/45 text-xs text-muted-foreground"><tr><th className="px-4 py-3 font-medium">名称</th><th className="px-4 py-3 font-medium">Provider</th><th className="px-4 py-3 font-medium">模型</th><th className="px-4 py-3 font-medium">Base URL</th><th className="px-4 py-3 font-medium">凭据</th><th className="w-32 px-4 py-3 text-right font-medium">操作</th></tr></thead>
-              <tbody>{aiProfiles.length ? aiProfiles.map((profile) => <tr key={profile.id} className="border-b last:border-b-0 hover:bg-muted/25"><td className="px-4 py-3 font-medium">{profile.name}</td><td className="px-4 py-3 text-muted-foreground">{profile.provider}</td><td className="px-4 py-3"><code className="text-xs">{profile.model}</code></td><td className="max-w-52 truncate px-4 py-3 text-xs text-muted-foreground" title={profile.baseURL}>{profile.baseURL || "官方默认"}</td><td className="px-4 py-3"><span className={cn("rounded-full px-2 py-1 text-[10px]", profile.apiKey ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" : "bg-muted text-muted-foreground")}>{profile.apiKey ? "已配置" : "未配置"}</span></td><td className="px-4 py-3"><div className="flex justify-end gap-1"><Button type="button" variant="ghost" size="icon-xs" onClick={() => setAIEditor({ value: { ...profile }, isNew: false })} aria-label={`修改 ${profile.name}`}><Pencil className="size-3.5" /></Button><Button type="button" variant="ghost" size="icon-xs" onClick={() => setPendingDelete({ kind: "AI", id: profile.id, name: profile.name })} aria-label={`删除 ${profile.name}`}><Trash2 className="size-3.5" /></Button></div></td></tr>) : <tr><td colSpan={6} className="px-4 py-10 text-center text-sm text-muted-foreground">暂无 AI 配置，可点击右上角新增。</td></tr>}</tbody>
+              <thead className="border-b bg-muted/45 text-xs text-muted-foreground"><tr><th className="px-4 py-3 font-medium">名称</th><th className="px-4 py-3 font-medium">Provider</th><th className="px-4 py-3 font-medium">模型 / 部署</th><th className="px-4 py-3 font-medium">Endpoint / Resource</th><th className="px-4 py-3 font-medium">状态</th><th className="w-32 px-4 py-3 text-right font-medium">操作</th></tr></thead>
+              <tbody>{aiProfiles.length ? aiProfiles.map((profile) => { const ready = isAIProfileReady(profile); const option = getAIProviderOption(profile.provider); const endpoint = profile.provider === "azure" ? profile.baseURL || profile.resourceName : profile.baseURL; return <tr key={profile.id} className="border-b last:border-b-0 hover:bg-muted/25"><td className="px-4 py-3 font-medium">{profile.name}</td><td className="px-4 py-3 text-muted-foreground" title={option.protocol}>{option.label}</td><td className="px-4 py-3"><code className="text-xs">{profile.model}</code></td><td className="max-w-52 truncate px-4 py-3 text-xs text-muted-foreground" title={endpoint}>{endpoint || "官方默认"}</td><td className="px-4 py-3"><span className={cn("rounded-full px-2 py-1 text-[10px]", ready ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" : "bg-muted text-muted-foreground")}>{ready ? "可使用" : "待完善"}</span></td><td className="px-4 py-3"><div className="flex justify-end gap-1"><Button type="button" variant="ghost" size="icon-xs" onClick={() => setAIEditor({ value: { ...profile }, isNew: false })} aria-label={`修改 ${profile.name}`}><Pencil className="size-3.5" /></Button><Button type="button" variant="ghost" size="icon-xs" onClick={() => setPendingDelete({ kind: "AI", id: profile.id, name: profile.name })} aria-label={`删除 ${profile.name}`}><Trash2 className="size-3.5" /></Button></div></td></tr> }) : <tr><td colSpan={6} className="px-4 py-10 text-center text-sm text-muted-foreground">暂无 AI 配置，可点击右上角新增。</td></tr>}</tbody>
             </table>
           </div>
         </div>
@@ -479,9 +486,9 @@ function SettingsPage({
         <div className="space-y-3 p-4 sm:p-6">
           <p className="rounded-lg bg-muted/35 p-3 text-xs leading-5 text-muted-foreground">请求头和环境变量同样保存在当前设备的 localStorage。STDIO 命令由 Quick 直接启动，不经过 Shell。</p>
           <div className="overflow-x-auto rounded-xl border bg-background">
-            <table className="w-full min-w-[42rem] text-left text-sm">
-              <thead className="border-b bg-muted/45 text-xs text-muted-foreground"><tr><th className="px-4 py-3 font-medium">名称</th><th className="px-4 py-3 font-medium">Transport</th><th className="px-4 py-3 font-medium">地址 / 命令</th><th className="px-4 py-3 font-medium">连接方式</th><th className="w-32 px-4 py-3 text-right font-medium">操作</th></tr></thead>
-              <tbody>{mcpServers.length ? mcpServers.map((profile) => <tr key={profile.id} className="border-b last:border-b-0 hover:bg-muted/25"><td className="px-4 py-3 font-medium">{profile.name}</td><td className="px-4 py-3 text-muted-foreground">{profile.transport === "streamable-http" ? "Streamable HTTP" : profile.transport === "sse" ? "SSE" : "STDIO"}</td><td className="max-w-80 truncate px-4 py-3 font-mono text-xs" title={profile.transport === "stdio" ? `${profile.command} ${profile.argsJSON}` : profile.url}>{profile.transport === "stdio" ? profile.command || "—" : profile.url || "—"}</td><td className="px-4 py-3 text-xs text-muted-foreground">{profile.transport === "stdio" ? "本地进程" : profile.connectionMode === "quick-proxy" ? "Quick 代理" : "直接连接"}</td><td className="px-4 py-3"><div className="flex justify-end gap-1"><Button type="button" variant="ghost" size="icon-xs" onClick={() => setMCPEditor({ value: { ...profile }, isNew: false })} aria-label={`修改 ${profile.name}`}><Pencil className="size-3.5" /></Button><Button type="button" variant="ghost" size="icon-xs" onClick={() => setPendingDelete({ kind: "MCP", id: profile.id, name: profile.name })} aria-label={`删除 ${profile.name}`}><Trash2 className="size-3.5" /></Button></div></td></tr>) : <tr><td colSpan={5} className="px-4 py-10 text-center text-sm text-muted-foreground">暂无 MCP 配置，可点击右上角新增。</td></tr>}</tbody>
+            <table className="w-full min-w-[47rem] text-left text-sm">
+              <thead className="border-b bg-muted/45 text-xs text-muted-foreground"><tr><th className="px-4 py-3 font-medium">名称</th><th className="px-4 py-3 font-medium">状态</th><th className="px-4 py-3 font-medium">Transport</th><th className="px-4 py-3 font-medium">地址 / 命令</th><th className="px-4 py-3 font-medium">连接方式</th><th className="w-32 px-4 py-3 text-right font-medium">操作</th></tr></thead>
+              <tbody>{mcpServers.length ? mcpServers.map((profile) => <tr key={profile.id} className="border-b last:border-b-0 hover:bg-muted/25"><td className="px-4 py-3 font-medium">{profile.name}</td><td className="px-4 py-3"><Switch size="compact" checked={profile.enabled} aria-label={`${profile.enabled ? "停用" : "启用"} ${profile.name}`} onCheckedChange={(checked) => onMCPServersChange(mcpServers.map((item) => item.id === profile.id ? { ...item, enabled: checked } : item))} /></td><td className="px-4 py-3 text-muted-foreground">{profile.transport === "streamable-http" ? "Streamable HTTP" : profile.transport === "sse" ? "SSE" : "STDIO"}</td><td className="max-w-80 truncate px-4 py-3 font-mono text-xs" title={profile.transport === "stdio" ? `${profile.command} ${profile.argsJSON}` : profile.url}>{profile.transport === "stdio" ? profile.command || "—" : profile.url || "—"}</td><td className="px-4 py-3 text-xs text-muted-foreground">{profile.transport === "stdio" ? "本地进程" : profile.connectionMode === "quick-proxy" ? "Quick 代理" : "直接连接"}</td><td className="px-4 py-3"><div className="flex justify-end gap-1"><Button type="button" variant="ghost" size="icon-xs" onClick={() => setMCPEditor({ value: { ...profile }, isNew: false })} aria-label={`修改 ${profile.name}`}><Pencil className="size-3.5" /></Button><Button type="button" variant="ghost" size="icon-xs" onClick={() => setPendingDelete({ kind: "MCP", id: profile.id, name: profile.name })} aria-label={`删除 ${profile.name}`}><Trash2 className="size-3.5" /></Button></div></td></tr>) : <tr><td colSpan={6} className="px-4 py-10 text-center text-sm text-muted-foreground">暂无 MCP 配置，可点击右上角新增。</td></tr>}</tbody>
             </table>
           </div>
         </div>
@@ -508,9 +515,9 @@ function App() {
   const [proxy, setProxy] = useState<ProxySettings>(() => getInitialProxySettings())
   const [assistantSettings, setAssistantSettings] = useState<AssistantSettings>(() => getInitialAssistantSettings())
   const [assistantOpen, setAssistantOpen] = useState(false)
-  const [aiChatMode, setAIChatMode] = useState<"chat" | "assistant">("chat")
   const [aiProfiles, setAIProfiles] = useState<AIProfile[]>(() => getInitialAIProfiles())
   const [mcpServers, setMCPServers] = useState<MCPServerProfile[]>(() => getInitialMCPServers())
+  const enabledMCPServers = mcpServers.filter((profile) => profile.enabled)
   const currentPage = pages.find((page) => page.id === activePage) ?? pages[0]
 
   useEffect(() => {
@@ -562,31 +569,27 @@ function App() {
     setActivePage(page)
   }
 
-  const openAssistantInAIChat = () => {
-    setAssistantOpen(false)
-    setAIChatMode("assistant")
-    navigateTo("ai-chat")
-  }
-
   return (
     <AssistantCapabilityProvider>
-      <AssistantConversationProvider>
       <SidebarProvider className="bg-transparent">
         <div className="bg" aria-hidden="true" />
         <AppSidebar activePage={activePage} onNavigate={navigateTo} />
         <SidebarInset className={activePage === "home" ? "bg-transparent" : "bg-background"}>
         <header className="app-topbar">
           <SidebarTrigger className="app-interactive" />
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <div className="truncate text-sm font-medium">{currentPage.label}</div>
             <div className="truncate text-xs text-muted-foreground">{currentPage.description}</div>
           </div>
+          <Button type="button" variant={assistantOpen ? "secondary" : "ghost"} size="icon" className="app-interactive ml-auto shrink-0" data-wails-no-drag onClick={() => setAssistantOpen((value) => !value)} aria-label={assistantOpen ? "收起小Q侧边栏" : "展开小Q侧边栏"} title={assistantOpen ? "收起小Q" : "展开小Q"}>
+            {assistantOpen ? <PanelRightClose className="size-4" /> : <PanelRightOpen className="size-4" />}
+          </Button>
         </header>
 
         <Suspense fallback={<div className="page-shell text-sm text-muted-foreground">正在加载工具…</div>}>
           {visitedPages.has("home") && <PageSlot active={activePage === "home"}><HomePage time={time} onNavigate={navigateTo} /></PageSlot>}
-          {visitedPages.has("ai-chat") && <PageSlot active={activePage === "ai-chat"}><AIChatPage profiles={aiProfiles} mode={aiChatMode} onModeChange={setAIChatMode} /></PageSlot>}
-          {visitedPages.has("mcp-inspector") && <PageSlot active={activePage === "mcp-inspector"}><MCPInspectorPage proxy={proxy} profiles={mcpServers} /></PageSlot>}
+          {visitedPages.has("ai-chat") && <PageSlot active={activePage === "ai-chat"}><AIChatPage profiles={aiProfiles} /></PageSlot>}
+          {visitedPages.has("mcp-inspector") && <PageSlot active={activePage === "mcp-inspector"}><MCPInspectorPage proxy={proxy} profiles={enabledMCPServers} /></PageSlot>}
           {visitedPages.has("formatter") && <PageSlot active={activePage === "formatter"}><StringToolsPage /></PageSlot>}
           {visitedPages.has("converter") && <PageSlot active={activePage === "converter"}><DataConversionPage /></PageSlot>}
           {visitedPages.has("time-ids") && <PageSlot active={activePage === "time-ids"}><TimeIdentifiersPage /></PageSlot>}
@@ -597,10 +600,9 @@ function App() {
           {visitedPages.has("settings") && <PageSlot active={activePage === "settings"}><SettingsPage page={currentPage} theme={theme} onThemeChange={changeTheme} proxy={proxy} onProxyChange={setProxy} aiProfiles={aiProfiles} onAIProfilesChange={setAIProfiles} mcpServers={mcpServers} onMCPServersChange={setMCPServers} assistantSettings={assistantSettings} onAssistantSettingsChange={setAssistantSettings} /></PageSlot>}
         </Suspense>
         </SidebarInset>
-        <GlobalAssistant profiles={aiProfiles} mcpServers={mcpServers} proxy={proxy} autoApproveMCP={assistantSettings.autoApproveMCP} activePage={activePage} onNavigate={navigateTo} open={assistantOpen} onOpenChange={setAssistantOpen} onOpenInAIChat={openAssistantInAIChat} />
+        <GlobalAssistant profiles={aiProfiles} mcpServers={enabledMCPServers} proxy={proxy} autoApproveOperations={assistantSettings.autoApproveOperations} activePage={activePage} onNavigate={navigateTo} open={assistantOpen} onOpenChange={setAssistantOpen} />
         <Toaster theme={theme} position="top-right" richColors closeButton />
       </SidebarProvider>
-      </AssistantConversationProvider>
     </AssistantCapabilityProvider>
   )
 }

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useMemo, useRef, useState } from "react"
 import { Activity, Braces, Copy, Globe2, Network, Play, Power, Router, Search, Sparkles, TerminalSquare } from "lucide-react"
 import { toast } from "sonner"
 
@@ -107,6 +107,7 @@ export default function NetworkPage({ proxy }: { proxy: ProxySettings }) {
   const [processQuery, setProcessQuery] = useState("")
   const [processes, setProcesses] = useState<ProcessInfo[]>([])
   const [processCanTerminate, setProcessCanTerminate] = useState(false)
+  const assistantSearchProcesses = useRef(new Map<number, ProcessInfo>())
   const [output, setOutput] = useState("")
   const [running, setRunning] = useState(false)
   const curlPreview = useMemo(() => httpToCurl({ method, url, headers, body }), [method, url, headers, body])
@@ -130,13 +131,14 @@ export default function NetworkPage({ proxy }: { proxy: ProxySettings }) {
         setHeaders(String(values.headers ?? ""))
         setBody(String(values.body ?? ""))
         setOutput("")
-        toast.success("页面助手已填写 HTTP 请求；尚未发送")
+        toast.success("小Q已填写 HTTP 请求；尚未发送")
         return { success: true, method: nextMethod, url: nextURL, executed: false, confirmationRequired: true }
       },
       run: async (values) => {
         const operation = String(values.operation ?? "")
         setOutput("")
         try {
+          const operationAutoApproved = values.operationAutoApproved === true
           if (operation === "http-prepare") {
             const nextMethod = String(values.method ?? "GET").toUpperCase()
             const nextURL = String(values.url ?? "").trim()
@@ -145,6 +147,20 @@ export default function NetworkPage({ proxy }: { proxy: ProxySettings }) {
             setMode("http"); setMethod(nextMethod); setURL(nextURL); setHeaders(String(values.headers ?? "")); setBody(String(values.body ?? ""))
             toast.success("HTTP 请求已准备；尚未发送")
             return { success: true, operation, method: nextMethod, url: nextURL, executed: false, confirmationRequired: true }
+          }
+          if (operation === "http-execute") {
+            const nextMethod = String(values.method ?? "GET").toUpperCase()
+            const nextURL = String(values.url ?? "").trim()
+            const nextHeaders = String(values.headers ?? "")
+            const nextBody = String(values.body ?? "")
+            if (!["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"].includes(nextMethod)) throw new Error(`不支持的 HTTP 方法：${nextMethod}`)
+            if (!/^https?:\/\//i.test(nextURL)) throw new Error("HTTP URL 必须以 http:// 或 https:// 开头")
+            setMode("http"); setMethod(nextMethod); setURL(nextURL); setHeaders(nextHeaders); setBody(nextBody)
+            if (!operationAutoApproved) return { success: true, operation, method: nextMethod, url: nextURL, executed: false, confirmationRequired: true, message: "操作自动审核未开启，请在页面手动发送" }
+            setRunning(true)
+            const result = await NetworkService.HTTPRequest(nextMethod, nextURL, nextHeaders, nextBody, proxy.mode, proxy.url, 15000) as unknown as HTTPResult
+            setOutput(`${result.status || "请求失败"} · ${result.durationMs} ms\n\n${JSON.stringify(result.headers, null, 2)}\n\n${result.body}`)
+            return { success: result.success, operation, executed: true, status: result.status, statusCode: result.statusCode, durationMs: result.durationMs, headers: result.headers, body: result.body.slice(0, 12000), truncated: result.body.length > 12000 }
           }
           if (operation === "curl-to-http") {
             const command = String(values.curl ?? "")
@@ -171,11 +187,30 @@ export default function NetworkPage({ proxy }: { proxy: ProxySettings }) {
             const query = String(values.query ?? "").trim()
             if (!query) throw new Error("助手查询本地进程必须提供端口、PID 或程序名；显示全部请在页面手动操作")
             if (!["port", "pid", "name"].includes(searchType)) throw new Error(`不支持的进程查询类型：${searchType}`)
+            assistantSearchProcesses.current.clear()
             setMode("process"); setProcessSearchType(searchType); setProcessQuery(query); setRunning(true)
             const result = await NetworkService.FindProcesses(searchType, query) as unknown as ProcessResult
             if (!result.success) throw new Error(result.output)
+            assistantSearchProcesses.current = new Map((result.processes ?? []).map((process) => [process.pid, process]))
             setProcesses(result.processes ?? []); setProcessCanTerminate(true); setOutput(result.output)
-            return { success: true, operation, count: result.processes?.length ?? 0, processes: (result.processes ?? []).slice(0, 100), truncated: (result.processes?.length ?? 0) > 100, executed: true, terminationAvailableOnlyInPage: true }
+            return { success: true, operation, count: result.processes?.length ?? 0, processes: (result.processes ?? []).slice(0, 100), truncated: (result.processes?.length ?? 0) > 100, executed: true, terminationAvailable: operationAutoApproved }
+          }
+          if (operation === "process-terminate") {
+            const pid = Number(values.pid)
+            if (!Number.isInteger(pid) || pid < 1) throw new Error("请输入有效的 PID")
+            const matched = assistantSearchProcesses.current.get(pid)
+            if (!matched) throw new Error("只能关闭小Q刚刚通过带条件搜索得到的进程；请先搜索并确认目标")
+            if (!operationAutoApproved) return { success: true, operation, pid, executed: false, confirmationRequired: true, message: "操作自动审核未开启，请在页面确认后关闭" }
+            setMode("process"); setRunning(true)
+            const current = await NetworkService.FindProcesses("pid", String(pid)) as unknown as ProcessResult
+            const currentProcess = current.processes?.find((process) => process.pid === pid)
+            if (!current.success || !currentProcess || currentProcess.name !== matched.name) throw new Error("目标进程已退出或 PID 已被其他程序复用，请重新搜索")
+            const result = await NetworkService.TerminateProcess(pid) as unknown as NetworkResult
+            if (!result.success) throw new Error(result.output)
+            assistantSearchProcesses.current.delete(pid)
+            setProcesses((current) => current.filter((process) => process.pid !== pid))
+            setOutput(result.output)
+            return { success: true, operation, pid, process: matched.name, executed: true, output: result.output }
           }
           const nextHost = String(values.host ?? "").trim()
           if (!nextHost) throw new Error("请输入主机名或 IP")

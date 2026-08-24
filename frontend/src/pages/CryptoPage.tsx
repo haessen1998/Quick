@@ -212,7 +212,7 @@ export default function CryptoPage() {
           } else if (operation === "jwt-sign" || operation === "jwt-verify") {
             setJwtMode(operation === "jwt-sign" ? "sign" : "verify"); setJwtInput(nextInput); setJwtOutput("")
           } else throw new Error(`不支持的加密操作：${operation}`)
-          toast.success("页面助手已准备加密操作；请检查密钥并手动执行")
+          toast.success("小Q已准备加密操作；请检查密钥并手动执行")
           return { success: true, operation, executed: false, confirmationRequired: true, message: "非敏感字段已填写；密钥或密码需由用户在页面输入并确认执行" }
         } catch (caught) {
           const message = caught instanceof Error ? caught.message : String(caught)

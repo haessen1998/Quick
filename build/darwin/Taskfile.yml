@@ -20,12 +20,13 @@ tasks:
           ARCH: '{{.ARCH}}'
           DEV: '{{.DEV}}'
           OUTPUT: '{{.OUTPUT}}'
-          EXTRA_TAGS: '{{.EXTRA_TAGS}}'
+          EXTRA_TAGS: '{{.MCP_BUILD_TAGS}}'
           OBFUSCATED: '{{.OBFUSCATED}}'
           GARBLE_ARGS: '{{.GARBLE_ARGS}}'
     vars:
       DEFAULT_OUTPUT: '{{.BIN_DIR}}/{{.APP_NAME}}'
       OUTPUT: '{{ .OUTPUT | default .DEFAULT_OUTPUT }}'
+      MCP_BUILD_TAGS: 'mcp{{if .EXTRA_TAGS}},{{.EXTRA_TAGS}}{{end}}'
 
   build:native:
     summary: Builds the application natively on macOS

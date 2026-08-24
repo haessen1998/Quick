@@ -23,12 +23,13 @@ tasks:
         vars:
           ARCH: '{{.ARCH}}'
           DEV: '{{.DEV}}'
-          EXTRA_TAGS: '{{.EXTRA_TAGS}}'
+          EXTRA_TAGS: '{{.MCP_BUILD_TAGS}}'
           OBFUSCATED: '{{.OBFUSCATED}}'
           GARBLE_ARGS: '{{.GARBLE_ARGS}}'
     vars:
       # Default to CGO_ENABLED=0 if not explicitly set
       CGO_ENABLED: '{{.CGO_ENABLED | default "0"}}'
+      MCP_BUILD_TAGS: 'mcp{{if .EXTRA_TAGS}},{{.EXTRA_TAGS}}{{end}}'
 
   build:native:
     summary: Builds the application using native Go cross-compilation

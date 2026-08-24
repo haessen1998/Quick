@@ -13,12 +13,14 @@ Quick 是一个基于 Wails 3、Go、React 和 shadcn/ui 构建的跨平台开�
 - 加密与验证：MD5、SHA、HMAC、AES-GCM、RSA 和 JWT。
 - 网络工具：Ping、DNS、TCP 端口、CIDR、HTTP/cURL 双向转换及本地进程查询。
 - 文本工作台：Markdown 安全预览，以及行级、单词级和字符级文本差异比较。
+- AI 对话与小Q：通过 AI SDK 接入 OpenAI、Azure OpenAI、Anthropic、Gemini、Open Responses 和 OpenAI Compatible Provider，支持 Markdown、思考过程与工具步骤渲染。
 - 浅色与深色主题、HTTP 代理策略。
 
 ## 技术栈
 
 - [Wails 3](https://v3.wails.io/) + Go
-- React 18 + TypeScript + Vite
+- React 19 + TypeScript + Vite
+- AI SDK + Comark
 - Tailwind CSS 4 + shadcn/ui
 - Wails 自动生成的 TypeScript 前后端绑定
 
@@ -45,6 +47,8 @@ wails3 task dev
 ```
 
 开发服务器默认使用 `127.0.0.1:9245`。完整功能需要在 Wails 桌面窗口中运行；直接用浏览器访问 Vite 地址只能预览前端界面。
+
+Quick 的开发与桌面发布构建默认启用 Wails 3 的实验性应用 MCP 服务。应用启动后会在 `http://127.0.0.1:9099/mcp` 提供 Streamable HTTP Endpoint，设置页内置的“Quick App MCP”配置可以直接连接。该服务仅监听本机回环地址，但具备窗口、DOM 和已绑定 Go 服务的操作能力，请不要通过端口转发或反向代理暴露到外网。详见 [Wails MCP Service 指南](https://v3.wails.io/guides/mcp-service/)。
 
 ## 构建与打包
 
@@ -116,8 +120,8 @@ GitHub Actions 可以在推送版本 Tag 时自动执行相同流程，并将公
 # 前端类型检查与生产构建
 npm run build --prefix frontend
 
-# Go 测试
-go test ./...
+# Go 测试（包含发布构建启用的 Wails MCP 代码）
+go test -tags mcp ./...
 
 # 重新生成 Wails TypeScript 绑定
 wails3 generate bindings -clean -ts -i

@@ -80,7 +80,7 @@ export function ToolWorkspace({ title, description, tools, assistantPage, output
         setInput(nextInput)
         setOutput("")
         setError("")
-        toast.success(`页面助手已填写：${nextTool.label}`)
+        toast.success(`小Q已填写：${nextTool.label}`)
         return { success: true, operation: nextTool.id, label: nextTool.label, inputLength: nextInput.length, executed: false }
       },
       run: (values) => {

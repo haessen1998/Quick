@@ -19,6 +19,9 @@ jobs:
     runs-on: macos-15
     env:
       WAILS_VERSION: v3.0.0-beta.9
+      WAILS_MCP: "1"
+      WAILS_MCP_HOST: "127.0.0.1"
+      WAILS_MCP_PORT: "9099"
       APPLE_TEAM_ID: FRR4S244RD
       SIGN_IDENTITY: "Developer ID Application: Haessen Yu (FRR4S244RD)"
       KEYCHAIN_PROFILE: quick-notary
@@ -94,7 +97,7 @@ jobs:
         run: npm run build --prefix frontend
 
       - name: Test Go code
-        run: go test ./...
+        run: go test -tags mcp ./...
 
       - name: Import Developer ID and configure notarization
         shell: bash

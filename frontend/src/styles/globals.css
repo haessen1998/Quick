@@ -47,6 +47,7 @@
 }
 
 :root {
+  --window-safe-top: 0px;
   --radius: 0.625rem;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
@@ -125,7 +126,20 @@
   }
 }
 
+:root[data-platform="macos"] {
+  /* Wails MacTitleBarHiddenInset keeps the native traffic lights over web content. */
+  --window-safe-top: 2rem;
+}
+
 @layer components {
+  .quick-accordion-content[data-state="open"] {
+    animation: quick-accordion-down 180ms ease-out;
+  }
+
+  .quick-accordion-content[data-state="closed"] {
+    animation: quick-accordion-up 150ms ease-in;
+  }
+
   .ai-chat-page-shell {
     padding: clamp(1rem, 2vw, 1.5rem);
   }
@@ -222,4 +236,14 @@
     padding: 0.45rem 0.65rem;
     text-align: left;
   }
+}
+
+@keyframes quick-accordion-down {
+  from { height: 0; opacity: 0; }
+  to { height: var(--radix-accordion-content-height); opacity: 1; }
+}
+
+@keyframes quick-accordion-up {
+  from { height: var(--radix-accordion-content-height); opacity: 1; }
+  to { height: 0; opacity: 0; }
 }

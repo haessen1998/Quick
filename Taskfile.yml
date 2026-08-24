@@ -1,5 +1,12 @@
 version: '3'
 
+env:
+  # Enable Wails' experimental application MCP service for local development
+  # and CLI-driven builds. Packaged binaries use the built-in loopback defaults.
+  WAILS_MCP: "1"
+  WAILS_MCP_HOST: "127.0.0.1"
+  WAILS_MCP_PORT: "9099"
+
 vars:
   APP_NAME: "quick"
   BIN_DIR: "bin"
