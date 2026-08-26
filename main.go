@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
+	"github.com/wailsapp/wails/v3/pkg/events"
 )
 
 // Wails uses Go's `embed` package to embed the frontend files into the binary.
@@ -20,6 +21,7 @@ var assets embed.FS
 
 func init() {
 	application.RegisterEvent[string]("time")
+	application.RegisterEvent[map[string]any]("files-dropped")
 }
 
 // main function serves as the application's entry point. It initializes and runs the application.
@@ -45,14 +47,16 @@ func main() {
 			ApplicationShouldTerminateAfterLastWindowClosed: true,
 		},
 	})
+	app.RegisterService(application.NewService(services.NewFileRenameService(app)))
 
 	// Create a new window with the necessary options.
 	// 'Title' is the title of the window.
 	// 'Mac' options tailor the window when running on macOS.
 	// 'BackgroundColour' is the background colour of the window.
 	// 'URL' is the URL that will be loaded into the webview.
-	app.Window.NewWithOptions(application.WebviewWindowOptions{
-		Title: "Quick",
+	window := app.Window.NewWithOptions(application.WebviewWindowOptions{
+		Title:          "Quick",
+		EnableFileDrop: true,
 		// Window sized to the golden ratio (1000 / 618 ≈ 1.618).
 		Width:  1000,
 		Height: 618,
@@ -63,6 +67,13 @@ func main() {
 		},
 		BackgroundColour: application.NewRGB(6, 7, 15),
 		URL:              "/",
+	})
+	window.OnWindowEvent(events.Common.WindowFilesDropped, func(event *application.WindowEvent) {
+		details := event.Context().DropTargetDetails()
+		if details == nil || details.ElementID != "file-rename-drop-zone" {
+			return
+		}
+		app.Event.Emit("files-dropped", map[string]any{"files": event.Context().DroppedFiles()})
 	})
 
 	go func() {

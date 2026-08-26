@@ -1,8 +1,9 @@
-import { type FormEvent, type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react"
+import { type FormEvent, type KeyboardEvent, useEffect, useMemo, useState } from "react"
 import { useChat } from "@ai-sdk/react"
 import { DirectChatTransport, ToolLoopAgent, type UIMessage } from "ai"
 import {
   Bot,
+  ArrowDown,
   Check,
   Copy,
   Eye,
@@ -29,6 +30,7 @@ import { MarkdownRenderer } from "@/components/MarkdownRenderer"
 import { AI_PROVIDER_OPTIONS, createLanguageModel, getAIProviderOption, settingsFromProfile, validateChatSettings, type AIProviderOption, type ChatSettings } from "@/lib/ai-provider"
 import { cn } from "@/lib/utils"
 import type { AIProfile } from "@/lib/saved-connections"
+import { useStickToBottom } from "@/lib/use-stick-to-bottom"
 
 const QUICK_PROMPTS = [
   "用简洁的步骤解释这段代码的执行过程",
@@ -127,7 +129,6 @@ function ChatMessage({
 
 function ChatSession({ settings }: { settings: ChatSettings }) {
   const [input, setInput] = useState("")
-  const scrollAreaRef = useRef<HTMLDivElement>(null)
   const transport = useMemo(() => {
     const agent = new ToolLoopAgent({
       model: createLanguageModel(settings),
@@ -141,17 +142,14 @@ function ChatSession({ settings }: { settings: ChatSettings }) {
     throttle: 40,
   })
   const isBusy = status === "submitted" || status === "streaming"
-
-  useEffect(() => {
-    const element = scrollAreaRef.current
-    if (element) element.scrollTo({ top: element.scrollHeight, behavior: status === "streaming" ? "auto" : "smooth" })
-  }, [messages, status])
+  const { scrollRef, atBottom, handleScroll, scrollToBottom } = useStickToBottom(messages, isBusy)
 
   const send = async (text: string) => {
     const prompt = text.trim()
     if (!prompt || isBusy) return
     clearError()
     setInput("")
+    scrollToBottom("auto")
     await sendMessage({ text: prompt })
   }
 
@@ -171,6 +169,7 @@ function ChatSession({ settings }: { settings: ChatSettings }) {
     stop()
     setMessages([])
     clearError()
+    scrollToBottom("auto")
   }
 
   return (
@@ -189,14 +188,15 @@ function ChatSession({ settings }: { settings: ChatSettings }) {
         </Button>
       </header>
 
-      <div ref={scrollAreaRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+      <div className="relative min-h-0 flex-1">
+      <div ref={scrollRef} onScroll={handleScroll} className="h-full overflow-y-auto overscroll-contain">
         {messages.length ? (
           messages.map((message, index) => (
             <ChatMessage
               key={message.id}
               message={message}
               isStreaming={status === "streaming" && index === messages.length - 1 && message.role === "assistant"}
-              onRegenerate={message.role === "assistant" && index === messages.length - 1 && !isBusy ? () => void regenerate() : undefined}
+              onRegenerate={message.role === "assistant" && index === messages.length - 1 && !isBusy ? () => { scrollToBottom("auto"); void regenerate() } : undefined}
             />
           ))
         ) : (
@@ -216,6 +216,8 @@ function ChatSession({ settings }: { settings: ChatSettings }) {
             </div>
           </div>
         )}
+      </div>
+      {!atBottom && <Button type="button" variant="secondary" size="icon-lg" className="absolute bottom-4 left-1/2 z-10 -translate-x-1/2 rounded-full border bg-background shadow-lg" onClick={() => scrollToBottom()} aria-label="回到对话底部" title="回到底部并继续跟随"><ArrowDown className="size-4" /></Button>}
       </div>
 
       <div className="shrink-0 border-t bg-card p-3 sm:p-4">

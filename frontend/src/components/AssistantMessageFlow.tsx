@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react"
-import { BookOpen, BrainCircuit, Check, CheckCircle2, CircleAlert, Clipboard, Code2, LoaderCircle, ShieldQuestion, Sparkles } from "lucide-react"
+import { BookOpen, BrainCircuit, Check, CheckCircle2, ChevronDown, CircleAlert, Clipboard, Code2, LoaderCircle, ShieldQuestion, Sparkles } from "lucide-react"
 import { getToolName, isToolUIPart, type UIMessage } from "ai"
 
 import { MarkdownRenderer } from "@/components/MarkdownRenderer"
@@ -124,7 +124,9 @@ export function AssistantMessageFlow({ message, streaming }: { message: UIMessag
   }, [processParts, streaming])
   const attentionSignature = attentionIDs.join("|")
   const previousAttention = useRef(new Set<string>())
+  const wasStreaming = useRef(streaming)
   const [expanded, setExpanded] = useState<string[]>([])
+  const [processOpen, setProcessOpen] = useState(streaming)
 
   useEffect(() => {
     const nextAttention = new Set(attentionIDs)
@@ -136,32 +138,40 @@ export function AssistantMessageFlow({ message, streaming }: { message: UIMessag
     previousAttention.current = nextAttention
   }, [attentionSignature])
 
+  useEffect(() => {
+    if (streaming) setProcessOpen(true)
+    else if (wasStreaming.current) setProcessOpen(false)
+    wasStreaming.current = streaming
+  }, [streaming])
+
   const toolCount = processParts.filter(({ part }) => isToolUIPart(part)).length
   const completedTools = processParts.filter(({ part }) => isToolUIPart(part) && part.state === "output-available").length
   const failedTools = processParts.filter(({ part }) => isToolUIPart(part) && (part.state === "output-error" || part.state === "output-denied" || (part.state === "approval-responded" && !part.approval.approved))).length
   const reasoningCount = processParts.filter(({ part }) => part.type === "reasoning").length
   const hasContent = groups.length > 0 || sourceParts.length > 0
+  const detailsID = `assistant-flow-${message.id}`
   if (!hasContent) return null
 
   return (
     <section className="mb-3 overflow-hidden rounded-xl border border-border/70 bg-muted/15 text-xs shadow-sm">
-      <div className="flex items-center gap-2.5 px-3 py-2.5">
+      <button type="button" className="app-interactive flex w-full items-center gap-2.5 px-3 py-2.5 text-left outline-none transition-colors hover:bg-muted/40 focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/30" aria-expanded={processOpen} aria-controls={detailsID} onClick={() => setProcessOpen((value) => !value)}>
         <span className={cn("flex size-7 shrink-0 items-center justify-center rounded-lg border bg-background", streaming && "border-primary/30 text-primary")}>
           {streaming ? <LoaderCircle className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
         </span>
-        <div className="min-w-0 flex-1">
-          <div className="font-medium text-foreground">{streaming ? "正在处理" : "执行过程"}</div>
-          <div className="mt-0.5 truncate text-[10px] text-muted-foreground">
+        <span className="min-w-0 flex-1">
+          <span className="block font-medium text-foreground">{streaming ? "正在处理" : "执行过程"}</span>
+          <span className="mt-0.5 block truncate text-[10px] text-muted-foreground">
             {toolCount ? completedTools + "/" + toolCount + " 个工具已完成" : reasoningCount ? "模型思考过程" : sourceParts.length + " 个引用来源"}
             {sourceParts.length && (toolCount || reasoningCount) ? " · " + sourceParts.length + " 个来源" : ""}
-          </div>
-        </div>
+          </span>
+        </span>
         {!streaming && (failedTools
           ? <span className="rounded-full bg-destructive/10 px-2 py-1 text-[10px] font-medium text-destructive">{failedTools} 个异常</span>
           : <span className="rounded-full bg-emerald-500/10 px-2 py-1 text-[10px] font-medium text-emerald-700 dark:text-emerald-300">完成</span>)}
-      </div>
+        <ChevronDown className={cn("size-4 shrink-0 text-muted-foreground transition-transform duration-200", processOpen && "rotate-180")} />
+      </button>
 
-      <Accordion type="multiple" value={expanded} onValueChange={setExpanded} className="border-t border-border/60 px-1.5 py-1">
+      {processOpen && <Accordion id={detailsID} type="multiple" value={expanded} onValueChange={setExpanded} className="animate-in fade-in slide-in-from-top-1 border-t border-border/60 px-1.5 py-1 duration-150">
         {groups.map((group) => (
           <div key={group.step}>
             {groups.length > 1 && <div className="flex items-center gap-2 px-2.5 pb-1 pt-2 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground"><span className="size-1.5 rounded-full bg-primary/55" />步骤 {group.step}</div>}
@@ -266,7 +276,7 @@ export function AssistantMessageFlow({ message, streaming }: { message: UIMessag
             </AccordionContent>
           </AccordionItem>
         )}
-      </Accordion>
+      </Accordion>}
     </section>
   )
 }

@@ -19,7 +19,9 @@ export const QUICK_CAPABILITIES: QuickCapabilitySummary[] = [
   { page: "validation", policy: "automatic", abilities: ["JSONPath", "XPath", "正则表达式及 g/i/m/s/u/y Flags"] },
   { page: "crypto", policy: "prepare-only", abilities: ["MD5、SHA-1、SHA-256、SHA-512", "HMAC", "AES-GCM 加解密", "RSA-OAEP 加解密和 RSA-PSS 签名验签", "RSA 密钥生成", "JWT 解析、HS256 签名与验证"] },
   { page: "network", policy: "mixed", abilities: ["自动执行 Ping、DNS A/AAAA/CNAME/MX/NS/TXT 查询、TCP 端口检测和 IPv4 CIDR 计算", "HTTP 与 cURL 自动双向转换；操作自动审核开启后可按明确请求发送 HTTP", "自动按端口/PID/程序名搜索本地进程；操作自动审核开启后只能关闭刚搜索到的进程"] },
-  { page: "text-workbench", policy: "automatic", abilities: ["Markdown 实时预览", "行级、单词级、字符级文本差异", "忽略空白差异"] },
+  { page: "text-workbench", policy: "automatic", abilities: ["Markdown 与 Mermaid 图表实时预览", "行级、单词级、字符级文本差异", "忽略空白差异"] },
+  { page: "file-tools", policy: "mixed", abilities: ["准备通配符或正则文件匹配规则", "预览重置编号、替换、前缀和后缀重命名", "操作自动审核开启后执行或撤销批量重命名"] },
+  { page: "navigation", policy: "mixed", abilities: ["读取和打开已保存站点", "准备 1x1、2x2、4x2 站点卡片", "操作自动审核开启后写入站点长期配置"] },
   { page: "settings", policy: "prepare-only", abilities: ["深浅主题", "系统/指定/不使用代理", "AI Provider 列表", "MCP Server 列表", "长期配置存储"] },
 ]
 
@@ -96,6 +98,14 @@ export function buildQuickAssistantStarters(page: PageId, context: Record<string
       suggestions = mode === "diff"
         ? ["总结左右文本最重要的差异", "判断当前差异更适合行、单词还是字符级比较", "忽略空白后重新分析实际内容变化"]
         : ["优化当前 Markdown 的结构和可读性", "为当前 Markdown 补充目录和代码示例", "检查当前 Markdown 是否存在格式问题"]
+      break
+    case "file-tools":
+      suggestions = context?.fileCount
+        ? ["根据当前文件准备一组安全的编号重命名规则", "检查当前重命名预览是否存在冲突", "说明怎样用正则捕获组替换当前文件名"]
+        : ["说明批量重命名的安全预览流程", "准备一个匹配图片文件的通配符规则", "说明重置编号、替换、前缀和后缀的区别"]
+      break
+    case "navigation":
+      suggestions = ["列出我保存的站点并按分组概括", "帮我准备一个 2x2 的开发文档站点卡片", "打开 Quick GitHub"]
       break
     case "mcp-inspector": {
       const connected = Boolean(context?.connected)

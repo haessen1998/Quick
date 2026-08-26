@@ -10,7 +10,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: macos-release-${{ github.ref }}
+  group: quick-release-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -18,7 +18,7 @@ jobs:
     name: Build, notarize, and release macOS DMG
     runs-on: macos-15
     env:
-      WAILS_VERSION: v3.0.0-beta.9
+      WAILS_VERSION: v3.0.0-beta.14
       WAILS_MCP: "1"
       WAILS_MCP_HOST: "127.0.0.1"
       WAILS_MCP_PORT: "9099"

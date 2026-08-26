@@ -48,7 +48,7 @@ function buildDiffRows(left: string, right: string, granularity: Granularity, ig
 
 export default function TextWorkbenchPage() {
   const [mode, setMode] = useState<"markdown" | "diff">("markdown")
-  const [markdown, setMarkdown] = useState("# Quick\n\n一个基于 **Wails 3 + React** 的开发者工具箱。\n\n- 字符串格式化\n- 数据转换\n- 网络与加密工具\n\n```go\nfmt.Println(\"Quick\")\n```")
+  const [markdown, setMarkdown] = useState("# Quick\n\n一个基于 **Wails 3 + React** 的开发者工具箱。\n\n```mermaid\nflowchart LR\n  A[输入] --> B[Quick]\n  B --> C[格式化与转换]\n  B --> D[网络与文件工具]\n```\n\n```go\nfmt.Println(\"Quick\")\n```")
   const [left, setLeft] = useState("Quick\nWails 3\nReact\n旧内容\n")
   const [right, setRight] = useState("Quick\nWails 3\nReact + shadcn/ui\n新内容\n")
   const [granularity, setGranularity] = useState<Granularity>("word")
@@ -83,13 +83,13 @@ export default function TextWorkbenchPage() {
   return (
     <section className="page-shell">
       <div className="mx-auto w-full max-w-7xl">
-        <div className="mb-6"><div className="mb-2 flex items-center gap-2 text-sm text-muted-foreground"><Sparkles className="size-4" />开发工具</div><h1 className="text-3xl font-semibold tracking-tight">文本工作台</h1><p className="mt-2 text-sm text-muted-foreground">实时 Markdown 安全预览，以及带行内高亮的智能文本差异比较。</p></div>
+        <div className="mb-6"><div className="mb-2 flex items-center gap-2 text-sm text-muted-foreground"><Sparkles className="size-4" />开发工具</div><h1 className="text-3xl font-semibold tracking-tight">文本工作台</h1><p className="mt-2 text-sm text-muted-foreground">实时 Markdown 与 Mermaid 图表预览，以及带行内高亮的智能文本差异比较。</p></div>
         <div className="mb-4 flex gap-2"><Button variant={mode === "markdown" ? "default" : "outline"} onClick={() => setMode("markdown")}><FileText />Markdown 预览</Button><Button variant={mode === "diff" ? "default" : "outline"} onClick={() => setMode("diff")}><Columns2 />文本对比</Button></div>
 
         {mode === "markdown" ? (
           <div className="grid overflow-hidden rounded-xl border bg-card shadow-sm lg:grid-cols-2">
             <label className="border-b lg:border-r lg:border-b-0"><div className="flex h-11 items-center gap-2 border-b px-4 text-sm font-medium"><FileText className="size-4" />Markdown</div><textarea className="app-interactive h-[36rem] w-full resize-none overflow-auto bg-transparent p-4 font-mono text-sm leading-6 outline-none" value={markdown} onChange={(event) => setMarkdown(event.target.value)} spellCheck={false} /></label>
-            <div><div className="flex h-11 items-center gap-2 border-b px-4 text-sm font-medium"><Eye className="size-4" />预览</div><div className="h-[36rem] overflow-auto p-6"><MarkdownRenderer value={markdown} /></div></div>
+            <div><div className="flex h-11 items-center justify-between gap-2 border-b px-4 text-sm font-medium"><span className="flex items-center gap-2"><Eye className="size-4" />预览</span><span className="text-xs font-normal text-muted-foreground">支持 Mermaid</span></div><div className="h-[36rem] overflow-auto p-6"><MarkdownRenderer value={markdown} /></div></div>
           </div>
         ) : (
           <div className="overflow-hidden rounded-xl border bg-card shadow-sm">

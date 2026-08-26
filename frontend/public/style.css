@@ -69,6 +69,18 @@ body {
 .app-interactive, button, input, textarea, select, a {
     --wails-draggable: no-drag;
 }
+[data-wails-no-drag], [data-wails-no-drag] * {
+    --wails-draggable: no-drag;
+}
+.assistant-panel {
+    -webkit-user-select: text;
+    user-select: text;
+}
+.assistant-panel button, .assistant-panel select, .assistant-panel summary,
+.assistant-panel [role="separator"] {
+    -webkit-user-select: none;
+    user-select: none;
+}
 .input, input[type="text"], input[type="password"], input[type="number"], input[type="datetime-local"], textarea, code, pre, .markdown-preview {
     -webkit-user-select: text;
     user-select: text;

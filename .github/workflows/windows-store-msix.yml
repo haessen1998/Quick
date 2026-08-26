@@ -7,10 +7,10 @@ on:
       - "v[0-9]+.[0-9]+.[0-9]+"
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
-  group: windows-store-msix-${{ github.ref }}
+  group: quick-release-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -18,7 +18,7 @@ jobs:
     name: Build Microsoft Store package
     runs-on: windows-latest
     env:
-      WAILS_VERSION: v3.0.0-beta.9
+      WAILS_VERSION: v3.0.0-beta.14
       WAILS_MCP: "1"
       WAILS_MCP_HOST: "127.0.0.1"
       WAILS_MCP_PORT: "9099"
@@ -70,7 +70,8 @@ jobs:
           $versionInfo | ConvertTo-Json -Depth 10 | Set-Content -Encoding utf8 $versionInfoPath
 
           "version=$configVersion" >> $env:GITHUB_OUTPUT
-          "artifact=Quick-$configVersion-windows-x64-store.msix" >> $env:GITHUB_OUTPUT
+          "exe_artifact=Quick-$configVersion-windows-x64.exe" >> $env:GITHUB_OUTPUT
+          "msix_artifact=Quick-$configVersion-windows-x64-store.msix" >> $env:GITHUB_OUTPUT
           "VITE_APP_VERSION=v$configVersion" >> $env:GITHUB_ENV
 
       - name: Install Wails
@@ -93,12 +94,16 @@ jobs:
       - name: Build Windows executable
         run: wails3 build GOOS=windows
 
+      - name: Prepare versioned executable
+        shell: pwsh
+        run: Copy-Item -LiteralPath "bin\quick.exe" -Destination "bin\${{ steps.version.outputs.exe_artifact }}"
+
       - name: Build unsigned Store MSIX
         shell: pwsh
         run: |
           .\build\windows\msix\package.ps1 `
             -ExecutablePath "bin\quick.exe" `
-            -OutputPath "bin\${{ steps.version.outputs.artifact }}" `
+            -OutputPath "bin\${{ steps.version.outputs.msix_artifact }}" `
             -IdentityName $env:STORE_IDENTITY_NAME `
             -Publisher $env:STORE_PUBLISHER `
             -Version "${{ steps.version.outputs.version }}"
@@ -106,18 +111,44 @@ jobs:
       - name: Create checksum
         shell: pwsh
         run: |
-          $artifact = "bin\${{ steps.version.outputs.artifact }}"
-          $hash = (Get-FileHash $artifact -Algorithm SHA256).Hash.ToLowerInvariant()
-          "$hash  ${{ steps.version.outputs.artifact }}" |
-            Set-Content -NoNewline "$artifact.sha256"
+          $artifacts = @(
+            "${{ steps.version.outputs.exe_artifact }}",
+            "${{ steps.version.outputs.msix_artifact }}"
+          )
+          foreach ($name in $artifacts) {
+            $artifact = Join-Path "bin" $name
+            $hash = (Get-FileHash -LiteralPath $artifact -Algorithm SHA256).Hash.ToLowerInvariant()
+            "$hash  $name" | Set-Content -NoNewline "$artifact.sha256"
+          }
 
       - name: Upload Store submission artifact
         uses: actions/upload-artifact@v4
         with:
           name: Quick-${{ steps.version.outputs.version }}-windows-store
           path: |
-            bin/${{ steps.version.outputs.artifact }}
-            bin/${{ steps.version.outputs.artifact }}.sha256
+            bin/${{ steps.version.outputs.exe_artifact }}
+            bin/${{ steps.version.outputs.exe_artifact }}.sha256
+            bin/${{ steps.version.outputs.msix_artifact }}
+            bin/${{ steps.version.outputs.msix_artifact }}.sha256
           if-no-files-found: error
           compression-level: 0
           retention-days: 30
+
+      - name: Publish GitHub Release
+        if: github.ref_type == 'tag'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $files = @(
+            "bin\${{ steps.version.outputs.exe_artifact }}",
+            "bin\${{ steps.version.outputs.exe_artifact }}.sha256",
+            "bin\${{ steps.version.outputs.msix_artifact }}",
+            "bin\${{ steps.version.outputs.msix_artifact }}.sha256"
+          )
+          gh release view "${{ github.ref_name }}" *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload "${{ github.ref_name }}" $files --clobber
+          } else {
+            gh release create "${{ github.ref_name }}" $files --verify-tag --generate-notes --title "Quick ${{ github.ref_name }}"
+          }

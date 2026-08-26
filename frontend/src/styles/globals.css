@@ -247,3 +247,16 @@
   from { height: var(--radix-accordion-content-height); opacity: 1; }
   to { height: 0; opacity: 0; }
 }
+/* CoMark exposes Mermaid rendering failures through data-error. Keep the
+   failure local to the diagram instead of blanking the whole Markdown view. */
+.quick-mermaid[data-error]:empty::after {
+  content: "Mermaid 渲染失败：" attr(data-error);
+  display: block;
+  min-width: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--destructive);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.75rem;
+  line-height: 1.25rem;
+}

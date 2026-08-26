@@ -5,8 +5,10 @@ import {
   Bot,
   Blocks,
   Clock3,
+  Compass,
   FileCheck2,
   Files,
+  FolderOpen,
   Gauge,
   GitBranch,
   Home,
@@ -77,6 +79,8 @@ const DataConversionPage = lazy(() => import("@/pages/DataConversionPage"))
 const NetworkPage = lazy(() => import("@/pages/NetworkPage"))
 const StringToolsPage = lazy(() => import("@/pages/StringToolsPage"))
 const TextWorkbenchPage = lazy(() => import("@/pages/TextWorkbenchPage"))
+const FileToolsPage = lazy(() => import("@/pages/FileToolsPage"))
+const NavigationPage = lazy(() => import("@/pages/NavigationPage"))
 const TimeIdentifiersPage = lazy(() => import("@/pages/TimeIdentifiersPage"))
 const ValidationPage = lazy(() => import("@/pages/ValidationPage"))
 
@@ -101,7 +105,9 @@ const pages: PageDefinition[] = [
   { id: "validation", label: "校验工具", description: "JSONPath、XPath 与正则表达式", icon: FileCheck2 },
   { id: "crypto", label: "加密与验证", description: "哈希、AES、RSA 与 JWT", icon: ShieldCheck },
   { id: "network", label: "网络工具", description: "网络诊断、HTTP/cURL 与本地进程", icon: Network },
-  { id: "text-workbench", label: "文本工作台", description: "Markdown 预览与智能文本差异", icon: Files },
+  { id: "text-workbench", label: "文本工作台", description: "Markdown、Mermaid 预览与智能文本差异", icon: Files },
+  { id: "file-tools", label: "文件工具", description: "安全预览、批量重命名与撤销", icon: FolderOpen },
+  { id: "navigation", label: "站点导航", description: "分组管理常用开发站点", icon: Compass },
   { id: "settings", label: "设置", description: "应用偏好选项", icon: Settings },
 ]
 
@@ -597,6 +603,8 @@ function App() {
           {visitedPages.has("crypto") && <PageSlot active={activePage === "crypto"}><CryptoPage /></PageSlot>}
           {visitedPages.has("network") && <PageSlot active={activePage === "network"}><NetworkPage proxy={proxy} /></PageSlot>}
           {visitedPages.has("text-workbench") && <PageSlot active={activePage === "text-workbench"}><TextWorkbenchPage /></PageSlot>}
+          {visitedPages.has("file-tools") && <PageSlot active={activePage === "file-tools"}><FileToolsPage /></PageSlot>}
+          {visitedPages.has("navigation") && <PageSlot active={activePage === "navigation"}><NavigationPage /></PageSlot>}
           {visitedPages.has("settings") && <PageSlot active={activePage === "settings"}><SettingsPage page={currentPage} theme={theme} onThemeChange={changeTheme} proxy={proxy} onProxyChange={setProxy} aiProfiles={aiProfiles} onAIProfilesChange={setAIProfiles} mcpServers={mcpServers} onMCPServersChange={setMCPServers} assistantSettings={assistantSettings} onAssistantSettingsChange={setAssistantSettings} /></PageSlot>}
         </Suspense>
         </SidebarInset>

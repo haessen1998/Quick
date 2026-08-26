@@ -1,6 +1,6 @@
 import { type CSSProperties, type FormEvent, type KeyboardEvent, type PointerEvent as ReactPointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useChat } from "@ai-sdk/react"
-import { Bot, LoaderCircle, RefreshCw, Send, Settings, ShieldCheck, Square, Trash2, Wrench } from "lucide-react"
+import { ArrowDown, Bot, LoaderCircle, RefreshCw, Send, Settings, ShieldCheck, Square, Trash2, Wrench } from "lucide-react"
 import { DirectChatTransport, ToolLoopAgent, isToolUIPart, jsonSchema, stepCountIs, tool, type UIMessage } from "ai"
 
 import { AssistantMessageFlow } from "@/components/AssistantMessageFlow"
@@ -13,6 +13,7 @@ import { useAssistantCapabilityRegistry } from "@/lib/assistant-capabilities"
 import { PAGE_IDS, PAGE_LABELS, type PageId } from "@/lib/pages"
 import type { ProxySettings } from "@/lib/proxy"
 import type { AIProfile, MCPServerProfile } from "@/lib/saved-connections"
+import { useStickToBottom } from "@/lib/use-stick-to-bottom"
 import { cn } from "@/lib/utils"
 
 const FORMATTER_OPERATIONS = ["json-format", "json-minify", "yaml-format", "xml-format", "xml-minify", "html-format", "html-minify", "css-format", "css-minify", "javascript-format", "javascript-minify"] as const
@@ -22,6 +23,9 @@ const TIME_OPERATIONS = ["timestamp-to-date", "date-to-timestamp", "timezone", "
 const VALIDATION_MODES = ["jsonpath", "xpath", "regex"] as const
 const CRYPTO_OPERATIONS = ["hash", "hmac", "aes-encrypt", "aes-decrypt", "rsa-generate-encryption", "rsa-generate-signing", "rsa-encrypt", "rsa-decrypt", "rsa-sign", "rsa-verify", "jwt-parse", "jwt-sign", "jwt-verify"] as const
 const NETWORK_OPERATIONS = ["ping", "dns", "port", "cidr", "http-prepare", "http-execute", "curl-to-http", "http-to-curl", "process-search", "process-terminate"] as const
+const FILE_RENAME_ACTIONS = ["prepare", "execute", "undo"] as const
+const FILE_RENAME_OPERATIONS = ["reset", "replace", "prefix", "suffix"] as const
+const NAVIGATION_ACTIONS = ["list", "open", "prepare", "add"] as const
 const QUICK_APP_MCP_ID = "mcp-wails3-app"
 const ASSISTANT_PANEL_WIDTH_KEY = "quick-assistant-panel-width"
 const DEFAULT_ASSISTANT_PANEL_WIDTH = 336
@@ -182,12 +186,28 @@ function AssistantSession({ profile, activePage, onNavigate, mcpServers, proxy, 
         execute: async (input) => usePage("network", "run", { ...input, operationAutoApproved: autoApproveOperations }),
       }),
       open_text_workbench: tool({
-        description: "打开文本工作台并填写 Markdown 预览，或准备行/单词/字符级文本对比。",
+        description: "打开文本工作台并填写 Markdown/Mermaid 预览，或准备行/单词/字符级文本对比。Mermaid 使用 fenced code block：```mermaid。",
         inputSchema: jsonSchema<{ mode: "markdown" | "diff"; markdown?: string; left?: string; right?: string; granularity?: "line" | "word" | "char"; ignoreWhitespace?: boolean }>({
           type: "object", properties: { mode: { type: "string", enum: ["markdown", "diff"] }, markdown: { type: "string" }, left: { type: "string" }, right: { type: "string" }, granularity: { type: "string", enum: ["line", "word", "char"] }, ignoreWhitespace: { type: "boolean" } },
           required: ["mode"], additionalProperties: false,
         }),
         execute: useTextWorkbench,
+      }),
+      file_rename: tool({
+        description: `使用文件工具准备和预览批量重命名规则。文件范围必须由用户在页面选择或拖入，助手不能填写绝对路径。${autoApproveOperations ? "操作自动审核已开启：用户明确要求且当前预览无冲突时，可以执行重命名或撤销。" : "操作自动审核未开启：只能准备规则和生成预览，执行或撤销需要用户在页面确认。"}`,
+        inputSchema: jsonSchema<{ action: typeof FILE_RENAME_ACTIONS[number]; matchMode?: "all" | "wildcard" | "regex"; matchPattern?: string; matchFullName?: boolean; operation?: typeof FILE_RENAME_OPERATIONS[number]; find?: string; replacement?: string; useRegex?: boolean; prefix?: string; suffix?: string; start?: number; step?: number; width?: number; includeExtension?: boolean; sortBy?: "name" | "modified" | "size" }>({
+          type: "object", properties: {
+            action: { type: "string", enum: [...FILE_RENAME_ACTIONS] }, matchMode: { type: "string", enum: ["all", "wildcard", "regex"] }, matchPattern: { type: "string" }, matchFullName: { type: "boolean" }, operation: { type: "string", enum: [...FILE_RENAME_OPERATIONS] }, find: { type: "string" }, replacement: { type: "string" }, useRegex: { type: "boolean" }, prefix: { type: "string" }, suffix: { type: "string" }, start: { type: "number" }, step: { type: "number" }, width: { type: "number", minimum: 1, maximum: 12 }, includeExtension: { type: "boolean" }, sortBy: { type: "string", enum: ["name", "modified", "size"] },
+          }, required: ["action"], additionalProperties: false,
+        }),
+        execute: async ({ action, ...input }) => usePage("file-tools", action, { ...input, operationAutoApproved: autoApproveOperations }),
+      }),
+      navigation_sites: tool({
+        description: `管理 Quick 站点导航。读取列表和按准确名称打开站点可以自动执行。${autoApproveOperations ? "操作自动审核已开启：用户明确要求时可以把新站点写入长期配置。" : "新增站点只能打开预填表单，由用户检查并保存。"}`,
+        inputSchema: jsonSchema<{ action: typeof NAVIGATION_ACTIONS[number]; name?: string; group?: string; title?: string; url?: string; icon?: string; description?: string; size?: "1x1" | "2x2" | "4x2" }>({
+          type: "object", properties: { action: { type: "string", enum: [...NAVIGATION_ACTIONS] }, name: { type: "string", description: "open 时使用的已保存站点名称" }, group: { type: "string" }, title: { type: "string" }, url: { type: "string" }, icon: { type: "string" }, description: { type: "string" }, size: { type: "string", enum: ["1x1", "2x2", "4x2"] } }, required: ["action"], additionalProperties: false,
+        }),
+        execute: async ({ action, ...input }) => usePage("navigation", action, { ...input, operationAutoApproved: autoApproveOperations }),
       }),
       prepare_mcp_inspector: tool({
         description: "在 MCP 测试页选择一个设置中已保存的 Server，或只填写不含凭据的远程/STDIO 连接参数。不会连接 Server，也不会调用 Tool。",
@@ -263,9 +283,9 @@ function AssistantSession({ profile, activePage, onNavigate, mcpServers, proxy, 
   const [starterPrompts, setStarterPrompts] = useState<string[]>([])
   const starterVariant = useRef(0)
   const startersInitialized = useRef(false)
-  const scrollRef = useRef<HTMLDivElement>(null)
   const { messages, sendMessage, status, stop, setMessages, error, clearError } = useChat({ transport, throttle: 40 })
   const busy = status === "submitted" || status === "streaming"
+  const { scrollRef, atBottom, handleScroll, scrollToBottom } = useStickToBottom(messages, busy)
   const refreshStarterPrompts = () => {
     starterVariant.current += 1
     setStarterPrompts(buildQuickAssistantStarters(activePage, registry.getPageContext(activePage), mcpServers, starterVariant.current))
@@ -277,15 +297,12 @@ function AssistantSession({ profile, activePage, onNavigate, mcpServers, proxy, 
     setStarterPrompts(buildQuickAssistantStarters(activePage, registry.getPageContext(activePage), mcpServers, starterVariant.current))
   }, [open, activePage, mcpServers, registry])
 
-  useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: status === "streaming" ? "auto" : "smooth" })
-  }, [messages, status])
-
   const send = async () => {
     const text = input.trim()
     if (!text || busy) return
     clearError()
     setInput("")
+    scrollToBottom("auto")
     await sendMessage({ text })
   }
   const submit = (event: FormEvent) => { event.preventDefault(); void send() }
@@ -294,7 +311,8 @@ function AssistantSession({ profile, activePage, onNavigate, mcpServers, proxy, 
   }
 
   return <>
-    <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-muted/10">
+    <div className="relative min-h-0 flex-1">
+    <div ref={scrollRef} onScroll={handleScroll} className="h-full overflow-y-auto overscroll-contain bg-muted/10">
       {messages.length ? messages.map((message, index) => {
         const text = messageText(message)
         const user = message.role === "user"
@@ -315,6 +333,8 @@ function AssistantSession({ profile, activePage, onNavigate, mcpServers, proxy, 
         </div>
       }) : <div className="flex h-full min-h-64 flex-col items-center justify-center p-5 text-center"><h3 className="text-sm font-medium">我是小Q</h3><p className="mt-2 text-xs leading-5 text-muted-foreground">我了解整个工具箱，可以执行本地转换与校验、准备页面内容，并在你明确要求时运行网络诊断或已保存的 MCP Tools。</p><div className="mt-4 w-full"><div className="mb-2 text-left text-[10px] font-medium uppercase tracking-wider text-muted-foreground">为当前页面推荐</div><div className="grid gap-2">{starterPrompts.map((prompt) => <button key={prompt} type="button" className="rounded-lg border bg-background px-3 py-2 text-left text-xs leading-5 transition-colors hover:bg-muted" onClick={() => setInput(prompt)}>{prompt}</button>)}</div></div></div>}
     </div>
+    {!atBottom && <Button type="button" variant="secondary" size="icon-lg" className="absolute bottom-3 left-1/2 z-10 -translate-x-1/2 rounded-full border bg-background shadow-lg" onClick={() => scrollToBottom()} aria-label="回到对话底部" title="回到底部并继续跟随"><ArrowDown className="size-4" /></Button>}
+    </div>
     <div className="shrink-0 border-t bg-background p-3">
       {error && <div className="mb-2 rounded-lg border border-destructive/30 bg-destructive/8 p-2 text-xs text-destructive">{error.message || "AI 请求失败"}</div>}
       <form onSubmit={submit} className="rounded-xl border bg-background p-2 shadow-sm focus-within:ring-3 focus-within:ring-ring/25">
@@ -324,7 +344,7 @@ function AssistantSession({ profile, activePage, onNavigate, mcpServers, proxy, 
             <summary className="app-interactive flex size-7 cursor-pointer list-none items-center justify-center rounded-md text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/30" aria-label="刷新与清空"><RefreshCw className="size-3.5" /></summary>
             <div className="absolute bottom-full left-0 z-20 mb-2 w-44 overflow-hidden rounded-lg border bg-popover p-1 text-popover-foreground shadow-xl">
               <button type="button" className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs hover:bg-muted" onClick={(event) => { refreshStarterPrompts(); event.currentTarget.closest("details")?.removeAttribute("open") }}><RefreshCw className="size-3.5" />换一组智能提示</button>
-              <button type="button" disabled={!messages.length} className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs hover:bg-muted disabled:pointer-events-none disabled:opacity-45" onClick={(event) => { stop(); setMessages([]); clearError(); event.currentTarget.closest("details")?.removeAttribute("open") }}><Trash2 className="size-3.5" />清空对话</button>
+              <button type="button" disabled={!messages.length} className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs hover:bg-muted disabled:pointer-events-none disabled:opacity-45" onClick={(event) => { stop(); setMessages([]); clearError(); scrollToBottom("auto"); event.currentTarget.closest("details")?.removeAttribute("open") }}><Trash2 className="size-3.5" />清空对话</button>
             </div>
           </details>
           {busy ? <Button type="button" size="icon-sm" variant="outline" onClick={stop} aria-label="停止生成"><Square className="size-3.5 fill-current" /></Button> : <Button type="submit" size="icon-sm" disabled={!input.trim()} aria-label="发送"><Send className="size-3.5" /></Button>}
@@ -421,7 +441,7 @@ export function GlobalAssistant({ profiles, mcpServers, proxy, autoApproveOperat
   return (
     <>
     {open && <button type="button" className="fixed bottom-0 left-0 right-0 top-[calc(var(--window-safe-top)+3.5rem)] z-40 bg-black/45 min-[920px]:hidden" onClick={() => onOpenChange(false)} aria-label="收起小Q" />}
-    <aside data-wails-no-drag style={panelStyle} className={cn("fixed bottom-0 right-0 top-[calc(var(--window-safe-top)+3.5rem)] z-50 flex h-[calc(100svh-var(--window-safe-top)-3.5rem)] w-[min(22rem,calc(100vw-0.75rem))] flex-col overflow-hidden rounded-l-2xl border-l bg-background text-foreground shadow-2xl transition-transform duration-200", open ? "translate-x-0" : "pointer-events-none translate-x-full", "min-[920px]:sticky min-[920px]:top-[var(--window-safe-top)] min-[920px]:z-20 min-[920px]:h-[calc(100svh-var(--window-safe-top))] min-[920px]:w-0 min-[920px]:shrink-0 min-[920px]:translate-x-0 min-[920px]:self-start min-[920px]:rounded-none min-[920px]:border-l-0 min-[920px]:shadow-none min-[920px]:transition-[width]", open && "min-[920px]:w-[var(--assistant-panel-width)] min-[920px]:border-l", resizing && "min-[920px]:transition-none") }>
+    <aside data-wails-no-drag style={panelStyle} className={cn("assistant-panel fixed bottom-0 right-0 top-[calc(var(--window-safe-top)+3.5rem)] z-50 flex h-[calc(100svh-var(--window-safe-top)-3.5rem)] w-[min(22rem,calc(100vw-0.75rem))] flex-col overflow-hidden rounded-l-2xl border-l bg-background text-foreground shadow-2xl transition-transform duration-200", open ? "translate-x-0" : "pointer-events-none translate-x-full", "min-[920px]:sticky min-[920px]:top-[var(--window-safe-top)] min-[920px]:z-20 min-[920px]:h-[calc(100svh-var(--window-safe-top))] min-[920px]:w-0 min-[920px]:shrink-0 min-[920px]:translate-x-0 min-[920px]:self-start min-[920px]:rounded-none min-[920px]:border-l-0 min-[920px]:shadow-none min-[920px]:transition-[width]", open && "min-[920px]:w-[var(--assistant-panel-width)] min-[920px]:border-l", resizing && "min-[920px]:transition-none") }>
       <div
         role="separator"
         tabIndex={open ? 0 : -1}

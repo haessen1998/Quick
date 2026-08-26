@@ -6,18 +6,17 @@ import (
 	"encoding/csv"
 	"fmt"
 	"net"
-	"os/exec"
 	"sort"
 	"strconv"
 	"strings"
 )
 
 func listLocalProcesses() ([]ProcessInfo, error) {
-	processOutput, err := exec.Command("tasklist", "/FO", "CSV", "/NH").Output()
+	processOutput, err := hiddenWindowsCommand("tasklist", "/FO", "CSV", "/NH").Output()
 	if err != nil {
 		return nil, fmt.Errorf("tasklist failed: %w", err)
 	}
-	portOutput, _ := exec.Command("netstat", "-ano", "-p", "tcp").Output()
+	portOutput, _ := hiddenWindowsCommand("netstat", "-ano", "-p", "tcp").Output()
 	portsByPID := make(map[int]map[int]struct{})
 	for _, line := range strings.Split(string(portOutput), "\n") {
 		fields := strings.Fields(line)

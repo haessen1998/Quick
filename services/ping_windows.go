@@ -4,7 +4,6 @@ package services
 
 import (
 	"context"
-	"os/exec"
 	"strconv"
 	"syscall"
 	"unicode/utf8"
@@ -20,7 +19,7 @@ import (
 var getOEMCodePage = syscall.NewLazyDLL("kernel32.dll").NewProc("GetOEMCP")
 
 func runPing(ctx context.Context, host string, timeoutMS int) (string, error) {
-	command := exec.CommandContext(ctx, "ping", "-n", "1", "-w", strconv.Itoa(timeoutMS), host)
+	command := hiddenWindowsCommandContext(ctx, "ping", "-n", "1", "-w", strconv.Itoa(timeoutMS), host)
 	output, err := command.CombinedOutput()
 	return decodeWindowsConsoleOutput(output, windowsOEMCodePage()), err
 }

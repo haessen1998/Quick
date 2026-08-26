@@ -12,7 +12,9 @@ Quick 是一个基于 Wails 3、Go、React 和 shadcn/ui 构建的跨平台开�
 - 校验工具：JSONPath、XPath 和支持常用 flags 的正则表达式匹配。
 - 加密与验证：MD5、SHA、HMAC、AES-GCM、RSA 和 JWT。
 - 网络工具：Ping、DNS、TCP 端口、CIDR、HTTP/cURL 双向转换及本地进程查询。
-- 文本工作台：Markdown 安全预览，以及行级、单词级和字符级文本差异比较。
+- 文本工作台：Markdown 与 Mermaid 图表预览，以及行级、单词级和字符级文本差异比较。
+- 文件工具：选择文件夹或拖入文件，预览并执行批量编号、替换、前缀和后缀重命名，支持撤销最近一次操作。
+- 站点导航：按分组保存常用站点，支持 `1x1`、`2x2`、`4x2` 卡片和拖拽排序。
 - AI 对话与小Q：通过 AI SDK 接入 OpenAI、Azure OpenAI、Anthropic、Gemini、Open Responses 和 OpenAI Compatible Provider，支持 Markdown、思考过程与工具步骤渲染。
 - 浅色与深色主题、HTTP 代理策略。
 
@@ -27,7 +29,7 @@ Quick 是一个基于 Wails 3、Go、React 和 shadcn/ui 构建的跨平台开�
 ## 环境要求
 
 - Go 1.25 或兼容版本
-- Wails CLI `v3.0.0-beta.9`
+- Wails CLI `v3.0.0-beta.14`
 - Node.js 和 npm
 - 对应平台的 Wails 构建依赖
 
@@ -68,9 +70,9 @@ wails3 task package
 
 ## Windows Microsoft Store 包
 
-Windows 商店版本使用 MSIX。推送形如 `v0.1.0` 的版本 Tag，或手动运行 `Windows Store MSIX` GitHub Actions 工作流时，会完成测试、构建并生成供 Partner Center 直接上传的未签名 `.msix`。Microsoft Store 会在认证通过后使用 Microsoft 证书重新签名。
+Windows 商店版本使用 MSIX。推送形如 `v0.1.0` 的版本 Tag，或手动运行 `Windows Store MSIX` GitHub Actions 工作流时，会完成测试、构建，并生成带版本号的 Windows `.exe` 与供 Partner Center 上传的未签名 `.msix`，二者都附带 SHA-256 校验文件。Tag 构建会把这些文件加入对应的 GitHub Release；Microsoft Store 会在认证通过后使用 Microsoft 证书重新签名商店包。
 
-商店产品为 [QuickDev](https://apps.microsoft.com/detail/9P084NQXKDMQ)，Store ID 是 `9P084NQXKDMQ`。Partner Center 分配的包标识已固化在构建配置中，不需要配置 GitHub Secret、仓库变量或签名证书。工作流产物保留 30 天；下载并解压 Actions 产物后，把其中的 `.msix` 直接上传到 Partner Center。
+商店产品为 [QuickDev](https://apps.microsoft.com/detail/9P084NQXKDMQ)，Store ID 是 `9P084NQXKDMQ`。Partner Center 分配的包标识已固化在构建配置中，不需要配置 GitHub Secret、仓库变量或签名证书。Actions 产物保留 30 天；其中的 `.msix` 可以直接上传到 Partner Center。GitHub Release 中的 Store MSIX 是未签名提交包，主要用于留档和商店上传，最终用户应从 Microsoft Store 安装已经过商店签名的版本。
 
 发布新版本前先更新 `build/config.yml` 中的版本，然后创建并推送 Tag：
 
@@ -79,7 +81,7 @@ git tag v0.1.0
 git push origin v0.1.0
 ```
 
-MSIX 商店包不会发布到 GitHub Release，因为未经过 Microsoft Store 签名的包不适合直接提供给最终用户。若以后需要在商店之外分发 Windows 安装包，再单独接入受信任的代码签名服务。
+GitHub Release 中的独立 `.exe` 当前也没有 Authenticode 签名，Windows 可能显示 SmartScreen 提示。若以后把它作为商店外的正式分发渠道，需要再接入受信任的 Windows 代码签名服务。
 
 ## macOS 发布包
 
@@ -112,7 +114,7 @@ GitHub Actions 可以在推送版本 Tag 时自动执行相同流程，并将公
 
 在 macOS 上可用 `base64 < DeveloperIDApplication.p12 | pbcopy` 将证书编码并复制到剪贴板。证书、私钥和密码只能保存为 GitHub Actions Secret，不应提交到仓库。
 
-以上 Secrets 配置完成后，先手动运行一次 `macOS Release` 工作流验证签名和公证。验证成功后再推送 `v0.1.0` Tag；同一个 Tag 会生成 Windows Store MSIX 构建产物，并创建包含 macOS DMG 与校验文件的 GitHub Release。
+以上 Secrets 配置完成后，先手动运行一次 `macOS Release` 工作流验证签名和公证。验证成功后再推送 `v0.1.0` Tag；同一个 Tag 会串行汇总 Windows EXE、Store MSIX、macOS DMG 及各自校验文件到同一个 GitHub Release，避免不同平台同时创建 Release 时发生竞争。
 
 ## 常用检查
 
@@ -134,9 +136,7 @@ Quick/
 ├─ frontend/                 React 前端、组件和生成绑定
 ├─ build/                    跨平台构建、打包和签名配置
 ├─ main.go                   Wails 应用入口
-├─ networkservice.go         网络与本地进程后台服务
-├─ process_windows.go        Windows 进程查询实现
-├─ process_unix.go           macOS/Linux 进程查询实现
+├─ services/                 网络、MCP、进程和文件重命名后台服务
 └─ Taskfile.yml              开发、构建和打包任务入口
 ```
 
