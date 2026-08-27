@@ -158,7 +158,7 @@ jobs:
           binary_path="$app_path/Contents/MacOS/quick"
           dmg_path="bin/$ARTIFACT"
 
-          lipo -verify_arch x86_64 arm64 "$binary_path"
+          lipo "$binary_path" -verify_arch x86_64 arm64
           codesign --verify --deep --strict --verbose=2 "$app_path"
           xcrun stapler validate "$app_path"
           spctl --assess --type execute --verbose=4 "$app_path"
@@ -178,22 +178,28 @@ jobs:
           retention-days: 30
 
       - name: Publish GitHub Release
-        if: github.ref_type == 'tag'
+        if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           ARTIFACT: ${{ steps.version.outputs.artifact }}
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
           set -euo pipefail
 
+          release_tag="$GITHUB_REF_NAME"
+          if [[ "$GITHUB_REF_TYPE" != "tag" ]]; then
+            release_tag="v$VERSION"
+          fi
+
           files=("bin/$ARTIFACT" "bin/$ARTIFACT.sha256")
-          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" "${files[@]}" --clobber
+          if gh release view "$release_tag" >/dev/null 2>&1; then
+            gh release upload "$release_tag" "${files[@]}" --clobber
           else
-            gh release create "$GITHUB_REF_NAME" "${files[@]}" \
+            gh release create "$release_tag" "${files[@]}" \
               --verify-tag \
               --generate-notes \
-              --title "Quick $GITHUB_REF_NAME"
+              --title "Quick $release_tag"
           fi
 
       - name: Remove temporary signing keychain
