@@ -53,7 +53,7 @@ async function withRemoteClient<T>(profile: MCPServerProfile, proxy: ProxySettin
       requestHeaders = new Headers({ "X-Quick-MCP-Token": session.token })
     } else requestHeaders = parseHeaderLines(profile.headers)
 
-    client = new Client({ name: "quick-page-assistant", version: "0.1.0" })
+    client = new Client({ name: "quick-page-assistant", version: "0.2.0" })
     transport = profile.transport === "sse"
       ? new SSEClientTransport(new URL(endpoint), {
           requestInit: { headers: requestHeaders },

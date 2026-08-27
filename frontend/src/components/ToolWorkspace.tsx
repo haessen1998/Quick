@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useMemo, useState, type ReactNode } from "react"
 import { ArrowRightLeft, Check, Clipboard, Eraser, Play, Sparkles, TriangleAlert, type LucideIcon } from "lucide-react"
 import { toast } from "sonner"
 
@@ -23,13 +23,14 @@ type ToolWorkspaceProps = {
   tools: TextTool[]
   outputPlaceholder?: string
   assistantPage: PageId
+  activeToolOptions?: Partial<Record<string, ReactNode>>
 }
 
 export function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error)
 }
 
-export function ToolWorkspace({ title, description, tools, assistantPage, outputPlaceholder = "处理结果会显示在这里…" }: ToolWorkspaceProps) {
+export function ToolWorkspace({ title, description, tools, assistantPage, activeToolOptions, outputPlaceholder = "处理结果会显示在这里…" }: ToolWorkspaceProps) {
   const [activeToolId, setActiveToolId] = useState(tools[0]?.id ?? "")
   const activeTool = useMemo(() => tools.find((tool) => tool.id === activeToolId) ?? tools[0], [activeToolId, tools])
   const [input, setInput] = useState(tools[0]?.sample ?? "")
@@ -174,6 +175,8 @@ export function ToolWorkspace({ title, description, tools, assistantPage, output
                 </Button>
               </div>
             </div>
+
+            {activeToolOptions?.[activeTool.id] && <div className="border-b bg-muted/10 px-4 py-3">{activeToolOptions[activeTool.id]}</div>}
 
             {error && (
               <div className="m-4 flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">

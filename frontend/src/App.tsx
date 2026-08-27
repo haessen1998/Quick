@@ -116,7 +116,7 @@ const pages: PageDefinition[] = [
   { id: "settings", label: "设置", description: "应用偏好选项", icon: Settings },
 ]
 
-const appVersion = import.meta.env.VITE_APP_VERSION || "v0.1.0"
+const appVersion = import.meta.env.VITE_APP_VERSION || "v0.2.0"
 
 function AppSidebar({ activePage, onNavigate }: { activePage: PageId; onNavigate: (page: PageId) => void }) {
   const { open } = useSidebar()
@@ -597,6 +597,18 @@ function App() {
     setActivePage(page)
   }
 
+  const saveAIProfileFromTest = (profile: AIProfile) => {
+    setAIProfiles((profiles) => profiles.some((item) => item.id === profile.id)
+      ? profiles.map((item) => item.id === profile.id ? profile : item)
+      : [...profiles, profile])
+  }
+
+  const saveMCPProfileFromTest = (profile: MCPServerProfile) => {
+    setMCPServers((profiles) => profiles.some((item) => item.id === profile.id)
+      ? profiles.map((item) => item.id === profile.id ? profile : item)
+      : [...profiles, profile])
+  }
+
   return (
     <AssistantCapabilityProvider>
       <SidebarProvider className="bg-transparent">
@@ -616,8 +628,8 @@ function App() {
 
         <Suspense fallback={<div className="page-shell text-sm text-muted-foreground">正在加载工具…</div>}>
           {visitedPages.has("home") && <PageSlot active={activePage === "home"}><HomePage time={time} onNavigate={navigateTo} /></PageSlot>}
-          {visitedPages.has("ai-chat") && <PageSlot active={activePage === "ai-chat"}><AIChatPage profiles={aiProfiles} /></PageSlot>}
-          {visitedPages.has("mcp-inspector") && <PageSlot active={activePage === "mcp-inspector"}><MCPInspectorPage proxy={proxy} profiles={enabledMCPServers} /></PageSlot>}
+          {visitedPages.has("ai-chat") && <PageSlot active={activePage === "ai-chat"}><AIChatPage profiles={aiProfiles} onSaveProfile={saveAIProfileFromTest} /></PageSlot>}
+          {visitedPages.has("mcp-inspector") && <PageSlot active={activePage === "mcp-inspector"}><MCPInspectorPage proxy={proxy} profiles={enabledMCPServers} onSaveProfile={saveMCPProfileFromTest} /></PageSlot>}
           {visitedPages.has("formatter") && <PageSlot active={activePage === "formatter"}><StringToolsPage /></PageSlot>}
           {visitedPages.has("converter") && <PageSlot active={activePage === "converter"}><DataConversionPage /></PageSlot>}
           {visitedPages.has("time-ids") && <PageSlot active={activePage === "time-ids"}><TimeIdentifiersPage /></PageSlot>}

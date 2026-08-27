@@ -70,15 +70,15 @@ wails3 task package
 
 ## Windows Microsoft Store 包
 
-Windows 商店版本使用 MSIX。推送形如 `v0.1.0` 的版本 Tag，或手动运行 `Windows Store MSIX` GitHub Actions 工作流时，会完成测试、构建，并生成带版本号的 Windows `.exe` 与供 Partner Center 上传的未签名 `.msix`，二者都附带 SHA-256 校验文件。Tag 构建会把这些文件加入对应的 GitHub Release；Microsoft Store 会在认证通过后使用 Microsoft 证书重新签名商店包。
+Windows 商店版本使用 MSIX。推送形如 `v0.2.0` 的版本 Tag，或手动运行 `Windows Store MSIX` GitHub Actions 工作流时，会完成测试、构建，并生成带版本号的 Windows `.exe` 与供 Partner Center 上传的未签名 `.msix`，二者都附带 SHA-256 校验文件。Tag 构建会把这些文件加入对应的 GitHub Release；Microsoft Store 会在认证通过后使用 Microsoft 证书重新签名商店包。
 
 商店产品为 [QuickDev](https://apps.microsoft.com/detail/9P084NQXKDMQ)，Store ID 是 `9P084NQXKDMQ`。Partner Center 分配的包标识已固化在构建配置中，不需要配置 GitHub Secret、仓库变量或签名证书。Actions 产物保留 30 天；其中的 `.msix` 可以直接上传到 Partner Center。GitHub Release 中的 Store MSIX 是未签名提交包，主要用于留档和商店上传，最终用户应从 Microsoft Store 安装已经过商店签名的版本。
 
 发布新版本前先更新 `build/config.yml` 中的版本，然后创建并推送 Tag：
 
 ```powershell
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.2.0
+git push origin v0.2.0
 ```
 
 GitHub Release 中的独立 `.exe` 当前也没有 Authenticode 签名，Windows 可能显示 SmartScreen 提示。若以后把它作为商店外的正式分发渠道，需要再接入受信任的 Windows 代码签名服务。
@@ -114,7 +114,7 @@ GitHub Actions 可以在推送版本 Tag 时自动执行相同流程，并将公
 
 在 macOS 上可用 `base64 < DeveloperIDApplication.p12 | pbcopy` 将证书编码并复制到剪贴板。证书、私钥和密码只能保存为 GitHub Actions Secret，不应提交到仓库。
 
-以上 Secrets 配置完成后，先手动运行一次 `macOS Release` 工作流验证签名和公证。验证成功后再推送 `v0.1.0` Tag；同一个 Tag 会串行汇总 Windows EXE、Store MSIX、macOS DMG 及各自校验文件到同一个 GitHub Release，避免不同平台同时创建 Release 时发生竞争。
+以上 Secrets 配置完成后，先手动运行一次 `macOS Release` 工作流验证签名和公证。验证成功后再推送 `v0.2.0` Tag；同一个 Tag 会串行汇总 Windows EXE、Store MSIX、macOS DMG 及各自校验文件到同一个 GitHub Release，避免不同平台同时创建 Release 时发生竞争。
 
 ## 常用检查
 

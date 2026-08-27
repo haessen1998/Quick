@@ -1,8 +1,10 @@
 import { Braces, Code2, FileCode2, FileJson, FileType2 } from "lucide-react"
 import { XMLBuilder, XMLParser, XMLValidator } from "fast-xml-parser"
+import { useMemo, useState } from "react"
 import { parseDocument } from "yaml"
 
 import { ToolWorkspace, type TextTool } from "@/components/ToolWorkspace"
+import { Switch } from "@/components/ui/switch"
 
 async function formatHtml(input: string) {
   const [prettier, htmlPlugin] = await Promise.all([import("prettier/standalone"), import("prettier/plugins/html")])
@@ -53,8 +55,24 @@ const htmlSample = '<main><h1>Quick</h1><p>Developer tools</p><button type="butt
 const cssSample = '.card{display:grid;gap:12px;color:#111;background:#fff}.card:hover{transform:translateY(-2px)}'
 const jsSample = 'const tools=["format","convert"];function ready(name){return `${name}: ${tools.join(", ")}`}'
 
-const tools: TextTool[] = [
-  { id: "json-format", group: "JSON", label: "JSON 格式化", description: "校验 JSON 并使用两个空格缩进", icon: FileJson, sample: jsonSample, run: (input) => JSON.stringify(JSON.parse(input), null, 2) },
+function parseEmbeddedJSON(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(parseEmbeddedJSON)
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, parseEmbeddedJSON(item)]))
+  }
+  if (typeof value !== "string") return value
+  const trimmed = value.trim()
+  if (!(trimmed.startsWith("{") && trimmed.endsWith("}")) && !(trimmed.startsWith("[") && trimmed.endsWith("]"))) return value
+  try {
+    return parseEmbeddedJSON(JSON.parse(trimmed))
+  } catch {
+    return value
+  }
+}
+
+function createTools(formatEmbeddedJSON: boolean): TextTool[] {
+  return [
+  { id: "json-format", group: "JSON", label: "JSON 格式化", description: formatEmbeddedJSON ? "校验 JSON，并递归展开字符串中的 JSON 对象或数组" : "校验 JSON 并使用两个空格缩进", icon: FileJson, sample: jsonSample, run: (input) => { const parsed = JSON.parse(input); return JSON.stringify(formatEmbeddedJSON ? parseEmbeddedJSON(parsed) : parsed, null, 2) } },
   { id: "json-minify", group: "JSON", label: "JSON 压缩", description: "移除 JSON 中不必要的空白", icon: Braces, sample: JSON.stringify(JSON.parse(jsonSample), null, 2), run: (input) => JSON.stringify(JSON.parse(input)) },
   { id: "yaml-format", group: "YAML", label: "YAML 格式化", description: "校验并规范 YAML 缩进", icon: FileType2, sample: "name: Quick\nfeatures:\n  - Wails\n  - shadcn/ui\nready: true", run: (input) => { const document = parseDocument(input); if (document.errors.length) throw document.errors[0]; return document.toString({ indent: 2, lineWidth: 0 }) } },
   { id: "xml-format", group: "XML", label: "XML 格式化", description: "校验 XML 并整理元素缩进", icon: FileCode2, sample: xmlSample, run: (input) => buildXml(input, true) },
@@ -65,8 +83,27 @@ const tools: TextTool[] = [
   { id: "css-minify", group: "CSS", label: "CSS 压缩", description: "优化并压缩 CSS", icon: FileCode2, sample: cssSample, run: async (input) => { const { minify } = await import("csso"); return minify(input).css } },
   { id: "javascript-format", group: "JavaScript", label: "JavaScript 格式化", description: "使用 Babel 解析并格式化 JavaScript", icon: Code2, sample: jsSample, run: formatJavaScript },
   { id: "javascript-minify", group: "JavaScript", label: "JavaScript 压缩", description: "使用 Terser 压缩 JavaScript", icon: Code2, sample: jsSample, run: async (input) => { const { minify } = await import("terser"); const result = await minify(input); if (!result.code) throw new Error("未生成压缩结果"); return result.code } },
-]
+  ]
+}
 
 export default function StringToolsPage() {
-  return <ToolWorkspace title="字符串格式化" description="格式化、校验与压缩 JSON、YAML、XML、HTML、CSS 和 JavaScript。" tools={tools} assistantPage="formatter" />
+  const [formatEmbeddedJSON, setFormatEmbeddedJSON] = useState(false)
+  const tools = useMemo(() => createTools(formatEmbeddedJSON), [formatEmbeddedJSON])
+  return (
+    <ToolWorkspace
+      title="字符串格式化"
+      description="格式化、校验与压缩 JSON、YAML、XML、HTML、CSS 和 JavaScript。"
+      tools={tools}
+      assistantPage="formatter"
+      activeToolOptions={{ "json-format": (
+        <label className="flex cursor-pointer items-center justify-between gap-4 rounded-lg border bg-background px-3 py-2.5 sm:max-w-md">
+          <span className="min-w-0">
+            <span className="block text-xs font-medium">展开嵌套 JSON 字符串</span>
+            <span className="mt-0.5 block text-[11px] leading-4 text-muted-foreground">递归识别字符串中的 JSON 对象和数组，并转换为可缩进的结构。</span>
+          </span>
+          <Switch checked={formatEmbeddedJSON} onCheckedChange={setFormatEmbeddedJSON} aria-label="展开嵌套 JSON 字符串" />
+        </label>
+      ) }}
+    />
+  )
 }

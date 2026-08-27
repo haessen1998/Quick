@@ -11,6 +11,7 @@ import {
   Play,
   PlugZap,
   RefreshCw,
+  Save,
   Search,
   Server,
   ShieldCheck,
@@ -25,7 +26,7 @@ import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { useAssistantCapability } from "@/lib/assistant-capabilities"
 import type { ProxySettings } from "@/lib/proxy"
-import type { MCPConnectionMode, MCPServerProfile, MCPTransportType } from "@/lib/saved-connections"
+import { createMCPServerProfile, type MCPConnectionMode, type MCPServerProfile, type MCPTransportType } from "@/lib/saved-connections"
 import { cn } from "@/lib/utils"
 import { MCPProxyService, MCPStdioService } from "../../bindings/changeme/services"
 
@@ -187,7 +188,7 @@ function SchemaField({ name, schema, required, value, onChange }: {
   )
 }
 
-export default function MCPInspectorPage({ proxy, profiles }: { proxy: ProxySettings; profiles: MCPServerProfile[] }) {
+export default function MCPInspectorPage({ proxy, profiles, onSaveProfile }: { proxy: ProxySettings; profiles: MCPServerProfile[]; onSaveProfile: (profile: MCPServerProfile) => void }) {
   const [selectedProfileID, setSelectedProfileID] = useState(profiles[0]?.id ?? "")
   const [transportType, setTransportType] = useState<MCPTransportType>(profiles[0]?.transport ?? "streamable-http")
   const [serverURL, setServerURL] = useState(profiles[0]?.url ?? "http://127.0.0.1:9099/mcp")
@@ -226,6 +227,39 @@ export default function MCPInspectorPage({ proxy, profiles }: { proxy: ProxySett
     setEnvText(profile.env)
     setCwd(profile.cwd)
   }, [])
+
+  const saveProfile = () => {
+    const existing = profiles.find((profile) => profile.id === selectedProfileID)
+    if (transportType === "stdio") {
+      if (!command.trim()) { toast.error("请先填写 STDIO 启动命令"); return }
+      try {
+        const parsed = JSON.parse(argsJSON || "[]")
+        if (!Array.isArray(parsed) || parsed.some((item) => typeof item !== "string")) throw new Error("参数必须是字符串数组")
+      } catch (error) {
+        toast.error(`STDIO 参数无效：${errorMessage(error)}`)
+        return
+      }
+    } else if (!/^https?:\/\//i.test(serverURL.trim())) {
+      toast.error("Server URL 必须以 http:// 或 https:// 开头")
+      return
+    }
+    const endpointName = transportType === "stdio" ? command.trim().split(/[\\/]/).pop() || "STDIO" : (() => { try { return new URL(serverURL.trim()).host } catch { return "MCP Server" } })()
+    const profile = createMCPServerProfile({
+      ...(existing ? { id: existing.id, name: existing.name } : { name: `MCP · ${endpointName}` }),
+      enabled: existing?.enabled ?? true,
+      transport: transportType,
+      url: serverURL.trim(),
+      headers: headersText.trim(),
+      connectionMode,
+      command: command.trim(),
+      argsJSON: argsJSON.trim() || "[]",
+      env: envText.trim(),
+      cwd: cwd.trim(),
+    })
+    onSaveProfile(profile)
+    setSelectedProfileID(profile.id)
+    toast.success(existing ? `已更新设置中的“${profile.name}”` : `已保存到设置：${profile.name}`)
+  }
 
   useAssistantCapability({
     page: "mcp-inspector",
@@ -396,7 +430,7 @@ export default function MCPInspectorPage({ proxy, profiles }: { proxy: ProxySett
       } else {
         requestHeaders = parseHeaderLines(headersText)
       }
-      const client = new Client({ name: "quick-mcp-tester", version: "0.1.0" })
+      const client = new Client({ name: "quick-mcp-tester", version: "0.2.0" })
       transport = transportType === "sse"
         ? new SSEClientTransport(new URL(endpoint), {
             requestInit: { headers: requestHeaders },
@@ -511,7 +545,7 @@ export default function MCPInspectorPage({ proxy, profiles }: { proxy: ProxySett
             </div>
             <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
               <ShieldCheck className="size-3.5 text-emerald-600 dark:text-emerald-400" />
-              当前编辑仅用于本次连接
+              可保存为长期配置
             </div>
           </div>
 
@@ -532,7 +566,7 @@ export default function MCPInspectorPage({ proxy, profiles }: { proxy: ProxySett
               <div className="grid gap-3 sm:grid-cols-[11rem_minmax(0,1fr)]">
                 <label className="block space-y-1.5 text-xs font-medium">
                   <span>Transport</span>
-                  <select className={INPUT_CLASS} value={transportType} disabled={connected || connecting} onChange={(event) => { setTransportType(event.target.value as MCPTransportType); setSelectedProfileID("") }}>
+                  <select className={INPUT_CLASS} value={transportType} disabled={connected || connecting} onChange={(event) => setTransportType(event.target.value as MCPTransportType)}>
                     <option value="streamable-http">Streamable HTTP</option>
                     <option value="sse">SSE（旧版兼容）</option>
                     <option value="stdio">STDIO（本地进程）</option>
@@ -541,25 +575,25 @@ export default function MCPInspectorPage({ proxy, profiles }: { proxy: ProxySett
                 {transportType === "stdio" ? (
                   <label className="block space-y-1.5 text-xs font-medium">
                     <span>启动命令</span>
-                    <input className={INPUT_CLASS} value={command} disabled={connected || connecting} onChange={(event) => { setCommand(event.target.value); setSelectedProfileID("") }} placeholder="npx、uvx 或可执行文件路径" />
+                    <input className={INPUT_CLASS} value={command} disabled={connected || connecting} onChange={(event) => setCommand(event.target.value)} placeholder="npx、uvx 或可执行文件路径" />
                   </label>
                 ) : (
                   <label className="block space-y-1.5 text-xs font-medium">
                     <span>Server URL</span>
-                    <input className={INPUT_CLASS} value={serverURL} disabled={connected || connecting} onChange={(event) => { setServerURL(event.target.value); setSelectedProfileID("") }} placeholder={transportType === "sse" ? "http://127.0.0.1:3001/sse" : "http://127.0.0.1:9099/mcp"} />
+                    <input className={INPUT_CLASS} value={serverURL} disabled={connected || connecting} onChange={(event) => setServerURL(event.target.value)} placeholder={transportType === "sse" ? "http://127.0.0.1:3001/sse" : "http://127.0.0.1:9099/mcp"} />
                   </label>
                 )}
               </div>
               {transportType === "stdio" ? (
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <label className="block space-y-1.5 text-xs font-medium"><span>参数（JSON 字符串数组）</span><textarea className={`${TEXTAREA_CLASS} h-24`} value={argsJSON} disabled={connected || connecting} onChange={(event) => { setArgsJSON(event.target.value); setSelectedProfileID("") }} placeholder={'["-y", "@example/mcp-server"]'} /></label>
-                  <label className="block space-y-1.5 text-xs font-medium"><span>环境变量（每行 KEY=value）</span><textarea className={`${TEXTAREA_CLASS} h-24`} value={envText} disabled={connected || connecting} onChange={(event) => { setEnvText(event.target.value); setSelectedProfileID("") }} placeholder={"API_KEY=…\nLOG_LEVEL=error"} /></label>
-                  <label className="block space-y-1.5 text-xs font-medium sm:col-span-2"><span>工作目录（可选）</span><input className={INPUT_CLASS} value={cwd} disabled={connected || connecting} onChange={(event) => { setCwd(event.target.value); setSelectedProfileID("") }} placeholder="留空使用 Quick 的当前目录" /></label>
+                  <label className="block space-y-1.5 text-xs font-medium"><span>参数（JSON 字符串数组）</span><textarea className={`${TEXTAREA_CLASS} h-24`} value={argsJSON} disabled={connected || connecting} onChange={(event) => setArgsJSON(event.target.value)} placeholder={'["-y", "@example/mcp-server"]'} /></label>
+                  <label className="block space-y-1.5 text-xs font-medium"><span>环境变量（每行 KEY=value）</span><textarea className={`${TEXTAREA_CLASS} h-24`} value={envText} disabled={connected || connecting} onChange={(event) => setEnvText(event.target.value)} placeholder={"API_KEY=…\nLOG_LEVEL=error"} /></label>
+                  <label className="block space-y-1.5 text-xs font-medium sm:col-span-2"><span>工作目录（可选）</span><input className={INPUT_CLASS} value={cwd} disabled={connected || connecting} onChange={(event) => setCwd(event.target.value)} placeholder="留空使用 Quick 的当前目录" /></label>
                 </div>
               ) : (
                 <label className="block space-y-1.5 text-xs font-medium">
                   <span className="flex items-center justify-between gap-2"><span>自定义请求头</span><span className="font-normal text-muted-foreground">每行填写一个 Header: value</span></span>
-                  <textarea className={`${TEXTAREA_CLASS} h-24`} value={headersText} disabled={connected || connecting} onChange={(event) => { setHeadersText(event.target.value); setSelectedProfileID("") }} placeholder={"Authorization: Bearer …\nX-API-Key: …"} />
+                  <textarea className={`${TEXTAREA_CLASS} h-24`} value={headersText} disabled={connected || connecting} onChange={(event) => setHeadersText(event.target.value)} placeholder={"Authorization: Bearer …\nX-API-Key: …"} />
                 </label>
               )}
             </div>
@@ -579,7 +613,7 @@ export default function MCPInspectorPage({ proxy, profiles }: { proxy: ProxySett
                       connectionMode === option.id && "border-primary bg-muted ring-1 ring-primary",
                     )}
                     disabled={connected || connecting}
-                    onClick={() => { setConnectionMode(option.id); setSelectedProfileID("") }}
+                    onClick={() => setConnectionMode(option.id)}
                   >
                     <span className="flex items-center gap-2 text-xs font-medium">
                       <span className={cn("size-2 rounded-full border", connectionMode === option.id && "border-primary bg-primary")} />
@@ -610,7 +644,10 @@ export default function MCPInspectorPage({ proxy, profiles }: { proxy: ProxySett
             {connected ? (
               <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={() => void closeConnection()}><CircleStop />断开连接</Button>
             ) : (
-              <Button type="button" className="w-full sm:w-auto" disabled={connecting} onClick={() => void connect()}>{connecting ? <LoaderCircle className="animate-spin" /> : <PlugZap />}{connecting ? "正在连接" : "连接 Server"}</Button>
+              <div className="flex w-full gap-2 sm:w-auto">
+                <Button type="button" variant="outline" className="flex-1 sm:flex-none" disabled={connecting} onClick={saveProfile}><Save />保存配置</Button>
+                <Button type="button" className="flex-1 sm:flex-none" disabled={connecting} onClick={() => void connect()}>{connecting ? <LoaderCircle className="animate-spin" /> : <PlugZap />}{connecting ? "正在连接" : "连接 Server"}</Button>
+              </div>
             )}
           </div>
         </article>

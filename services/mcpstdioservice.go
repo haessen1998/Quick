@@ -90,7 +90,7 @@ func (s *MCPStdioService) Connect(command string, argsJSON string, envText strin
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	client := mcp.NewClient(&mcp.Implementation{Name: "quick-mcp-tester", Version: "0.1.0"}, nil)
+	client := mcp.NewClient(&mcp.Implementation{Name: "quick-mcp-tester", Version: "0.2.0"}, nil)
 	session, err := client.Connect(ctx, &mcp.CommandTransport{Command: cmd, TerminateDuration: 2 * time.Second}, nil)
 	if err != nil {
 		message := err.Error()

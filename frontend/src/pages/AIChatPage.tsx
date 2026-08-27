@@ -13,6 +13,7 @@ import {
   MessageSquareText,
   RefreshCw,
   RotateCcw,
+  Save,
   Send,
   Settings2,
   ShieldCheck,
@@ -29,7 +30,7 @@ import { AssistantMessageFlow } from "@/components/AssistantMessageFlow"
 import { MarkdownRenderer } from "@/components/MarkdownRenderer"
 import { AI_PROVIDER_OPTIONS, createLanguageModel, getAIProviderOption, settingsFromProfile, validateChatSettings, type AIProviderOption, type ChatSettings } from "@/lib/ai-provider"
 import { cn } from "@/lib/utils"
-import type { AIProfile } from "@/lib/saved-connections"
+import { createAIProfile, type AIProfile } from "@/lib/saved-connections"
 import { useStickToBottom } from "@/lib/use-stick-to-bottom"
 
 const QUICK_PROMPTS = [
@@ -254,7 +255,7 @@ function ChatSession({ settings }: { settings: ChatSettings }) {
   )
 }
 
-export default function AIChatPage({ profiles }: { profiles: AIProfile[] }) {
+export default function AIChatPage({ profiles, onSaveProfile }: { profiles: AIProfile[]; onSaveProfile: (profile: AIProfile) => void }) {
   const [selectedProfileID, setSelectedProfileID] = useState(profiles[0]?.id ?? "")
   const [draft, setDraft] = useState<ChatSettings>(() => settingsFromProfile(profiles[0], INITIAL_SETTINGS))
   const [activeSettings, setActiveSettings] = useState<ChatSettings | null>(null)
@@ -301,6 +302,24 @@ export default function AIChatPage({ profiles }: { profiles: AIProfile[] }) {
     setActiveSettings({ ...draft, model: draft.model.trim(), apiKey: draft.apiKey.trim(), baseURL: draft.baseURL.trim(), resourceName: draft.resourceName.trim(), apiVersion: draft.apiVersion.trim() })
     setSessionVersion((version) => version + 1)
     toast.success(activeSettings ? "配置已应用，并已新建会话" : "AI Provider 已连接到新会话")
+  }
+
+  const saveProfile = () => {
+    const model = draft.model.trim()
+    if (!model) { toast.error("请先填写模型或部署名称"); return }
+    const existing = profiles.find((profile) => profile.id === selectedProfileID)
+    const profile = createAIProfile({
+      ...draft,
+      ...(existing ? { id: existing.id, name: existing.name } : { name: `${currentProvider.shortLabel} · ${model}` }),
+      model,
+      apiKey: draft.apiKey.trim(),
+      baseURL: draft.baseURL.trim(),
+      resourceName: draft.resourceName.trim(),
+      apiVersion: draft.apiVersion.trim(),
+    })
+    onSaveProfile(profile)
+    setSelectedProfileID(profile.id)
+    toast.success(existing ? `已更新设置中的“${profile.name}”` : `已保存到设置：${profile.name}`)
   }
 
   return (
@@ -424,10 +443,15 @@ export default function AIChatPage({ profiles }: { profiles: AIProfile[] }) {
                   />
                 </label>
 
-                <Button type="submit" className="w-full">
-                  {activeSettings ? <RotateCcw className="size-4" /> : <Bot className="size-4" />}
-                  {activeSettings ? "应用并新建会话" : "开始对话"}
-                </Button>
+                <div className="grid grid-cols-2 gap-2">
+                  <Button type="button" variant="outline" onClick={saveProfile}>
+                    <Save className="size-4" />保存配置
+                  </Button>
+                  <Button type="submit">
+                    {activeSettings ? <RotateCcw className="size-4" /> : <Bot className="size-4" />}
+                    {activeSettings ? "应用配置" : "开始对话"}
+                  </Button>
+                </div>
               </form>
             </article>
 
