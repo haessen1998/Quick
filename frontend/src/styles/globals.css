@@ -128,7 +128,32 @@
 
 :root[data-platform="macos"] {
   /* Wails MacTitleBarHiddenInset keeps the native traffic lights over web content. */
-  --window-safe-top: 2rem;
+  --window-safe-top: 0px;
+  --macos-traffic-light-width: 5rem;
+}
+
+/* Keep the existing sidebar header in the native title-bar row instead of
+   reserving a separate strip across the whole application. */
+:root[data-platform="macos"] [data-slot="sidebar"][data-state="expanded"] .app-sidebar-brand {
+  justify-content: flex-end;
+  padding-left: var(--macos-traffic-light-width);
+}
+
+@media (min-width: 768px) {
+  :root[data-platform="macos"] [data-slot="sidebar"][data-state="collapsed"] .app-sidebar-brand {
+    visibility: hidden;
+  }
+}
+
+@media (max-width: 767px) {
+  :root[data-platform="macos"] [data-slot="sidebar"] .app-sidebar-brand {
+    justify-content: flex-end;
+    padding-left: var(--macos-traffic-light-width);
+  }
+
+  :root[data-platform="macos"] .app-topbar {
+    padding-left: var(--macos-traffic-light-width);
+  }
 }
 
 @layer components {

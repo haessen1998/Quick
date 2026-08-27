@@ -22,7 +22,6 @@ jobs:
       WAILS_MCP: "1"
       WAILS_MCP_HOST: "127.0.0.1"
       WAILS_MCP_PORT: "9099"
-      APPLE_TEAM_ID: FRR4S244RD
       SIGN_IDENTITY: "Developer ID Application: Haessen Yu (FRR4S244RD)"
       KEYCHAIN_PROFILE: quick-notary
 
@@ -73,13 +72,14 @@ jobs:
       - name: Require Apple signing credentials
         shell: bash
         env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
           CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          NOTARY_APPLE_ID: ${{ secrets.APPLE_NOTARY_APPLE_ID }}
-          NOTARY_PASSWORD: ${{ secrets.APPLE_NOTARY_PASSWORD }}
         run: |
           set -euo pipefail
-          for name in CERTIFICATE_P12_BASE64 CERTIFICATE_PASSWORD NOTARY_APPLE_ID NOTARY_PASSWORD; do
+          for name in APPLE_ID APPLE_TEAM_ID APPLE_APP_SPECIFIC_PASSWORD CERTIFICATE_P12_BASE64 CERTIFICATE_PASSWORD; do
             if [[ -z "${!name:-}" ]]; then
               echo "Missing required GitHub Actions secret for $name" >&2
               exit 1
@@ -88,7 +88,9 @@ jobs:
 
       - name: Install Wails
         shell: bash
-        run: go install github.com/wailsapp/wails/v3/cmd/wails3@"$WAILS_VERSION"
+        run: |
+          go install github.com/wailsapp/wails/v3/cmd/wails3@"$WAILS_VERSION"
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
       - name: Install frontend dependencies
         run: npm ci --prefix frontend
@@ -102,10 +104,11 @@ jobs:
       - name: Import Developer ID and configure notarization
         shell: bash
         env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
           CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          NOTARY_APPLE_ID: ${{ secrets.APPLE_NOTARY_APPLE_ID }}
-          NOTARY_PASSWORD: ${{ secrets.APPLE_NOTARY_PASSWORD }}
         run: |
           set -euo pipefail
 
@@ -134,9 +137,9 @@ jobs:
 
           security find-identity -v -p codesigning "$keychain_path" | grep -F "$SIGN_IDENTITY"
           xcrun notarytool store-credentials "$KEYCHAIN_PROFILE" \
-            --apple-id "$NOTARY_APPLE_ID" \
+            --apple-id "$APPLE_ID" \
             --team-id "$APPLE_TEAM_ID" \
-            --password "$NOTARY_PASSWORD"
+            --password "$APPLE_APP_SPECIFIC_PASSWORD"
 
           rm -f "$certificate_path"
 

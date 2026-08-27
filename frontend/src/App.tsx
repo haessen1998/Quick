@@ -124,7 +124,7 @@ function AppSidebar({ activePage, onNavigate }: { activePage: PageId; onNavigate
   return (
     <Sidebar>
       <SidebarHeader className="h-14 border-b border-sidebar-border px-2 py-0">
-        <div className={cn("flex h-full items-center gap-3 overflow-hidden px-1", !open && "md:justify-center")}>
+        <div className={cn("app-sidebar-brand flex h-full items-center gap-3 overflow-hidden px-1", !open && "md:justify-center")}>
           <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-sm font-bold text-primary-foreground">
             Q
           </div>
