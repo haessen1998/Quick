@@ -39,6 +39,8 @@ func main() {
 			application.NewService(&services.NetworkService{}),
 			application.NewService(&services.MCPProxyService{}),
 			application.NewService(&services.MCPStdioService{}),
+			application.NewService(services.NewConfigService()),
+			application.NewService(services.NewNavigationService()),
 		},
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets),

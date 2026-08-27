@@ -62,10 +62,15 @@ import type { PageId } from "@/lib/pages"
 import { getInitialTheme, type AppTheme } from "@/lib/theme"
 import { getInitialProxySettings, saveProxySettings, type ProxySettings } from "@/lib/proxy"
 import {
+  clearLegacySensitiveConnectionCache,
   createAIProfile,
   createMCPServerProfile,
   getInitialAIProfiles,
   getInitialMCPServers,
+  hydrateAIProfiles,
+  hydrateMCPServers,
+  persistAIProfiles,
+  persistMCPServers,
   saveAIProfiles,
   saveMCPServers,
   type AIProfile,
@@ -367,7 +372,7 @@ function SettingsPage({
           </div>
           <div className="rounded-xl border bg-background p-4">
             <div className="flex items-center gap-2 text-sm font-medium"><Settings className="size-4" />长期配置</div>
-            <p className="mt-2 text-xs leading-5 text-muted-foreground">主题、网络代理、AI/MCP 列表和小Q偏好保存在当前设备的 WebView localStorage 中，重新启动 Quick 后仍可使用。</p>
+            <p className="mt-2 text-xs leading-5 text-muted-foreground">AI/MCP 列表等长期配置会写入当前用户的 Quick 配置文件；主题、面板尺寸等界面偏好保存在 WebView 本地缓存中。</p>
           </div>
         </div>
       </article>
@@ -470,7 +475,7 @@ function SettingsPage({
         </div>
         <div className="space-y-3 p-4 sm:p-6">
           <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/8 p-3 text-xs leading-5 text-amber-800 dark:text-amber-200">
-            <KeyRound className="mt-0.5 size-4 shrink-0" />API Key 会保存在当前设备的 WebView localStorage 中，未做系统密钥链加密。请只在可信设备上使用。
+            <KeyRound className="mt-0.5 size-4 shrink-0" />API Key 使用应用内固定密钥进行 AES-256-GCM 加密后保存在 Quick 配置文件中。它可避免直接读取明文，但不能替代系统密钥链。
           </div>
           <div className="overflow-x-auto rounded-xl border bg-background">
             <table className="w-full min-w-[44rem] text-left text-sm">
@@ -523,6 +528,7 @@ function App() {
   const [assistantOpen, setAssistantOpen] = useState(false)
   const [aiProfiles, setAIProfiles] = useState<AIProfile[]>(() => getInitialAIProfiles())
   const [mcpServers, setMCPServers] = useState<MCPServerProfile[]>(() => getInitialMCPServers())
+  const [persistentConfigReady, setPersistentConfigReady] = useState(false)
   const enabledMCPServers = mcpServers.filter((profile) => profile.enabled)
   const currentPage = pages.find((page) => page.id === activePage) ?? pages[0]
 
@@ -553,12 +559,28 @@ function App() {
   }, [assistantSettings])
 
   useEffect(() => {
-    saveAIProfiles(aiProfiles)
-  }, [aiProfiles])
+    let cancelled = false
+    Promise.all([hydrateAIProfiles(aiProfiles), hydrateMCPServers(mcpServers)]).then(([savedAIProfiles, savedMCPServers]) => {
+      if (cancelled) return
+      setAIProfiles(savedAIProfiles)
+      setMCPServers(savedMCPServers)
+      clearLegacySensitiveConnectionCache()
+      setPersistentConfigReady(true)
+    }).catch((error) => console.warn("Durable configuration is unavailable; using WebView fallback storage", error))
+    return () => { cancelled = true }
+    // Initial WebView values are intentionally captured once for migration.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
-    saveMCPServers(mcpServers)
-  }, [mcpServers])
+    if (persistentConfigReady) void persistAIProfiles(aiProfiles).catch((error) => console.warn("Unable to persist AI profiles", error))
+    else saveAIProfiles(aiProfiles)
+  }, [aiProfiles, persistentConfigReady])
+
+  useEffect(() => {
+    if (persistentConfigReady) void persistMCPServers(mcpServers).catch((error) => console.warn("Unable to persist MCP servers", error))
+    else saveMCPServers(mcpServers)
+  }, [mcpServers, persistentConfigReady])
 
   const changeTheme = (nextTheme: AppTheme) => {
     setTheme(nextTheme)

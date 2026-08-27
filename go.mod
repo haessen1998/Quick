@@ -5,6 +5,7 @@ go 1.25.0
 require (
 	github.com/modelcontextprotocol/go-sdk v1.7.0
 	github.com/wailsapp/wails/v3 v3.0.0-beta.14
+	golang.org/x/net v0.56.0
 	golang.org/x/text v0.41.0
 )
 

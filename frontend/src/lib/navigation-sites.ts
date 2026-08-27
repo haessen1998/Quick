@@ -1,3 +1,5 @@
+import { loadPersistentConfig, savePersistentConfig } from "@/lib/persistent-config"
+
 export type NavigationCardSize = "1x1" | "2x2" | "4x2"
 
 export type NavigationItem = {
@@ -44,11 +46,24 @@ export function normalizeNavigationURL(value: string) {
   return url.toString()
 }
 
+export function automaticSiteIcon(value: string) {
+  try {
+    return new URL("/favicon.ico", normalizeNavigationURL(value)).toString()
+  } catch {
+    return ""
+  }
+}
+
 export function loadNavigationGroups(): NavigationGroup[] {
   if (typeof window === "undefined") return defaultGroups
+  return parseNavigationGroups(window.localStorage.getItem(STORAGE_KEY)) ?? defaultGroups
+}
+
+function parseNavigationGroups(raw: string | null): NavigationGroup[] | null {
+  if (!raw) return null
   try {
-    const parsed = JSON.parse(window.localStorage.getItem(STORAGE_KEY) ?? "null")
-    if (!Array.isArray(parsed)) return defaultGroups
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return null
     const groups = parsed.flatMap((raw): NavigationGroup[] => {
       if (!raw || typeof raw !== "object" || typeof raw.id !== "string" || typeof raw.name !== "string" || !Array.isArray(raw.items)) return []
       const items = raw.items.flatMap((item: unknown): NavigationItem[] => {
@@ -59,12 +74,31 @@ export function loadNavigationGroups(): NavigationGroup[] {
       })
       return [{ id: raw.id, name: raw.name, items }]
     })
-    return groups.length ? groups : defaultGroups
+    return groups
   } catch {
-    return defaultGroups
+    return null
   }
 }
 
 export function saveNavigationGroups(groups: NavigationGroup[]) {
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(groups))
+  const serialized = JSON.stringify(groups)
+  const previous = window.localStorage.getItem(STORAGE_KEY)
+  if (previous && previous !== serialized) window.localStorage.setItem(`${STORAGE_KEY}-backup`, previous)
+  window.localStorage.setItem(STORAGE_KEY, serialized)
+}
+
+export async function hydrateNavigationGroups(fallback: NavigationGroup[]) {
+  try {
+    const durable = await loadPersistentConfig("navigation-groups")
+    const groups = parseNavigationGroups(durable)
+    if (groups) return groups
+    await savePersistentConfig("navigation-groups", fallback)
+  } catch (error) {
+    console.warn("Unable to hydrate durable navigation groups", error)
+  }
+  return fallback
+}
+
+export async function persistNavigationGroups(groups: NavigationGroup[]) {
+  await savePersistentConfig("navigation-groups", groups)
 }

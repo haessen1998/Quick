@@ -1,3 +1,5 @@
+import { loadPersistentConfig, savePersistentConfig } from "@/lib/persistent-config"
+
 export type AIProviderId = "openai" | "azure" | "anthropic" | "google" | "open-responses" | "compatible"
 
 export type AIProfile = {
@@ -96,21 +98,27 @@ function loadList<T>(key: string, fallback: T[], validate: (value: unknown) => v
   return fallback.map((item) => ({ ...item }))
 }
 
-function isAIProfile(value: unknown): value is AIProfile {
-  if (!value || typeof value !== "object") return false
-  const profile = value as Partial<AIProfile>
-  return typeof profile.id === "string" && typeof profile.name === "string" && typeof profile.model === "string"
-    && typeof profile.apiKey === "string" && typeof profile.baseURL === "string" && typeof profile.systemPrompt === "string"
-    && ["openai", "azure", "anthropic", "google", "open-responses", "compatible"].includes(profile.provider ?? "")
-}
-
-function normalizeAIProfile(profile: AIProfile): AIProfile {
-  return {
-    ...profile,
+function normalizeAIProfile(value: unknown): AIProfile | null {
+  if (!value || typeof value !== "object") return null
+  const profile = value as Partial<AIProfile> & { baseUrl?: unknown; endpoint?: unknown; prompt?: unknown }
+  const provider = profile.provider === "azure" || profile.provider === "anthropic" || profile.provider === "google"
+    || profile.provider === "open-responses" || profile.provider === "compatible" ? profile.provider : "openai"
+  const id = typeof profile.id === "string" && profile.id ? profile.id : createID("ai")
+  const name = typeof profile.name === "string" ? profile.name : "未命名 AI"
+  const model = typeof profile.model === "string" ? profile.model : ""
+  if (!name && !model) return null
+  return createAIProfile({
+    id,
+    name,
+    provider,
+    model,
+    apiKey: typeof profile.apiKey === "string" ? profile.apiKey : "",
+    baseURL: typeof profile.baseURL === "string" ? profile.baseURL : typeof profile.baseUrl === "string" ? profile.baseUrl : typeof profile.endpoint === "string" ? profile.endpoint : "",
     resourceName: typeof profile.resourceName === "string" ? profile.resourceName : "",
     apiVersion: typeof profile.apiVersion === "string" ? profile.apiVersion : "",
     useDeploymentBasedUrls: typeof profile.useDeploymentBasedUrls === "boolean" ? profile.useDeploymentBasedUrls : false,
-  }
+    systemPrompt: typeof profile.systemPrompt === "string" ? profile.systemPrompt : typeof profile.prompt === "string" ? profile.prompt : DEFAULT_SYSTEM_PROMPT,
+  })
 }
 
 function isMCPServerProfile(value: unknown): value is MCPServerProfile {
@@ -124,7 +132,7 @@ function isMCPServerProfile(value: unknown): value is MCPServerProfile {
 }
 
 export function getInitialAIProfiles() {
-  const profiles = loadList(AI_STORAGE_KEY, DEFAULT_AI_PROFILES, isAIProfile).map(normalizeAIProfile)
+  const profiles = parseAIProfiles(window.localStorage.getItem(AI_STORAGE_KEY)) ?? DEFAULT_AI_PROFILES.map((item) => ({ ...item }))
   const isUntouchedLegacyDefaults = profiles.length === LEGACY_AI_DEFAULTS.length && LEGACY_AI_DEFAULTS.every((legacy) => {
     const profile = profiles.find((item) => item.id === legacy.id)
     return profile?.name === legacy.name && profile.provider === legacy.provider && profile.model === legacy.model
@@ -134,11 +142,27 @@ export function getInitialAIProfiles() {
 }
 
 export function saveAIProfiles(profiles: AIProfile[]) {
-  window.localStorage.setItem(AI_STORAGE_KEY, JSON.stringify(profiles))
+  saveLocalList(AI_STORAGE_KEY, profiles)
+}
+
+export async function hydrateAIProfiles(fallback: AIProfile[]) {
+  const durable = await loadPersistentConfig("ai-profiles")
+  const profiles = parseAIProfiles(durable)
+  const merged = profiles ? mergeAIProfiles(profiles, fallback) : fallback
+  if (!profiles || JSON.stringify(merged) !== JSON.stringify(profiles)) await savePersistentConfig("ai-profiles", merged)
+  return merged
+}
+
+export async function persistAIProfiles(profiles: AIProfile[]) {
+  await savePersistentConfig("ai-profiles", profiles)
 }
 
 export function getInitialMCPServers() {
-  return loadList(MCP_STORAGE_KEY, DEFAULT_MCP_SERVERS, isMCPServerProfile).map((profile) => {
+  return normalizeMCPServers(loadList(MCP_STORAGE_KEY, DEFAULT_MCP_SERVERS, isMCPServerProfile))
+}
+
+function normalizeMCPServers(profiles: MCPServerProfile[]) {
+  return profiles.map((profile) => {
     const enabled = typeof profile.enabled === "boolean" ? profile.enabled : true
     if (profile.id === "mcp-local-http" && profile.url === "http://127.0.0.1:3000/mcp") {
       return { ...profile, id: "mcp-wails3-app", name: "Quick App MCP", enabled, url: "http://127.0.0.1:9099/mcp" }
@@ -151,5 +175,68 @@ export function getInitialMCPServers() {
 }
 
 export function saveMCPServers(profiles: MCPServerProfile[]) {
-  window.localStorage.setItem(MCP_STORAGE_KEY, JSON.stringify(profiles))
+  saveLocalList(MCP_STORAGE_KEY, profiles)
+}
+
+export async function hydrateMCPServers(fallback: MCPServerProfile[]) {
+  const durable = await loadPersistentConfig("mcp-servers")
+  if (durable) {
+    const parsed = JSON.parse(durable)
+    if (Array.isArray(parsed)) return normalizeMCPServers(parsed.filter(isMCPServerProfile))
+  }
+  await savePersistentConfig("mcp-servers", fallback)
+  return fallback
+}
+
+export async function persistMCPServers(profiles: MCPServerProfile[]) {
+  await savePersistentConfig("mcp-servers", profiles)
+}
+
+export function clearLegacySensitiveConnectionCache() {
+  for (const key of [AI_STORAGE_KEY, MCP_STORAGE_KEY]) {
+    window.localStorage.removeItem(key)
+    window.localStorage.removeItem(`${key}-backup`)
+  }
+}
+
+function parseAIProfiles(raw: string | null): AIProfile[] | null {
+  if (!raw) return null
+  try {
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return null
+    return parsed.map(normalizeAIProfile).filter((profile): profile is AIProfile => Boolean(profile))
+  } catch {
+    return null
+  }
+}
+
+function aiProfileCompleteness(profile: AIProfile) {
+  let score = profile.apiKey.trim() ? 20 : 0
+  score += profile.baseURL.trim() || profile.resourceName.trim() ? 5 : 0
+  score += profile.systemPrompt !== DEFAULT_SYSTEM_PROMPT ? 2 : 0
+  score += profile.id !== "ai-openai" ? 1 : 0
+  return score
+}
+
+function isEmptyAIExample(profile: AIProfile) {
+  return profile.id === "ai-openai" && profile.provider === "openai" && profile.model === "gpt-5-mini"
+    && !profile.apiKey.trim() && !profile.baseURL.trim() && !profile.resourceName.trim()
+}
+
+function mergeAIProfiles(durable: AIProfile[], local: AIProfile[]) {
+  const merged = durable.map((profile) => ({ ...profile }))
+  for (const candidate of local) {
+    const index = merged.findIndex((profile) => profile.id === candidate.id)
+    if (index < 0) merged.push({ ...candidate })
+    else if (aiProfileCompleteness(candidate) > aiProfileCompleteness(merged[index])) merged[index] = { ...candidate }
+  }
+  const hasConfiguredOrCustomProfile = merged.some((profile) => !isEmptyAIExample(profile))
+  return hasConfiguredOrCustomProfile ? merged.filter((profile) => !isEmptyAIExample(profile)) : merged
+}
+
+function saveLocalList(key: string, value: unknown) {
+  const serialized = JSON.stringify(value)
+  const previous = window.localStorage.getItem(key)
+  if (previous && previous !== serialized) window.localStorage.setItem(`${key}-backup`, previous)
+  window.localStorage.setItem(key, serialized)
 }

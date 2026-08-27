@@ -1,15 +1,16 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { Browser } from "@wailsio/runtime"
+import * as NavigationService from "@/../bindings/changeme/services/navigationservice"
 import { DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core"
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
-import { GripVertical, LayoutGrid, Pencil, Plus, Sparkles, Trash2 } from "lucide-react"
+import { Globe2, GripVertical, ImagePlus, LayoutGrid, Link2, Plus, Pencil, Sparkles, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { useAssistantCapability } from "@/lib/assistant-capabilities"
-import { loadNavigationGroups, navigationId, normalizeNavigationURL, saveNavigationGroups, type NavigationCardSize, type NavigationGroup, type NavigationItem } from "@/lib/navigation-sites"
+import { automaticSiteIcon, hydrateNavigationGroups, loadNavigationGroups, navigationId, normalizeNavigationURL, persistNavigationGroups, saveNavigationGroups, type NavigationCardSize, type NavigationGroup, type NavigationItem } from "@/lib/navigation-sites"
 import { cn } from "@/lib/utils"
 
 const sizeClasses: Record<NavigationCardSize, string> = {
@@ -29,9 +30,52 @@ function siteHost(url: string) {
   try { return new URL(normalizeNavigationURL(url)).hostname } catch { return url }
 }
 
+function SiteIcon({ item, className }: { item: NavigationItem; className?: string }) {
+  const source = item.icon || automaticSiteIcon(item.url)
+  const [failed, setFailed] = useState(false)
+  useEffect(() => setFailed(false), [source])
+  if (!source || failed) return <span className={cn("flex size-full items-center justify-center", className)}>{item.title.trim().slice(0, 1).toUpperCase() || "?"}</span>
+  return <img src={source} alt="" className={cn("size-full object-cover", className)} onError={() => setFailed(true)} />
+}
+
+async function localIconDataURL(file: File) {
+  if (!file.type.startsWith("image/")) throw new Error("请选择图片文件")
+  if (file.size > 5 * 1024 * 1024) throw new Error("图片不能超过 5 MB")
+  const source = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result))
+    reader.onerror = () => reject(new Error("读取本地图片失败"))
+    reader.readAsDataURL(file)
+  })
+  const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const element = new Image()
+    element.onload = () => resolve(element)
+    element.onerror = () => reject(new Error("无法解析这张图片"))
+    element.src = source
+  })
+  const edge = 256
+  const scale = Math.min(1, edge / Math.max(image.naturalWidth, image.naturalHeight))
+  const width = Math.max(1, Math.round(image.naturalWidth * scale))
+  const height = Math.max(1, Math.round(image.naturalHeight * scale))
+  const canvas = document.createElement("canvas")
+  canvas.width = width
+  canvas.height = height
+  const context = canvas.getContext("2d")
+  if (!context) throw new Error("当前环境无法处理图片")
+  context.drawImage(image, 0, 0, width, height)
+  return canvas.toDataURL("image/webp", 0.9)
+}
+
+async function discoverSiteIcon(url: string) {
+  try {
+    return await NavigationService.DiscoverSiteIcon(normalizeNavigationURL(url))
+  } catch {
+    return automaticSiteIcon(url)
+  }
+}
+
 function SortableCard({ item, onEdit }: { item: NavigationItem; onEdit: () => void }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id })
-  const firstLetter = item.title.trim().slice(0, 1).toUpperCase() || "?"
   const open = async () => {
     try { await Browser.OpenURL(normalizeNavigationURL(item.url)) } catch (error) { toast.error(error instanceof Error ? error.message : String(error)) }
   }
@@ -39,7 +83,7 @@ function SortableCard({ item, onEdit }: { item: NavigationItem; onEdit: () => vo
     <article ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition }} className={cn("group relative min-w-0 overflow-hidden rounded-xl border bg-card shadow-sm transition-[box-shadow,border-color,opacity] hover:border-primary/40 hover:shadow-md", sizeClasses[item.size], isDragging && "z-20 opacity-60 shadow-xl")}>
       <button type="button" className="app-interactive flex size-full min-w-0 flex-col items-start justify-between p-3 text-left" onClick={open} title={item.url}>
         <span className={cn("flex shrink-0 items-center justify-center overflow-hidden rounded-lg bg-primary/10 font-semibold text-primary", item.size === "1x1" ? "size-8 text-sm" : "size-10 text-base")}>
-          {item.icon ? <img src={item.icon} alt="" className="size-full object-cover" /> : firstLetter}
+          <SiteIcon item={item} />
         </span>
         {item.size !== "1x1" && <span className="min-w-0"><span className="block truncate text-sm font-medium">{item.title}</span>{item.size === "4x2" && <span className="mt-1 line-clamp-2 block text-xs leading-5 text-muted-foreground">{item.description || siteHost(item.url)}</span>}</span>}
       </button>
@@ -56,9 +100,27 @@ export default function NavigationPage() {
   const [groupEditor, setGroupEditor] = useState<{ id?: string; name: string } | null>(null)
   const [itemEditor, setItemEditor] = useState<ItemEditor | null>(null)
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null)
+  const [persistentConfigReady, setPersistentConfigReady] = useState(false)
+  const [iconBusy, setIconBusy] = useState(false)
+  const iconInputRef = useRef<HTMLInputElement>(null)
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }))
 
-  useEffect(() => saveNavigationGroups(groups), [groups])
+  useEffect(() => {
+    let cancelled = false
+    hydrateNavigationGroups(groups).then((savedGroups) => {
+      if (cancelled) return
+      setGroups(savedGroups)
+      setPersistentConfigReady(true)
+    })
+    return () => { cancelled = true }
+    // Initial WebView value is intentionally captured once for migration.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    saveNavigationGroups(groups)
+    if (persistentConfigReady) void persistNavigationGroups(groups).catch((error) => console.warn("Unable to persist navigation groups", error))
+  }, [groups, persistentConfigReady])
 
   const itemLocation = useMemo(() => {
     const locations = new Map<string, { groupId: string; index: number }>()
@@ -89,10 +151,12 @@ export default function NavigationPage() {
     setGroupEditor(null)
   }
 
-  const saveItem = () => {
+  const saveItem = async () => {
     if (!itemEditor) return
     try {
-      const value = { ...itemEditor.value, title: itemEditor.value.title.trim(), url: normalizeNavigationURL(itemEditor.value.url), icon: itemEditor.value.icon.trim(), description: itemEditor.value.description.trim() }
+      const url = normalizeNavigationURL(itemEditor.value.url)
+      const configuredIcon = itemEditor.value.icon.trim()
+      const value = { ...itemEditor.value, title: itemEditor.value.title.trim(), url, icon: configuredIcon || await discoverSiteIcon(url), description: itemEditor.value.description.trim() }
       if (!value.title) throw new Error("请输入站点名称")
       setGroups((current) => current.map((group) => {
         if (group.id === itemEditor.groupId) return { ...group, items: itemEditor.isNew ? [...group.items, value] : group.items.map((item) => item.id === value.id ? value : item) }
@@ -101,6 +165,38 @@ export default function NavigationPage() {
       }))
       setItemEditor(null)
     } catch (error) { toast.error(error instanceof Error ? error.message : String(error)) }
+  }
+
+  const updateItem = (changes: Partial<NavigationItem>) => {
+    setItemEditor((current) => current ? { ...current, value: { ...current.value, ...changes } } : current)
+  }
+
+  const chooseLocalIcon = async (file: File | undefined) => {
+    if (!file) return
+    setIconBusy(true)
+    try {
+      updateItem({ icon: await localIconDataURL(file) })
+      toast.success("已使用本地图片，并压缩到导航配置中")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error))
+    } finally {
+      setIconBusy(false)
+      if (iconInputRef.current) iconInputRef.current.value = ""
+    }
+  }
+
+  const discoverEditorIcon = async (quiet = false) => {
+    if (!itemEditor) return
+    setIconBusy(true)
+    try {
+      const icon = await discoverSiteIcon(itemEditor.value.url)
+      if (icon) updateItem({ icon })
+      if (!quiet) toast.success(icon ? "已获取站点图标" : "没有找到可用图标")
+    } catch (error) {
+      if (!quiet) toast.error(error instanceof Error ? error.message : String(error))
+    } finally {
+      setIconBusy(false)
+    }
   }
 
   const removePending = () => {
@@ -161,7 +257,62 @@ export default function NavigationPage() {
 
       <Dialog open={Boolean(groupEditor)} onOpenChange={(open) => !open && setGroupEditor(null)}><DialogContent><DialogHeader><DialogTitle>{groupEditor?.id ? "修改分组" : "新增分组"}</DialogTitle><DialogDescription>分组用于整理不同用途的开发站点。</DialogDescription></DialogHeader><label className="text-sm"><span className="mb-1.5 block text-muted-foreground">分组名称</span><input autoFocus className="app-interactive w-full rounded-lg border bg-background px-3 py-2" value={groupEditor?.name ?? ""} onChange={(event) => setGroupEditor((value) => value ? { ...value, name: event.target.value } : value)} /></label><DialogFooter><DialogClose asChild><Button variant="outline">取消</Button></DialogClose><Button onClick={saveGroup}>保存</Button></DialogFooter></DialogContent></Dialog>
 
-      <Dialog open={Boolean(itemEditor)} onOpenChange={(open) => !open && setItemEditor(null)}><DialogContent><DialogHeader><DialogTitle>{itemEditor?.isNew ? "新增站点" : "修改站点"}</DialogTitle><DialogDescription>站点会保存在当前设备，并通过系统默认浏览器打开。</DialogDescription></DialogHeader>{itemEditor && <div className="grid gap-4 sm:grid-cols-2"><label className="text-sm"><span className="mb-1.5 block text-muted-foreground">名称</span><input className="app-interactive w-full rounded-lg border bg-background px-3 py-2" value={itemEditor.value.title} onChange={(event) => setItemEditor({ ...itemEditor, value: { ...itemEditor.value, title: event.target.value } })} /></label><label className="text-sm"><span className="mb-1.5 block text-muted-foreground">所属分组</span><select className="app-interactive w-full rounded-lg border bg-background px-3 py-2" value={itemEditor.groupId} onChange={(event) => setItemEditor({ ...itemEditor, groupId: event.target.value })}>{groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}</select></label><label className="text-sm sm:col-span-2"><span className="mb-1.5 block text-muted-foreground">网址</span><input className="app-interactive w-full rounded-lg border bg-background px-3 py-2 font-mono" value={itemEditor.value.url} onChange={(event) => setItemEditor({ ...itemEditor, value: { ...itemEditor.value, url: event.target.value } })} /></label><label className="text-sm"><span className="mb-1.5 block text-muted-foreground">尺寸</span><select className="app-interactive w-full rounded-lg border bg-background px-3 py-2" value={itemEditor.value.size} onChange={(event) => setItemEditor({ ...itemEditor, value: { ...itemEditor.value, size: event.target.value as NavigationCardSize } })}><option value="1x1">1 × 1 · 图标</option><option value="2x2">2 × 2 · 名称</option><option value="4x2">4 × 2 · 说明</option></select></label><label className="text-sm"><span className="mb-1.5 block text-muted-foreground">图标地址（可选）</span><input className="app-interactive w-full rounded-lg border bg-background px-3 py-2" value={itemEditor.value.icon} onChange={(event) => setItemEditor({ ...itemEditor, value: { ...itemEditor.value, icon: event.target.value } })} /></label><label className="text-sm sm:col-span-2"><span className="mb-1.5 block text-muted-foreground">说明（可选）</span><input className="app-interactive w-full rounded-lg border bg-background px-3 py-2" value={itemEditor.value.description} onChange={(event) => setItemEditor({ ...itemEditor, value: { ...itemEditor.value, description: event.target.value } })} /></label></div>}<DialogFooter>{!itemEditor?.isNew && <Button variant="ghost" className="mr-auto text-destructive" onClick={() => itemEditor && setPendingDelete({ kind: "item", groupId: itemEditor.groupId, itemId: itemEditor.value.id, name: itemEditor.value.title })}><Trash2 />删除</Button>}<DialogClose asChild><Button variant="outline">取消</Button></DialogClose><Button onClick={saveItem}>保存</Button></DialogFooter></DialogContent></Dialog>
+      <Dialog open={Boolean(itemEditor)} onOpenChange={(open) => !open && setItemEditor(null)}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>{itemEditor?.isNew ? "新增站点" : "修改站点"}</DialogTitle>
+            <DialogDescription>整理入口信息并预览卡片；网址会使用系统默认浏览器打开。</DialogDescription>
+          </DialogHeader>
+          {itemEditor && <div className="grid md:grid-cols-[14rem_minmax(0,1fr)]">
+            <aside className="flex min-h-52 flex-col border-b bg-gradient-to-br from-primary/[0.08] via-muted/20 to-background p-5 md:border-b-0 md:border-r">
+              <div className="mb-4 flex items-center gap-2 text-xs font-medium text-muted-foreground"><Sparkles className="size-3.5" />卡片预览</div>
+              <div className="flex flex-1 items-center justify-center">
+                <div className={cn("flex flex-col justify-between overflow-hidden rounded-xl border bg-card p-3 shadow-md", itemEditor.value.size === "1x1" ? "size-20" : itemEditor.value.size === "2x2" ? "h-32 w-36" : "h-32 w-full")}>
+                  <span className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-primary/10 font-semibold text-primary"><SiteIcon item={itemEditor.value} /></span>
+                  {itemEditor.value.size !== "1x1" && <span className="min-w-0"><span className="block truncate text-sm font-medium">{itemEditor.value.title || "站点名称"}</span>{itemEditor.value.size === "4x2" && <span className="mt-1 line-clamp-2 block text-xs leading-5 text-muted-foreground">{itemEditor.value.description || siteHost(itemEditor.value.url) || "站点说明"}</span>}</span>}
+                </div>
+              </div>
+              <p className="mt-4 text-center text-[11px] leading-4 text-muted-foreground">自动读取页面声明的 favicon，找不到时回退到站点根目录。</p>
+            </aside>
+
+            <div className="space-y-5 p-5">
+              <section className="space-y-3">
+                <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground"><Link2 className="size-3.5" />基本信息</div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="text-sm"><span className="mb-1.5 block text-xs font-medium">名称</span><input autoFocus className="app-interactive w-full rounded-lg border bg-background px-3 py-2" placeholder="例如 GitHub" value={itemEditor.value.title} onChange={(event) => updateItem({ title: event.target.value })} /></label>
+                  <label className="text-sm"><span className="mb-1.5 block text-xs font-medium">所属分组</span><select className="app-interactive w-full rounded-lg border bg-background px-3 py-2" value={itemEditor.groupId} onChange={(event) => setItemEditor({ ...itemEditor, groupId: event.target.value })}>{groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}</select></label>
+                  <label className="text-sm sm:col-span-2"><span className="mb-1.5 block text-xs font-medium">网址</span><div className="relative"><Globe2 className="pointer-events-none absolute left-3 top-2.5 size-4 text-muted-foreground" /><input className="app-interactive w-full rounded-lg border bg-background py-2 pl-9 pr-3 font-mono text-sm" placeholder="https://example.com" value={itemEditor.value.url} onChange={(event) => updateItem({ url: event.target.value })} onBlur={() => { if (!itemEditor.value.icon) void discoverEditorIcon(true) }} /></div></label>
+                  <label className="text-sm sm:col-span-2"><span className="mb-1.5 block text-xs font-medium">说明 <span className="font-normal text-muted-foreground">（可选）</span></span><input className="app-interactive w-full rounded-lg border bg-background px-3 py-2" placeholder="描述这个入口的用途" value={itemEditor.value.description} onChange={(event) => updateItem({ description: event.target.value })} /></label>
+                </div>
+              </section>
+
+              <section className="space-y-3 border-t pt-5">
+                <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground"><LayoutGrid className="size-3.5" />卡片外观</div>
+                <div>
+                  <span className="mb-1.5 block text-xs font-medium">尺寸</span>
+                  <div className="grid grid-cols-3 gap-2">
+                    {(["1x1", "2x2", "4x2"] as NavigationCardSize[]).map((size) => <button key={size} type="button" className={cn("app-interactive rounded-lg border px-2 py-2 text-left transition-colors", itemEditor.value.size === size ? "border-primary bg-primary/10 text-primary" : "bg-background hover:bg-muted/40")} onClick={() => updateItem({ size })}><span className="block text-xs font-medium">{size}</span><span className="mt-0.5 block text-[10px] text-muted-foreground">{size === "1x1" ? "仅图标" : size === "2x2" ? "图标与名称" : "名称与说明"}</span></button>)}
+                  </div>
+                </div>
+                <div>
+                  <span className="mb-1.5 block text-xs font-medium">站点图标</span>
+                  <div className="flex flex-wrap gap-2">
+                    <Button type="button" variant={!itemEditor.value.icon ? "secondary" : "outline"} size="sm" disabled={iconBusy} onClick={() => void discoverEditorIcon()}><Globe2 />{iconBusy ? "正在获取…" : "自动获取"}</Button>
+                    <Button type="button" variant={itemEditor.value.icon.startsWith("data:") ? "secondary" : "outline"} size="sm" disabled={iconBusy} onClick={() => iconInputRef.current?.click()}><ImagePlus />{iconBusy ? "正在处理…" : "本地图片"}</Button>
+                    <input ref={iconInputRef} type="file" accept="image/*" className="hidden" onChange={(event) => void chooseLocalIcon(event.target.files?.[0])} />
+                  </div>
+                  <input className="app-interactive mt-2 w-full rounded-lg border bg-background px-3 py-2 text-sm" placeholder={itemEditor.value.icon.startsWith("data:") ? "已使用本地图片；输入地址可替换" : "或粘贴自定义图片 URL"} value={itemEditor.value.icon.startsWith("data:") ? "" : itemEditor.value.icon} onChange={(event) => updateItem({ icon: event.target.value })} />
+                </div>
+              </section>
+            </div>
+          </div>}
+          <DialogFooter>
+            {!itemEditor?.isNew && <Button variant="ghost" className="mr-auto text-destructive" onClick={() => itemEditor && setPendingDelete({ kind: "item", groupId: itemEditor.groupId, itemId: itemEditor.value.id, name: itemEditor.value.title })}><Trash2 />删除</Button>}
+            <DialogClose asChild><Button variant="outline">取消</Button></DialogClose>
+            <Button disabled={iconBusy} onClick={() => void saveItem()}>保存站点</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={Boolean(pendingDelete)} onOpenChange={(open) => !open && setPendingDelete(null)}><DialogContent><DialogHeader><DialogTitle>删除{pendingDelete?.kind === "group" ? "分组" : "站点"}</DialogTitle><DialogDescription>确定删除“{pendingDelete?.name}”吗？{pendingDelete?.kind === "group" ? "分组内的站点也会一并删除。" : ""}</DialogDescription></DialogHeader><DialogFooter><DialogClose asChild><Button variant="outline">取消</Button></DialogClose><Button variant="destructive" onClick={() => { removePending(); setItemEditor(null) }}>删除</Button></DialogFooter></DialogContent></Dialog>
     </section>
