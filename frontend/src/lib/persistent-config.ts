@@ -1,6 +1,6 @@
 import * as ConfigService from "@/../bindings/changeme/services/configservice"
 
-export type PersistentConfigKey = "ai-profiles" | "mcp-servers" | "navigation-groups"
+export type PersistentConfigKey = "ai-profiles" | "mcp-servers" | "navigation-groups" | "sidebar-order"
 
 export async function loadPersistentConfig(key: PersistentConfigKey) {
   return ConfigService.Load(key)

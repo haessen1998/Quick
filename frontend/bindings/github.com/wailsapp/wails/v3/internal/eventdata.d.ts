@@ -9,6 +9,7 @@ declare module "@wailsio/runtime" {
     namespace Events {
         interface CustomEvents {
             "files-dropped": { [_ in string]?: any } | null;
+            "navigation-groups-changed": string;
             "time": string;
         }
     }

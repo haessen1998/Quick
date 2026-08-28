@@ -285,3 +285,17 @@
   font-size: 0.75rem;
   line-height: 1.25rem;
 }
+
+/* The fullscreen pseudo-class only matches the element that entered
+   fullscreen. Size its child viewport explicitly so the diagram uses the
+   entire remaining screen instead of keeping the normal 28rem height. */
+.mermaid-preview:fullscreen {
+  display: flex;
+  flex-direction: column;
+}
+
+.mermaid-preview:fullscreen .mermaid-canvas {
+  height: auto;
+  min-height: 0;
+  flex: 1 1 auto;
+}

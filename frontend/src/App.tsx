@@ -1,4 +1,7 @@
-import { lazy, Suspense, useEffect, useState, type ReactNode } from "react"
+import { lazy, Suspense, useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react"
+import { DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core"
+import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable"
+import { CSS } from "@dnd-kit/utilities"
 import {
   ArrowRight,
   ArrowLeftRight,
@@ -6,11 +9,14 @@ import {
   Blocks,
   Clock3,
   Compass,
+  Download,
   FileCheck2,
+  FileSpreadsheet,
   Files,
   FolderOpen,
   Gauge,
   GitBranch,
+  GripVertical,
   Home,
   KeyRound,
   Moon,
@@ -18,6 +24,7 @@ import {
   Network,
   Pencil,
   Plus,
+  RotateCcw,
   PanelRightClose,
   PanelRightOpen,
   ShieldCheck,
@@ -25,6 +32,7 @@ import {
   Sparkles,
   Sun,
   Trash2,
+  Upload,
   Eye,
   EyeOff,
   type LucideIcon,
@@ -61,6 +69,8 @@ import { AI_PROVIDER_OPTIONS, getAIProviderOption, isAIProfileReady } from "@/li
 import type { PageId } from "@/lib/pages"
 import { getInitialTheme, type AppTheme } from "@/lib/theme"
 import { getInitialProxySettings, saveProxySettings, type ProxySettings } from "@/lib/proxy"
+import { NAVIGATION_GROUPS_CHANGED_EVENT, loadNavigationGroups, mergeNavigationGroups, navigationCSVTemplate, navigationGroupsToCSV, parseNavigationCSV, persistNavigationGroups, saveNavigationGroups } from "@/lib/navigation-sites"
+import { DEFAULT_SIDEBAR_ORDER, hydrateSidebarOrder, loadSidebarOrder, normalizeSidebarOrder, persistSidebarOrder, saveSidebarOrder } from "@/lib/sidebar-order"
 import {
   clearLegacySensitiveConnectionCache,
   createAIProfile,
@@ -116,10 +126,51 @@ const pages: PageDefinition[] = [
   { id: "settings", label: "设置", description: "应用偏好选项", icon: Settings },
 ]
 
-const appVersion = import.meta.env.VITE_APP_VERSION || "v0.2.0"
+const appVersion = import.meta.env.VITE_APP_VERSION || "v0.3.0"
 
-function AppSidebar({ activePage, onNavigate }: { activePage: PageId; onNavigate: (page: PageId) => void }) {
+function SidebarPageLink({ page, activePage, onNavigate }: { page: PageDefinition; activePage: PageId; onNavigate: (page: PageId) => void }) {
   const { open } = useSidebar()
+  const Icon = page.icon
+  return (
+    <SidebarMenuItem data-sidebar-page={page.id}>
+      <SidebarMenuButton isActive={activePage === page.id} title={!open ? page.label : undefined} onClick={() => onNavigate(page.id)}>
+        <Icon className="size-4 shrink-0" />
+        <span className={cn("truncate", !open && "md:hidden")}>{page.label}</span>
+      </SidebarMenuButton>
+    </SidebarMenuItem>
+  )
+}
+
+function SortableSidebarPage({ page, activePage, onNavigate }: { page: PageDefinition; activePage: PageId; onNavigate: (page: PageId) => void }) {
+  const { open } = useSidebar()
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: page.id })
+  const Icon = page.icon
+  const style: CSSProperties = { transform: CSS.Transform.toString(transform), transition }
+  return (
+    <SidebarMenuItem ref={setNodeRef} style={style} data-sidebar-page={page.id} className={cn("group/sidebar-page", isDragging && "z-20 opacity-60")}>
+      <SidebarMenuButton className={cn(open && "pr-9")} isActive={activePage === page.id} title={!open ? page.label : undefined} onClick={() => onNavigate(page.id)}>
+        <Icon className="size-4 shrink-0" />
+        <span className={cn("truncate", !open && "md:hidden")}>{page.label}</span>
+      </SidebarMenuButton>
+      {open && <button type="button" className="app-interactive absolute right-1 top-1 flex size-7 cursor-grab touch-none items-center justify-center rounded-md text-sidebar-foreground/35 opacity-0 transition-opacity hover:bg-sidebar-accent hover:text-sidebar-accent-foreground group-hover/sidebar-page:opacity-100 focus-visible:opacity-100 active:cursor-grabbing" aria-label={`拖动 ${page.label}`} title={`拖动调整 ${page.label} 的顺序`} {...attributes} {...listeners}><GripVertical className="size-3.5" /></button>}
+    </SidebarMenuItem>
+  )
+}
+
+function AppSidebar({ activePage, order, onNavigate, onOrderChange }: { activePage: PageId; order: PageId[]; onNavigate: (page: PageId) => void; onOrderChange: (order: PageId[]) => void }) {
+  const { open } = useSidebar()
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }))
+  const orderedPages = normalizeSidebarOrder(order).map((id) => pages.find((page) => page.id === id)).filter((page): page is PageDefinition => Boolean(page))
+  const homePage = pages.find((page) => page.id === "home")!
+  const settingsPage = pages.find((page) => page.id === "settings")!
+  const defaultOrder = order.length === DEFAULT_SIDEBAR_ORDER.length && order.every((page, index) => page === DEFAULT_SIDEBAR_ORDER[index])
+
+  const dragEnd = ({ active, over }: DragEndEvent) => {
+    if (!over || active.id === over.id) return
+    const from = order.indexOf(String(active.id) as PageId)
+    const to = order.indexOf(String(over.id) as PageId)
+    if (from >= 0 && to >= 0) onOrderChange(arrayMove(order, from, to))
+  }
 
   return (
     <Sidebar>
@@ -137,25 +188,20 @@ function AppSidebar({ activePage, onNavigate }: { activePage: PageId; onNavigate
 
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>应用导航</SidebarGroupLabel>
+          <SidebarGroupLabel className="flex items-center justify-between gap-2">
+            <span>应用导航</span>
+            <button type="button" className="app-interactive flex size-6 shrink-0 items-center justify-center rounded-md hover:bg-sidebar-accent hover:text-sidebar-accent-foreground disabled:pointer-events-none disabled:opacity-30" disabled={defaultOrder} onClick={() => { onOrderChange([...DEFAULT_SIDEBAR_ORDER]); toast.success("已恢复默认导航顺序") }} aria-label="恢复默认导航顺序" title="恢复默认顺序"><RotateCcw className="size-3.5" /></button>
+          </SidebarGroupLabel>
           <SidebarGroupContent>
-            <SidebarMenu>
-              {pages.map((page) => {
-                const Icon = page.icon
-                return (
-                  <SidebarMenuItem key={page.id}>
-                    <SidebarMenuButton
-                      isActive={activePage === page.id}
-                      title={!open ? page.label : undefined}
-                      onClick={() => onNavigate(page.id)}
-                    >
-                      <Icon className="size-4 shrink-0" />
-                      <span className={cn("truncate", !open && "md:hidden")}>{page.label}</span>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                )
-              })}
-            </SidebarMenu>
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={dragEnd}>
+              <SidebarMenu>
+                <SidebarPageLink page={homePage} activePage={activePage} onNavigate={onNavigate} />
+                <SortableContext items={order} strategy={verticalListSortingStrategy}>
+                  {orderedPages.map((page) => <SortableSidebarPage key={page.id} page={page} activePage={activePage} onNavigate={onNavigate} />)}
+                </SortableContext>
+                <SidebarPageLink page={settingsPage} activePage={activePage} onNavigate={onNavigate} />
+              </SidebarMenu>
+            </DndContext>
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
@@ -235,6 +281,15 @@ function PageShell({ page, children }: { page: PageDefinition; children: React.R
 
 const SETTINGS_INPUT_CLASS = "h-9 w-full rounded-lg border border-input bg-transparent px-3 text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/30"
 const SETTINGS_TEXTAREA_CLASS = "h-24 w-full resize-none rounded-lg border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/30"
+
+function downloadCSV(filename: string, content: string) {
+  const url = URL.createObjectURL(new Blob([content], { type: "text/csv;charset=utf-8" }))
+  const anchor = document.createElement("a")
+  anchor.href = url
+  anchor.download = filename
+  anchor.click()
+  URL.revokeObjectURL(url)
+}
 
 function AIProfileEditor({ profile, isNew, onChange, onSave, onClose }: { profile: AIProfile; isNew: boolean; onChange: (profile: AIProfile) => void; onSave: () => void; onClose: () => void }) {
   const [showKey, setShowKey] = useState(false)
@@ -337,6 +392,7 @@ function SettingsPage({
   const [aiEditor, setAIEditor] = useState<{ value: AIProfile; isNew: boolean } | null>(null)
   const [mcpEditor, setMCPEditor] = useState<{ value: MCPServerProfile; isNew: boolean } | null>(null)
   const [pendingDelete, setPendingDelete] = useState<{ kind: "AI" | "MCP"; id: string; name: string } | null>(null)
+  const navigationImportRef = useRef<HTMLInputElement>(null)
   const saveAIEditor = () => {
     if (!aiEditor) return
     onAIProfilesChange(aiEditor.isNew ? [...aiProfiles, aiEditor.value] : aiProfiles.map((profile) => profile.id === aiEditor.value.id ? aiEditor.value : profile))
@@ -356,6 +412,21 @@ function SettingsPage({
     toast.success(`${pendingDelete.kind} 配置已删除`)
     setPendingDelete(null)
   }
+  const importNavigationCSV = async (file: File | undefined) => {
+    if (!file) return
+    try {
+      const incoming = parseNavigationCSV(await file.text())
+      const merged = mergeNavigationGroups(loadNavigationGroups(), incoming)
+      saveNavigationGroups(merged)
+      window.dispatchEvent(new CustomEvent(NAVIGATION_GROUPS_CHANGED_EVENT, { detail: merged }))
+      await persistNavigationGroups(merged).catch((error) => console.warn("Unable to persist imported navigation groups", error))
+      toast.success(`已导入 ${incoming.reduce((count, group) => count + group.items.length, 0)} 个站点`, { description: "同名分组已合并，相同网址的站点已更新。" })
+    } catch (error) {
+      toast.error("导入 CSV 失败", { description: error instanceof Error ? error.message : String(error) })
+    } finally {
+      if (navigationImportRef.current) navigationImportRef.current.value = ""
+    }
+  }
 
   return (
     <PageShell page={page}>
@@ -374,6 +445,25 @@ function SettingsPage({
             <div className="flex items-center gap-2 text-sm font-medium"><Settings className="size-4" />长期配置</div>
             <p className="mt-2 text-xs leading-5 text-muted-foreground">AI/MCP 列表等长期配置会写入当前用户的 Quick 配置文件；主题、面板尺寸等界面偏好保存在 WebView 本地缓存中。</p>
           </div>
+        </div>
+      </article>
+
+      <article className="rounded-xl border bg-card text-card-foreground shadow-sm">
+        <div className="flex flex-wrap items-center gap-3 border-b p-6">
+          <div className="min-w-0 flex-1">
+            <h2 className="font-medium">站点导航数据</h2>
+            <p className="mt-1 text-sm text-muted-foreground">通过 CSV 批量维护导航分组与站点，适合迁移或集中录入。</p>
+          </div>
+          <FileSpreadsheet className="size-5 text-muted-foreground" />
+        </div>
+        <div className="p-6">
+          <div className="grid gap-3 sm:grid-cols-3">
+            <button type="button" className="app-interactive rounded-xl border bg-background p-4 text-left transition-colors hover:bg-muted/35" onClick={() => downloadCSV("quick-navigation-template.csv", navigationCSVTemplate())}><FileSpreadsheet className="size-5 text-muted-foreground" /><span className="mt-3 block text-sm font-medium">下载导入模板</span><span className="mt-1 block text-xs leading-5 text-muted-foreground">包含 group、list、title、url、icon、description、size 列。</span></button>
+            <button type="button" className="app-interactive rounded-xl border bg-background p-4 text-left transition-colors hover:bg-muted/35" onClick={() => downloadCSV("quick-navigation.csv", navigationGroupsToCSV(loadNavigationGroups()))}><Download className="size-5 text-muted-foreground" /><span className="mt-3 block text-sm font-medium">导出 CSV</span><span className="mt-1 block text-xs leading-5 text-muted-foreground">导出全部站点，保留 Tab、list 小组、图标和尺寸。</span></button>
+            <button type="button" className="app-interactive rounded-xl border bg-background p-4 text-left transition-colors hover:bg-muted/35" onClick={() => navigationImportRef.current?.click()}><Upload className="size-5 text-muted-foreground" /><span className="mt-3 block text-sm font-medium">导入 CSV</span><span className="mt-1 block text-xs leading-5 text-muted-foreground">合并同名分组，以网址匹配并更新已有站点。</span></button>
+          </div>
+          <input ref={navigationImportRef} type="file" accept=".csv,text/csv" className="hidden" onChange={(event) => void importNavigationCSV(event.target.files?.[0])} />
+          <p className="mt-3 rounded-lg bg-muted/35 px-3 py-2 text-[11px] leading-5 text-muted-foreground">导入采用安全合并，不会删除 CSV 中未包含的现有站点。group 对应一级 Tab，list 对应 Tab 内可选小组；size 支持 1x1、2x2、4x2。</p>
         </div>
       </article>
 
@@ -528,6 +618,8 @@ function App() {
   const [assistantOpen, setAssistantOpen] = useState(false)
   const [aiProfiles, setAIProfiles] = useState<AIProfile[]>(() => getInitialAIProfiles())
   const [mcpServers, setMCPServers] = useState<MCPServerProfile[]>(() => getInitialMCPServers())
+  const [sidebarOrder, setSidebarOrder] = useState<PageId[]>(loadSidebarOrder)
+  const [sidebarOrderReady, setSidebarOrderReady] = useState(false)
   const [persistentConfigReady, setPersistentConfigReady] = useState(false)
   const enabledMCPServers = mcpServers.filter((profile) => profile.enabled)
   const currentPage = pages.find((page) => page.id === activePage) ?? pages[0]
@@ -582,6 +674,25 @@ function App() {
     else saveMCPServers(mcpServers)
   }, [mcpServers, persistentConfigReady])
 
+  useEffect(() => {
+    let cancelled = false
+    hydrateSidebarOrder(sidebarOrder).then((savedOrder) => {
+      if (cancelled) return
+      setSidebarOrder(savedOrder)
+      setSidebarOrderReady(true)
+    })
+    return () => { cancelled = true }
+    // Initial WebView value is intentionally captured once for migration.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    saveSidebarOrder(sidebarOrder)
+    if (sidebarOrderReady) void persistSidebarOrder(sidebarOrder).catch((error) => console.warn("Unable to persist sidebar order", error))
+  }, [sidebarOrder, sidebarOrderReady])
+
+  const changeSidebarOrder = useCallback((order: PageId[]) => setSidebarOrder(normalizeSidebarOrder(order)), [])
+
   const changeTheme = (nextTheme: AppTheme) => {
     setTheme(nextTheme)
     toast.success(nextTheme === "dark" ? "已切换到深色主题" : "已切换到浅色主题")
@@ -613,7 +724,7 @@ function App() {
     <AssistantCapabilityProvider>
       <SidebarProvider className="bg-transparent">
         <div className="bg" aria-hidden="true" />
-        <AppSidebar activePage={activePage} onNavigate={navigateTo} />
+        <AppSidebar activePage={activePage} order={sidebarOrder} onNavigate={navigateTo} onOrderChange={changeSidebarOrder} />
         <SidebarInset className={activePage === "home" ? "bg-transparent" : "bg-background"}>
         <header className="app-topbar">
           <SidebarTrigger className="app-interactive" />
@@ -642,7 +753,7 @@ function App() {
           {visitedPages.has("settings") && <PageSlot active={activePage === "settings"}><SettingsPage page={currentPage} theme={theme} onThemeChange={changeTheme} proxy={proxy} onProxyChange={setProxy} aiProfiles={aiProfiles} onAIProfilesChange={setAIProfiles} mcpServers={mcpServers} onMCPServersChange={setMCPServers} assistantSettings={assistantSettings} onAssistantSettingsChange={setAssistantSettings} /></PageSlot>}
         </Suspense>
         </SidebarInset>
-        <GlobalAssistant profiles={aiProfiles} mcpServers={enabledMCPServers} proxy={proxy} autoApproveOperations={assistantSettings.autoApproveOperations} activePage={activePage} onNavigate={navigateTo} open={assistantOpen} onOpenChange={setAssistantOpen} />
+        <GlobalAssistant profiles={aiProfiles} mcpServers={enabledMCPServers} proxy={proxy} autoApproveOperations={assistantSettings.autoApproveOperations} activePage={activePage} onNavigate={navigateTo} sidebarOrder={sidebarOrder} onSidebarOrderChange={changeSidebarOrder} open={assistantOpen} onOpenChange={setAssistantOpen} />
         <Toaster theme={theme} position="top-right" richColors closeButton />
       </SidebarProvider>
     </AssistantCapabilityProvider>

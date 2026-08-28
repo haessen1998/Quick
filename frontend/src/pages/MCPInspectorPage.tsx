@@ -430,7 +430,7 @@ export default function MCPInspectorPage({ proxy, profiles, onSaveProfile }: { p
       } else {
         requestHeaders = parseHeaderLines(headersText)
       }
-      const client = new Client({ name: "quick-mcp-tester", version: "0.2.0" })
+      const client = new Client({ name: "quick-mcp-tester", version: "0.3.0" })
       transport = transportType === "sse"
         ? new SSEClientTransport(new URL(endpoint), {
             requestInit: { headers: requestHeaders },

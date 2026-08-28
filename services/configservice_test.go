@@ -85,3 +85,18 @@ func TestConfigServiceRejectsUnknownKeysAndMalformedJSON(t *testing.T) {
 		t.Fatal("Save() accepted malformed JSON")
 	}
 }
+
+func TestConfigServiceStoresSidebarOrder(t *testing.T) {
+	service := &ConfigService{path: filepath.Join(t.TempDir(), "settings.json")}
+	const order = `["navigation","formatter","ai-chat"]`
+	if err := service.Save("sidebar-order", order); err != nil {
+		t.Fatalf("Save(sidebar-order) error = %v", err)
+	}
+	loaded, err := service.Load("sidebar-order")
+	var got, want []string
+	loadErr := json.Unmarshal([]byte(loaded), &got)
+	wantErr := json.Unmarshal([]byte(order), &want)
+	if err != nil || loadErr != nil || wantErr != nil || !reflect.DeepEqual(got, want) {
+		t.Fatalf("Load(sidebar-order) = %q, %v", loaded, err)
+	}
+}

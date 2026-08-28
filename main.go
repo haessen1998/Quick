@@ -22,10 +22,12 @@ var assets embed.FS
 func init() {
 	application.RegisterEvent[string]("time")
 	application.RegisterEvent[map[string]any]("files-dropped")
+	application.RegisterEvent[string](services.NavigationGroupsChangedEvent)
 }
 
 // main function serves as the application's entry point. It initializes and runs the application.
 func main() {
+	configService := services.NewConfigService()
 
 	// Create a new Wails application by providing the necessary options.
 	// Variables 'Name' and 'Description' are for application metadata.
@@ -39,8 +41,7 @@ func main() {
 			application.NewService(&services.NetworkService{}),
 			application.NewService(&services.MCPProxyService{}),
 			application.NewService(&services.MCPStdioService{}),
-			application.NewService(services.NewConfigService()),
-			application.NewService(services.NewNavigationService()),
+			application.NewService(configService),
 		},
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets),
@@ -50,6 +51,7 @@ func main() {
 		},
 	})
 	app.RegisterService(application.NewService(services.NewFileRenameService(app)))
+	app.RegisterService(application.NewService(services.NewNavigationService(configService, app)))
 
 	// Create a new window with the necessary options.
 	// 'Title' is the title of the window.

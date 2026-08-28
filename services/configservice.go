@@ -29,6 +29,7 @@ var persistentConfigKeys = map[string]struct{}{
 	"ai-profiles":       {},
 	"mcp-servers":       {},
 	"navigation-groups": {},
+	"sidebar-order":     {},
 }
 
 var encryptedConfigKeys = map[string]struct{}{

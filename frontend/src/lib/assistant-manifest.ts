@@ -10,7 +10,7 @@ export type QuickCapabilitySummary = {
 }
 
 export const QUICK_CAPABILITIES: QuickCapabilitySummary[] = [
-  { page: "home", policy: "automatic", abilities: ["查看 Quick 概览和进入各工具页"] },
+  { page: "home", policy: "automatic", abilities: ["查看 Quick 概览和进入各工具页", "读取、调整或恢复侧栏页面顺序；首页和设置保持固定"] },
   { page: "ai-chat", policy: "automatic", abilities: ["使用设置页保存的 OpenAI、Azure OpenAI、Anthropic、Gemini、Open Responses 或 OpenAI Compatible 配置进行完整对话"] },
   { page: "mcp-inspector", policy: "mixed", abilities: ["选择已保存 MCP", "配置 Streamable HTTP、SSE、STDIO", "自动连接并读取 Tools", "未知或有副作用的 Tool 经确认后调用", "查看调用历史"] },
   { page: "formatter", policy: "automatic", abilities: ["JSON/YAML/XML/HTML/CSS/JavaScript 格式化", "JSON/XML/HTML/CSS/JavaScript 压缩"] },
@@ -21,7 +21,7 @@ export const QUICK_CAPABILITIES: QuickCapabilitySummary[] = [
   { page: "network", policy: "mixed", abilities: ["自动执行 Ping、DNS A/AAAA/CNAME/MX/NS/TXT 查询、TCP 端口检测和 IPv4 CIDR 计算", "HTTP 与 cURL 自动双向转换；操作自动审核开启后可按明确请求发送 HTTP", "自动按端口/PID/程序名搜索本地进程；操作自动审核开启后只能关闭刚搜索到的进程"] },
   { page: "text-workbench", policy: "automatic", abilities: ["Markdown 与 Mermaid 图表实时预览", "行级、单词级、字符级文本差异", "忽略空白差异"] },
   { page: "file-tools", policy: "mixed", abilities: ["准备通配符或正则文件匹配规则", "预览重置编号、替换、前缀和后缀重命名", "操作自动审核开启后执行或撤销批量重命名"] },
-  { page: "navigation", policy: "mixed", abilities: ["读取和打开已保存站点", "准备 1x1、2x2、4x2 站点卡片", "操作自动审核开启后写入站点长期配置"] },
+  { page: "navigation", policy: "mixed", abilities: ["通过 Go Service 读取持久化站点", "按一级 group Tab 与可选 list 小组整理站点", "修改标题、说明、网址和卡片尺寸", "按站点名称/ID 或来源 group/list 批量移动", "移入新 list 或移出 list", "准备新增或删除站点", "操作自动审核开启后直接修改站点长期配置"] },
   { page: "settings", policy: "prepare-only", abilities: ["深浅主题", "系统/指定/不使用代理", "AI Provider 列表", "MCP Server 列表", "长期配置存储"] },
 ]
 
@@ -105,7 +105,7 @@ export function buildQuickAssistantStarters(page: PageId, context: Record<string
         : ["说明批量重命名的安全预览流程", "准备一个匹配图片文件的通配符规则", "说明重置编号、替换、前缀和后缀的区别"]
       break
     case "navigation":
-      suggestions = ["列出我保存的站点并按分组概括", "帮我准备一个 2x2 的开发文档站点卡片", "打开 Quick GitHub"]
+      suggestions = ["列出站点并按 group 和 list 概括", "把一个 list 下的全部站点批量移动到另一个 group", "帮我准备一个 2x2 的开发文档站点卡片"]
       break
     case "mcp-inspector": {
       const connected = Boolean(context?.connected)

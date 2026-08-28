@@ -2,6 +2,7 @@ import { type CSSProperties, type FormEvent, type KeyboardEvent, type PointerEve
 import { useChat } from "@ai-sdk/react"
 import { ArrowDown, Bot, LoaderCircle, RefreshCw, Send, Settings, ShieldCheck, Square, Trash2, Wrench } from "lucide-react"
 import { DirectChatTransport, ToolLoopAgent, isToolUIPart, jsonSchema, stepCountIs, tool, type UIMessage } from "ai"
+import * as NavigationService from "@/../bindings/changeme/services/navigationservice"
 
 import { AssistantMessageFlow } from "@/components/AssistantMessageFlow"
 import { MarkdownRenderer } from "@/components/MarkdownRenderer"
@@ -11,8 +12,10 @@ import { createLanguageModel, isAIProfileReady, type ChatSettings } from "@/lib/
 import { buildQuickAssistantInstructions, buildQuickAssistantStarters } from "@/lib/assistant-manifest"
 import { useAssistantCapabilityRegistry } from "@/lib/assistant-capabilities"
 import { PAGE_IDS, PAGE_LABELS, type PageId } from "@/lib/pages"
+import { parseNavigationGroupsPayload, publishNavigationGroups } from "@/lib/navigation-sites"
 import type { ProxySettings } from "@/lib/proxy"
 import type { AIProfile, MCPServerProfile } from "@/lib/saved-connections"
+import { DEFAULT_SIDEBAR_ORDER, isSidebarMovablePage, moveSidebarPage, normalizeSidebarOrder } from "@/lib/sidebar-order"
 import { useStickToBottom } from "@/lib/use-stick-to-bottom"
 import { cn } from "@/lib/utils"
 
@@ -25,7 +28,8 @@ const CRYPTO_OPERATIONS = ["hash", "hmac", "aes-encrypt", "aes-decrypt", "rsa-ge
 const NETWORK_OPERATIONS = ["ping", "dns", "port", "cidr", "http-prepare", "http-execute", "curl-to-http", "http-to-curl", "process-search", "process-terminate"] as const
 const FILE_RENAME_ACTIONS = ["prepare", "execute", "undo"] as const
 const FILE_RENAME_OPERATIONS = ["reset", "replace", "prefix", "suffix"] as const
-const NAVIGATION_ACTIONS = ["list", "open", "prepare", "add"] as const
+const NAVIGATION_ACTIONS = ["list", "open", "prepare", "add", "update", "move", "batch-update", "delete"] as const
+const SIDEBAR_ACTIONS = ["list", "move", "reset"] as const
 const QUICK_APP_MCP_ID = "mcp-wails3-app"
 const ASSISTANT_PANEL_WIDTH_KEY = "quick-assistant-panel-width"
 const DEFAULT_ASSISTANT_PANEL_WIDTH = 336
@@ -76,10 +80,11 @@ function isAutomaticMCPCall(server: MCPServerProfile, toolName: string, args: Re
     "changeme/services.NetworkService.Ping",
     "changeme/services.NetworkService.CheckPort",
     "changeme/services.NetworkService.DNSQuery",
+    "changeme/services.NavigationService.GetNavigationGroups",
   ].includes(args.name)
 }
 
-function AssistantSession({ profile, activePage, onNavigate, mcpServers, proxy, autoApproveOperations, confirmMCPCall, open }: { profile: AIProfile; activePage: PageId; onNavigate: (page: PageId) => void; mcpServers: MCPServerProfile[]; proxy: ProxySettings; autoApproveOperations: boolean; confirmMCPCall: (request: MCPCallRequest) => Promise<boolean>; open: boolean }) {
+function AssistantSession({ profile, activePage, onNavigate, sidebarOrder, onSidebarOrderChange, mcpServers, proxy, autoApproveOperations, confirmMCPCall, open }: { profile: AIProfile; activePage: PageId; onNavigate: (page: PageId) => void; sidebarOrder: PageId[]; onSidebarOrderChange: (order: PageId[]) => void; mcpServers: MCPServerProfile[]; proxy: ProxySettings; autoApproveOperations: boolean; confirmMCPCall: (request: MCPCallRequest) => Promise<boolean>; open: boolean }) {
   const registry = useAssistantCapabilityRegistry()
   const activePageRef = useRef(activePage)
   const navigateRef = useRef(onNavigate)
@@ -104,11 +109,95 @@ function AssistantSession({ profile, activePage, onNavigate, mcpServers, proxy, 
       return matches[0]
     }
     const useTextWorkbench = (input: { mode: "markdown" | "diff"; markdown?: string; left?: string; right?: string; granularity?: "line" | "word" | "char"; ignoreWhitespace?: boolean }) => usePage("text-workbench", "fill", input)
+    const useSidebarOrder = (input: { action: typeof SIDEBAR_ACTIONS[number]; page?: PageId; before?: PageId; after?: PageId; position?: number }) => {
+      const current = normalizeSidebarOrder(sidebarOrder)
+      const describe = (order: PageId[]) => ["home" as PageId, ...order, "settings" as PageId].map((page, index) => ({ position: index + 1, page, label: PAGE_LABELS[page], fixed: page === "home" || page === "settings" }))
+      if (input.action === "list") return { success: true, order: describe(current) }
+      if (input.action === "reset") {
+        const next = [...DEFAULT_SIDEBAR_ORDER]
+        onSidebarOrderChange(next)
+        return { success: true, executed: true, order: describe(next) }
+      }
+      if (!input.page || !isSidebarMovablePage(input.page)) return { success: false, executed: false, message: "首页和设置固定；请提供一个可移动的工具页面" }
+      if ([input.before, input.after, input.position].filter((value) => value !== undefined).length !== 1) return { success: false, executed: false, message: "请只使用 before、after 或 position 中的一种定位方式" }
+      const remaining = current.filter((page) => page !== input.page)
+      let targetIndex = -1
+      if (input.before) {
+        if (input.before === "home") return { success: false, executed: false, message: "首页必须固定在最上方" }
+        targetIndex = input.before === "settings" ? remaining.length : remaining.indexOf(input.before)
+      } else if (input.after) {
+        if (input.after === "settings") return { success: false, executed: false, message: "设置必须固定在最下方" }
+        targetIndex = input.after === "home" ? 0 : remaining.indexOf(input.after) + 1
+      } else if (typeof input.position === "number" && Number.isInteger(input.position)) {
+        targetIndex = input.position - 2
+      }
+      if (targetIndex < 0 || targetIndex > remaining.length) return { success: false, executed: false, message: "目标页面或位置无效；position 使用包含固定首页在内的 2 到 12" }
+      const next = moveSidebarPage(current, input.page, targetIndex)
+      onSidebarOrderChange(next)
+      return { success: true, executed: true, moved: input.page, order: describe(next) }
+    }
+    const useNavigationService = async (action: typeof NAVIGATION_ACTIONS[number], input: Record<string, unknown>) => {
+      if (action === "list") {
+        try {
+          const groups = parseNavigationGroupsPayload(await NavigationService.GetNavigationGroups())
+          if (!groups) throw new Error("Go Service 返回了无效的导航数据")
+          publishNavigationGroups(groups)
+          return { success: true, source: "go-service", groups: groups.map((group) => ({ name: group.name, lists: [...new Set(group.items.map((item) => item.list).filter(Boolean))], sites: group.items.map(({ id, title, url, description, list, size }) => ({ id, title, url, description, list, size })) })) }
+        } catch {
+          return usePage("navigation", "list", input)
+        }
+      }
+      if (action !== "update" && action !== "move" && action !== "batch-update") return usePage("navigation", action, { ...input, operationAutoApproved: autoApproveOperations })
+      if (!autoApproveOperations) {
+        if (action === "batch-update") return { success: false, executed: false, requiresConfirmation: true, message: "批量修改会写入长期配置，请先在设置中开启操作自动审核" }
+        return usePage("navigation", action, { ...input, operationAutoApproved: false })
+      }
+      const has = (key: string) => Object.prototype.hasOwnProperty.call(input, key)
+      const names = Array.isArray(input.names) ? input.names.map(String).filter((value) => value.trim()) : []
+      if (typeof input.name === "string" && input.name.trim()) names.push(input.name)
+      const listKey = has("targetList") ? "targetList" : "list"
+      const result = await NavigationService.BatchUpdateSites({
+        ids: Array.isArray(input.ids) ? input.ids.map(String) : undefined,
+        titles: names.length ? names : undefined,
+        sourceGroup: String(input.sourceGroup ?? ""),
+        sourceList: String(input.sourceList ?? ""),
+        matchSourceList: has("sourceList") || Boolean(input.matchSourceList),
+        targetGroup: String(input.targetGroup ?? input.group ?? ""),
+        targetList: String(input[listKey] ?? ""),
+        setTargetList: has(listKey),
+        title: String(input.title ?? ""),
+        setTitle: has("title"),
+        url: String(input.url ?? ""),
+        setUrl: has("url"),
+        icon: String(input.icon ?? ""),
+        setIcon: has("icon"),
+        description: String(input.description ?? ""),
+        setDescription: has("description"),
+        size: String(input.size ?? ""),
+        setSize: has("size"),
+      })
+      const groups = parseNavigationGroupsPayload(result.groups)
+      if (groups) publishNavigationGroups(groups)
+      return { success: true, executed: true, source: "go-service", updated: result.updated, sites: result.sites }
+    }
     const tools = {
       navigate_to_page: tool({
         description: "切换 Quick 当前页面。只切换页面，不修改页面内容。",
         inputSchema: jsonSchema<{ page: PageId }>({ type: "object", properties: { page: { type: "string", enum: PAGE_IDS, description: "目标页面 ID" } }, required: ["page"], additionalProperties: false }),
         execute: async ({ page }) => navigate(page),
+      }),
+      sidebar_navigation: tool({
+        description: "读取、调整或恢复 Quick 侧栏页面顺序。首页固定最上，设置固定最下，其余工具页可以按目标页面前后或最终位置移动；修改会自动保存为长期偏好。",
+        inputSchema: jsonSchema<{ action: typeof SIDEBAR_ACTIONS[number]; page?: PageId; before?: PageId; after?: PageId; position?: number }>({
+          type: "object", properties: {
+            action: { type: "string", enum: [...SIDEBAR_ACTIONS] },
+            page: { type: "string", enum: [...DEFAULT_SIDEBAR_ORDER], description: "move 时要移动的工具页面" },
+            before: { type: "string", enum: PAGE_IDS, description: "移动到此页面之前" },
+            after: { type: "string", enum: PAGE_IDS, description: "移动到此页面之后" },
+            position: { type: "number", minimum: 2, maximum: DEFAULT_SIDEBAR_ORDER.length + 1, description: "最终侧栏位置；首页固定为 1，设置固定为最后" },
+          }, required: ["action"], additionalProperties: false,
+        }),
+        execute: async (input) => useSidebarOrder(input),
       }),
       get_current_page_context: tool({
         description: "读取 Quick 当前页面及该页面愿意提供给助手的非敏感表单上下文。",
@@ -203,11 +292,23 @@ function AssistantSession({ profile, activePage, onNavigate, mcpServers, proxy, 
         execute: async ({ action, ...input }) => usePage("file-tools", action, { ...input, operationAutoApproved: autoApproveOperations }),
       }),
       navigation_sites: tool({
-        description: `管理 Quick 站点导航。读取列表和按准确名称打开站点可以自动执行。${autoApproveOperations ? "操作自动审核已开启：用户明确要求时可以把新站点写入长期配置。" : "新增站点只能打开预填表单，由用户检查并保存。"}`,
-        inputSchema: jsonSchema<{ action: typeof NAVIGATION_ACTIONS[number]; name?: string; group?: string; title?: string; url?: string; icon?: string; description?: string; size?: "1x1" | "2x2" | "4x2" }>({
-          type: "object", properties: { action: { type: "string", enum: [...NAVIGATION_ACTIONS] }, name: { type: "string", description: "open 时使用的已保存站点名称" }, group: { type: "string" }, title: { type: "string" }, url: { type: "string" }, icon: { type: "string" }, description: { type: "string" }, size: { type: "string", enum: ["1x1", "2x2", "4x2"] } }, required: ["action"], additionalProperties: false,
+        description: `通过 Quick Go Service 管理持久化站点导航，不依赖导航页面是否已打开。update/move 操作一个准确名称；batch-update 可按 names/ids，或按 sourceGroup 与可选 sourceList 批量筛选。targetGroup/targetList 表示目标位置，targetList 传空字符串表示移出 list。读取和打开可自动执行。${autoApproveOperations ? "操作自动审核已开启：用户明确要求时可以直接批量修改长期配置。" : "新增、单项编辑和移动会打开表单；批量修改需要先开启操作自动审核；删除会打开确认框。"}`,
+        inputSchema: jsonSchema<{ action: typeof NAVIGATION_ACTIONS[number]; name?: string; names?: string[]; ids?: string[]; sourceGroup?: string; sourceList?: string; targetGroup?: string; targetList?: string; group?: string; list?: string; title?: string; url?: string; icon?: string; description?: string; size?: "1x1" | "2x2" | "4x2" }>({
+          type: "object", properties: {
+            action: { type: "string", enum: [...NAVIGATION_ACTIONS] },
+            name: { type: "string", description: "open/update/move/delete 时用于定位记录的当前准确站点名称" },
+            names: { type: "array", items: { type: "string" }, description: "batch-update 要处理的一组准确站点名称" },
+            ids: { type: "array", items: { type: "string" }, description: "batch-update 要处理的一组站点 ID；优先使用 list 返回的 ID" },
+            sourceGroup: { type: "string", description: "batch-update 的来源 group；不提供 names/ids 时表示选择该 group 下的全部站点" },
+            sourceList: { type: "string", description: "batch-update 的来源 list；与 sourceGroup 组合筛选，空字符串可匹配未分 list 的站点" },
+            targetGroup: { type: "string", description: "batch-update 移动到的现有 group" },
+            targetList: { type: "string", description: "batch-update 移动到的 list；空字符串表示移出 list" },
+            group: { type: "string", description: "新增或单项移动后的一级 Tab 分组名称" },
+            list: { type: "string", description: "新增或单项移动后的 list；空字符串表示移出 list" },
+            title: { type: "string", description: "新增站点标题，或只选择一个站点时的新标题" }, url: { type: "string" }, icon: { type: "string" }, description: { type: "string", description: "站点说明；批量操作时会应用到全部匹配项，空字符串表示清空" }, size: { type: "string", enum: ["1x1", "2x2", "4x2"] },
+          }, required: ["action"], additionalProperties: false,
         }),
-        execute: async ({ action, ...input }) => usePage("navigation", action, { ...input, operationAutoApproved: autoApproveOperations }),
+        execute: async ({ action, ...input }) => useNavigationService(action, input),
       }),
       prepare_mcp_inspector: tool({
         description: "在 MCP 测试页选择一个设置中已保存的 Server，或只填写不含凭据的远程/STDIO 连接参数。不会连接 Server，也不会调用 Tool。",
@@ -277,7 +378,7 @@ function AssistantSession({ profile, activePage, onNavigate, mcpServers, proxy, 
       maxOutputTokens: 2048,
     })
     return new DirectChatTransport({ agent })
-  }, [profile.id, profile.provider, profile.model, profile.apiKey, profile.baseURL, profile.systemPrompt, registry, mcpServers, proxy.mode, proxy.url, autoApproveOperations, confirmMCPCall])
+  }, [profile.id, profile.provider, profile.model, profile.apiKey, profile.baseURL, profile.systemPrompt, registry, sidebarOrder, onSidebarOrderChange, mcpServers, proxy.mode, proxy.url, autoApproveOperations, confirmMCPCall])
 
   const [input, setInput] = useState("")
   const [starterPrompts, setStarterPrompts] = useState<string[]>([])
@@ -354,7 +455,7 @@ function AssistantSession({ profile, activePage, onNavigate, mcpServers, proxy, 
   </>
 }
 
-export function GlobalAssistant({ profiles, mcpServers, proxy, autoApproveOperations, activePage, onNavigate, open, onOpenChange }: { profiles: AIProfile[]; mcpServers: MCPServerProfile[]; proxy: ProxySettings; autoApproveOperations: boolean; activePage: PageId; onNavigate: (page: PageId) => void; open: boolean; onOpenChange: (open: boolean) => void }) {
+export function GlobalAssistant({ profiles, mcpServers, proxy, autoApproveOperations, activePage, onNavigate, sidebarOrder, onSidebarOrderChange, open, onOpenChange }: { profiles: AIProfile[]; mcpServers: MCPServerProfile[]; proxy: ProxySettings; autoApproveOperations: boolean; activePage: PageId; onNavigate: (page: PageId) => void; sidebarOrder: PageId[]; onSidebarOrderChange: (order: PageId[]) => void; open: boolean; onOpenChange: (open: boolean) => void }) {
   const [selectedID, setSelectedID] = useState(() => profiles.find((profile) => isAIProfileReady(profile))?.id ?? profiles[0]?.id ?? "")
   const [pendingMCPCall, setPendingMCPCall] = useState<PendingMCPCall | null>(null)
   const [panelWidth, setPanelWidth] = useState(getInitialAssistantPanelWidth)
@@ -470,7 +571,7 @@ export function GlobalAssistant({ profiles, mcpServers, proxy, autoApproveOperat
         {mcpServers.length > 0 && <span className={cn("flex h-8 shrink-0 items-center gap-1 rounded-lg border bg-muted/25 px-2 text-[10px] text-muted-foreground", autoApproveOperations && "border-amber-500/40 bg-amber-500/8 text-amber-700 dark:text-amber-200")} title={`${mcpServers.length} 个 MCP Server 已注册到小Q${autoApproveOperations ? "；操作自动审核已开启" : ""}`}><Wrench className="size-3" />MCP {mcpServers.length}{autoApproveOperations && " Auto"}</span>}
         <Button type="button" variant="outline" size="icon-sm" onClick={() => { onOpenChange(false); onNavigate("settings") }} aria-label="打开 AI 设置"><Settings className="size-3.5" /></Button>
       </div>
-      {!selected ? <div className="flex flex-1 flex-col items-center justify-center p-6 text-center"><Bot className="size-8 text-muted-foreground" /><p className="mt-3 text-sm font-medium">还没有 AI 配置</p><p className="mt-1 text-xs text-muted-foreground">请先在设置页新增一个 Provider。</p><Button className="mt-4" size="sm" onClick={() => { onOpenChange(false); onNavigate("settings") }}>打开设置</Button></div> : !isAIProfileReady(selected) ? <div className="flex flex-1 flex-col items-center justify-center p-6 text-center"><Bot className="size-8 text-muted-foreground" /><p className="mt-3 text-sm font-medium">配置尚未完成</p><p className="mt-1 text-xs leading-5 text-muted-foreground">请为 {selected.name} 补充 API Key；Compatible Provider 还需要 Base URL。</p><Button className="mt-4" size="sm" onClick={() => { onOpenChange(false); onNavigate("settings") }}>完善配置</Button></div> : <AssistantSession key={selected.id} profile={selected} activePage={activePage} onNavigate={onNavigate} mcpServers={mcpServers} proxy={proxy} autoApproveOperations={autoApproveOperations} confirmMCPCall={confirmMCPCall} open={open} />}
+      {!selected ? <div className="flex flex-1 flex-col items-center justify-center p-6 text-center"><Bot className="size-8 text-muted-foreground" /><p className="mt-3 text-sm font-medium">还没有 AI 配置</p><p className="mt-1 text-xs text-muted-foreground">请先在设置页新增一个 Provider。</p><Button className="mt-4" size="sm" onClick={() => { onOpenChange(false); onNavigate("settings") }}>打开设置</Button></div> : !isAIProfileReady(selected) ? <div className="flex flex-1 flex-col items-center justify-center p-6 text-center"><Bot className="size-8 text-muted-foreground" /><p className="mt-3 text-sm font-medium">配置尚未完成</p><p className="mt-1 text-xs leading-5 text-muted-foreground">请为 {selected.name} 补充 API Key；Compatible Provider 还需要 Base URL。</p><Button className="mt-4" size="sm" onClick={() => { onOpenChange(false); onNavigate("settings") }}>完善配置</Button></div> : <AssistantSession key={selected.id} profile={selected} activePage={activePage} onNavigate={onNavigate} sidebarOrder={sidebarOrder} onSidebarOrderChange={onSidebarOrderChange} mcpServers={mcpServers} proxy={proxy} autoApproveOperations={autoApproveOperations} confirmMCPCall={confirmMCPCall} open={open} />}
       </div>
     </aside>
     <Dialog open={Boolean(pendingMCPCall)} onOpenChange={(nextOpen) => { if (!nextOpen) finishMCPCall(false) }}>
