@@ -1,4 +1,4 @@
-module changeme
+module github.com/haessen1998/Quick
 
 go 1.25.0
 

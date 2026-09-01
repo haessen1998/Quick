@@ -2,7 +2,7 @@ import { type CSSProperties, type FormEvent, type KeyboardEvent, type PointerEve
 import { useChat } from "@ai-sdk/react"
 import { ArrowDown, Bot, LoaderCircle, RefreshCw, Send, Settings, ShieldCheck, Square, Trash2, Wrench } from "lucide-react"
 import { DirectChatTransport, ToolLoopAgent, isToolUIPart, jsonSchema, stepCountIs, tool, type UIMessage } from "ai"
-import * as NavigationService from "@/../bindings/changeme/services/navigationservice"
+import * as NavigationService from "@/../bindings/github.com/haessen1998/Quick/internal/navigation/navigationservice"
 
 import { AssistantMessageFlow } from "@/components/AssistantMessageFlow"
 import { MarkdownRenderer } from "@/components/MarkdownRenderer"
@@ -14,7 +14,7 @@ import { useAssistantCapabilityRegistry } from "@/lib/assistant-capabilities"
 import { PAGE_IDS, PAGE_LABELS, type PageId } from "@/lib/pages"
 import { parseNavigationGroupsPayload, publishNavigationGroups } from "@/lib/navigation-sites"
 import type { ProxySettings } from "@/lib/proxy"
-import type { AIProfile, MCPServerProfile } from "@/lib/saved-connections"
+import { QUICK_APP_MCP_ID, QUICK_APP_MCP_URL, type AIProfile, type MCPServerProfile } from "@/lib/saved-connections"
 import { DEFAULT_SIDEBAR_ORDER, isSidebarMovablePage, moveSidebarPage, normalizeSidebarOrder } from "@/lib/sidebar-order"
 import { useStickToBottom } from "@/lib/use-stick-to-bottom"
 import { cn } from "@/lib/utils"
@@ -29,8 +29,7 @@ const NETWORK_OPERATIONS = ["ping", "dns", "port", "cidr", "http-prepare", "http
 const FILE_RENAME_ACTIONS = ["prepare", "execute", "undo"] as const
 const FILE_RENAME_OPERATIONS = ["reset", "replace", "prefix", "suffix"] as const
 const NAVIGATION_ACTIONS = ["list", "open", "prepare", "add", "update", "move", "batch-update", "delete"] as const
-const SIDEBAR_ACTIONS = ["list", "move", "reset"] as const
-const QUICK_APP_MCP_ID = "mcp-wails3-app"
+const SIDEBAR_ACTIONS = ["list", "move"] as const
 const ASSISTANT_PANEL_WIDTH_KEY = "quick-assistant-panel-width"
 const DEFAULT_ASSISTANT_PANEL_WIDTH = 336
 const MIN_ASSISTANT_PANEL_WIDTH = 288
@@ -68,7 +67,7 @@ function messageText(message: UIMessage) {
 }
 
 function isQuickAppMCP(server: MCPServerProfile) {
-  return server.id === QUICK_APP_MCP_ID || server.url === "http://127.0.0.1:9099/mcp"
+  return server.id === QUICK_APP_MCP_ID || server.url === QUICK_APP_MCP_URL
 }
 
 function isAutomaticMCPCall(server: MCPServerProfile, toolName: string, args: Record<string, unknown>) {
@@ -76,11 +75,11 @@ function isAutomaticMCPCall(server: MCPServerProfile, toolName: string, args: Re
   if (["app_info", "windows_list", "dom_html", "dom_query"].includes(toolName)) return true
   if (toolName !== "call_bound_method" || typeof args.name !== "string") return false
   return [
-    "changeme/services.NetworkService.FindProcesses",
-    "changeme/services.NetworkService.Ping",
-    "changeme/services.NetworkService.CheckPort",
-    "changeme/services.NetworkService.DNSQuery",
-    "changeme/services.NavigationService.GetNavigationGroups",
+    "github.com/haessen1998/Quick/internal/network.NetworkService.FindProcesses",
+    "github.com/haessen1998/Quick/internal/network.NetworkService.Ping",
+    "github.com/haessen1998/Quick/internal/network.NetworkService.CheckPort",
+    "github.com/haessen1998/Quick/internal/network.NetworkService.DNSQuery",
+    "github.com/haessen1998/Quick/internal/navigation.NavigationService.GetNavigationGroups",
   ].includes(args.name)
 }
 
@@ -113,11 +112,6 @@ function AssistantSession({ profile, activePage, onNavigate, sidebarOrder, onSid
       const current = normalizeSidebarOrder(sidebarOrder)
       const describe = (order: PageId[]) => ["home" as PageId, ...order, "settings" as PageId].map((page, index) => ({ position: index + 1, page, label: PAGE_LABELS[page], fixed: page === "home" || page === "settings" }))
       if (input.action === "list") return { success: true, order: describe(current) }
-      if (input.action === "reset") {
-        const next = [...DEFAULT_SIDEBAR_ORDER]
-        onSidebarOrderChange(next)
-        return { success: true, executed: true, order: describe(next) }
-      }
       if (!input.page || !isSidebarMovablePage(input.page)) return { success: false, executed: false, message: "首页和设置固定；请提供一个可移动的工具页面" }
       if ([input.before, input.after, input.position].filter((value) => value !== undefined).length !== 1) return { success: false, executed: false, message: "请只使用 before、after 或 position 中的一种定位方式" }
       const remaining = current.filter((page) => page !== input.page)
@@ -187,7 +181,7 @@ function AssistantSession({ profile, activePage, onNavigate, sidebarOrder, onSid
         execute: async ({ page }) => navigate(page),
       }),
       sidebar_navigation: tool({
-        description: "读取、调整或恢复 Quick 侧栏页面顺序。首页固定最上，设置固定最下，其余工具页可以按目标页面前后或最终位置移动；修改会自动保存为长期偏好。",
+        description: "读取或调整 Quick 侧栏页面顺序。首页固定最上，设置固定最下，其余工具页可以按目标页面前后或最终位置移动；用户拖拽或修改后的顺序会自动长期保存。",
         inputSchema: jsonSchema<{ action: typeof SIDEBAR_ACTIONS[number]; page?: PageId; before?: PageId; after?: PageId; position?: number }>({
           type: "object", properties: {
             action: { type: "string", enum: [...SIDEBAR_ACTIONS] },
@@ -266,9 +260,9 @@ function AssistantSession({ profile, activePage, onNavigate, sidebarOrder, onSid
       }),
       network_operation: tool({
         description: `使用网络工具。Ping、DNS、TCP 端口、CIDR、cURL/HTTP 互转和带条件进程搜索均可自动执行。${autoApproveOperations ? "操作自动审核已开启：用户明确要求时可发送 HTTP 请求；关闭进程前必须先按端口、PID 或程序名搜索，并且只能关闭该搜索结果中的 PID。" : "操作自动审核未开启：HTTP 只准备不发送，进程不能关闭。"}`,
-        inputSchema: jsonSchema<{ operation: typeof NETWORK_OPERATIONS[number]; host?: string; port?: number; recordType?: string; cidr?: string; method?: typeof HTTP_METHODS[number]; url?: string; headers?: string; body?: string; curl?: string; searchType?: string; query?: string; pid?: number }>({
+        inputSchema: jsonSchema<{ operation: typeof NETWORK_OPERATIONS[number]; host?: string; count?: number; timeoutMS?: number; packetSize?: number; port?: number; recordType?: string; cidr?: string; method?: typeof HTTP_METHODS[number]; url?: string; headers?: string; body?: string; curl?: string; searchType?: string; query?: string; pid?: number }>({
           type: "object", properties: {
-            operation: { type: "string", enum: [...NETWORK_OPERATIONS] }, host: { type: "string" }, port: { type: "number", minimum: 1, maximum: 65535 }, recordType: { type: "string", enum: ["A", "AAAA", "CNAME", "MX", "NS", "TXT"] }, cidr: { type: "string" },
+            operation: { type: "string", enum: [...NETWORK_OPERATIONS] }, host: { type: "string" }, count: { type: "number", minimum: 1, maximum: 20, description: "Ping 次数" }, timeoutMS: { type: "number", minimum: 100, maximum: 60000, description: "Ping 总超时毫秒数" }, packetSize: { type: "number", minimum: 1, maximum: 65500, description: "Ping 数据包字节数" }, port: { type: "number", minimum: 1, maximum: 65535 }, recordType: { type: "string", enum: ["A", "AAAA", "CNAME", "MX", "NS", "TXT"] }, cidr: { type: "string" },
             method: { type: "string", enum: [...HTTP_METHODS] }, url: { type: "string" }, headers: { type: "string", description: "每行 Header: value；不要放入秘密" }, body: { type: "string" }, curl: { type: "string" }, searchType: { type: "string", enum: ["port", "pid", "name"] }, query: { type: "string" }, pid: { type: "number", minimum: 1, description: "仅用于关闭刚刚通过带条件搜索得到的进程" },
           }, required: ["operation"], additionalProperties: false,
         }),

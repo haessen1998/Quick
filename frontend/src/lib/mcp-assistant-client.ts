@@ -1,7 +1,7 @@
 import { Client, SSEClientTransport, StreamableHTTPClientTransport } from "@modelcontextprotocol/client"
 import type { CallToolResult, Tool, Transport } from "@modelcontextprotocol/client"
 
-import { MCPProxyService, MCPStdioService } from "../../bindings/changeme/services"
+import { MCPProxyService, MCPStdioService } from "../../bindings/github.com/haessen1998/Quick/internal/mcp"
 import type { ProxySettings } from "@/lib/proxy"
 import type { MCPServerProfile } from "@/lib/saved-connections"
 
@@ -53,7 +53,7 @@ async function withRemoteClient<T>(profile: MCPServerProfile, proxy: ProxySettin
       requestHeaders = new Headers({ "X-Quick-MCP-Token": session.token })
     } else requestHeaders = parseHeaderLines(profile.headers)
 
-    client = new Client({ name: "quick-page-assistant", version: "0.3.0" })
+    client = new Client({ name: "quick-page-assistant", version: "0.3.1" })
     transport = profile.transport === "sse"
       ? new SSEClientTransport(new URL(endpoint), {
           requestInit: { headers: requestHeaders },

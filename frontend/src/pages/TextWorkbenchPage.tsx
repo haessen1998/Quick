@@ -48,9 +48,9 @@ function buildDiffRows(left: string, right: string, granularity: Granularity, ig
 
 export default function TextWorkbenchPage() {
   const [mode, setMode] = useState<"markdown" | "diff">("markdown")
-  const [markdown, setMarkdown] = useState("# Quick\n\n一个基于 **Wails 3 + React** 的开发者工具箱。\n\n```mermaid\nflowchart LR\n  A[输入] --> B[Quick]\n  B --> C[格式化与转换]\n  B --> D[网络与文件工具]\n```\n\n```go\nfmt.Println(\"Quick\")\n```")
-  const [left, setLeft] = useState("Quick\nWails 3\nReact\n旧内容\n")
-  const [right, setRight] = useState("Quick\nWails 3\nReact + shadcn/ui\n新内容\n")
+  const [markdown, setMarkdown] = useState("# Quick\n\n一个本地优先的跨平台开发者工具箱。\n\n```mermaid\nflowchart LR\n  A[输入] --> B[Quick]\n  B --> C[格式化与转换]\n  B --> D[网络与文件工具]\n```\n\n```go\nfmt.Println(\"Quick\")\n```")
+  const [left, setLeft] = useState("Quick\nGo\nReact\n旧内容\n")
+  const [right, setRight] = useState("Quick\nGo\nReact + shadcn/ui\n新内容\n")
   const [granularity, setGranularity] = useState<Granularity>("word")
   const [ignoreWhitespace, setIgnoreWhitespace] = useState(false)
   const rows = useMemo(() => buildDiffRows(left, right, granularity, ignoreWhitespace), [left, right, granularity, ignoreWhitespace])

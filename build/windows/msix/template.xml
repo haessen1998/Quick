@@ -17,7 +17,7 @@
         PackageDisplayName="Quick"
         PublisherName="CN=My Company"
         PublisherDisplayName="My Company"
-        Version="0.3.0.0"
+        Version="0.3.1.0"
         PackageDescription="A Quick application">
         <Capabilities>
             <Capability Name="runFullTrust" />

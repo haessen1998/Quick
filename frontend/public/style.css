@@ -3,7 +3,7 @@
     --ink: #06070f;            /* darkest base behind the image */
     --text: #f4f6fb;
     --legacy-muted: #9aa6c0;
-    --legacy-accent: #ff4d4d;  /* Wails red */
+    --legacy-accent: #ff4d4d;  /* Quick accent */
     --accent-2: #ff2d72;       /* pink, used in gradients */
     --glass: rgba(255, 255, 255, 0.05);
     --glass-strong: rgba(255, 255, 255, 0.08);
@@ -314,9 +314,7 @@ body {
     transform: translateY(-2px);
     filter: drop-shadow(0 0 1em rgba(255, 77, 77, 0.45));
 }
-/* Logo heights sit on the golden scale (φ³ = 4.236rem). The Wails mark carries
-   its wordmark, so the badge is one golden step smaller (φ³ ÷ √φ) to keep the
-   pair visually balanced. */
+/* Logo heights sit on the golden scale (φ³ = 4.236rem). */
 .brand-logo { height: var(--s-5); width: auto; display: block; object-fit: contain; }
 .brand-badge img { height: calc(var(--s-5) / 1.272); width: auto; display: block; object-fit: contain; }
 
@@ -353,9 +351,7 @@ body {
     color: transparent;
 }
 
-/* The framework word ("JavaScript") crossfades to the entered name on Greet:
-   the outgoing word is taken out of flow and fades out while the incoming word
-   fades in over the same spot. */
+/* Crossfade title text without changing the surrounding layout. */
 .title-name { position: relative; display: inline-block; }
 .title-name-text {
     display: inline-block;
@@ -513,7 +509,7 @@ input[type="text"] {
     .quick-hero-subtitle { margin-left: auto; margin-right: auto; }
     .quick-hero-tags, .quick-hero-actions { justify-content: center; }
     .quick-hero-title { font-size: clamp(3.8rem, 20vw, 6rem); }
-    /* Stack the title onto two lines ("Wails +" / "Javascript") like the target. */
+    /* Stack the accent onto a second line on narrow screens. */
     .title-accent { display: block; }
     .subtitle { margin-left: auto; margin-right: auto; }
     /* A touch more width back on small screens so the input stays usable. */

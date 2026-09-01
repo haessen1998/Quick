@@ -20,7 +20,7 @@ export type NavigationGroup = {
 
 const STORAGE_KEY = "quick-navigation-sites-v1"
 const SCHEMA_VERSION_KEY = "quick-navigation-sites-schema-version"
-const CURRENT_SCHEMA_VERSION = 2
+const CURRENT_SCHEMA_VERSION = 3
 export const NAVIGATION_GROUPS_CHANGED_EVENT = "quick:navigation-groups-changed"
 let migrateDurableGroups = false
 
@@ -34,7 +34,6 @@ const defaultGroups: NavigationGroup[] = [
     name: "Quick",
     items: [
       { id: "quick-github", title: "Quick GitHub", url: "https://github.com/haessen1998/Quick", icon: "", description: "源码、Issue 与版本发布", list: "", size: "2x2" },
-      { id: "wails-docs", title: "Wails 3", url: "https://v3.wails.io/", icon: "", description: "Wails 3 官方文档", list: "", size: "4x2" },
     ],
   },
   {
@@ -49,13 +48,20 @@ function addOtherGroup(groups: NavigationGroup[]) {
   return [...groups, { id: navigationId("group"), name: "Other", items: [] }]
 }
 
+function removeLegacyTemplateSites(groups: NavigationGroup[]) {
+  return groups.map((group) => ({
+    ...group,
+    items: group.items.filter((item) => !(item.id === "wails-docs" && item.title === "Wails 3" && item.url === "https://v3.wails.io/")),
+  }))
+}
+
 function migrateLocalGroups(groups: NavigationGroup[]) {
   if (typeof window === "undefined") return groups
   const version = Number(window.localStorage.getItem(SCHEMA_VERSION_KEY) ?? 0)
   if (version >= CURRENT_SCHEMA_VERSION) return groups
   window.localStorage.setItem(SCHEMA_VERSION_KEY, String(CURRENT_SCHEMA_VERSION))
   migrateDurableGroups = true
-  return addOtherGroup(groups)
+  return addOtherGroup(removeLegacyTemplateSites(groups))
 }
 
 function isNavigationSize(value: unknown): value is NavigationCardSize {
@@ -68,14 +74,6 @@ export function normalizeNavigationURL(value: string) {
   const url = new URL(candidate)
   if (url.protocol !== "http:" && url.protocol !== "https:") throw new Error("只支持 http 或 https 地址")
   return url.toString()
-}
-
-export function automaticSiteIcon(value: string) {
-  try {
-    return new URL("/favicon.ico", normalizeNavigationURL(value)).toString()
-  } catch {
-    return ""
-  }
 }
 
 export function loadNavigationGroups(): NavigationGroup[] {
@@ -125,7 +123,7 @@ export async function hydrateNavigationGroups(fallback: NavigationGroup[]) {
   try {
     const durable = await loadPersistentConfig("navigation-groups")
     const groups = parseNavigationGroups(durable)
-    if (groups) return migrateDurableGroups ? addOtherGroup(groups) : groups
+    if (groups) return migrateDurableGroups ? addOtherGroup(removeLegacyTemplateSites(groups)) : groups
     await savePersistentConfig("navigation-groups", fallback)
   } catch (error) {
     console.warn("Unable to hydrate durable navigation groups", error)

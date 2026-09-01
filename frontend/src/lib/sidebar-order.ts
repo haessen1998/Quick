@@ -17,20 +17,6 @@ export const DEFAULT_SIDEBAR_ORDER: PageId[] = [
   "mcp-inspector",
 ]
 
-const LEGACY_DEFAULT_SIDEBAR_ORDERS: PageId[][] = [[
-  "ai-chat",
-  "mcp-inspector",
-  "formatter",
-  "converter",
-  "time-ids",
-  "validation",
-  "crypto",
-  "network",
-  "text-workbench",
-  "file-tools",
-  "navigation",
-]]
-
 const movablePages = new Set<PageId>(DEFAULT_SIDEBAR_ORDER)
 
 export function isSidebarMovablePage(value: unknown): value is PageId {
@@ -48,9 +34,6 @@ export function normalizeSidebarOrder(value: unknown): PageId[] {
         order.push(page)
       }
     }
-  }
-  if (LEGACY_DEFAULT_SIDEBAR_ORDERS.some((legacy) => legacy.length === order.length && legacy.every((page, index) => order[index] === page))) {
-    return [...DEFAULT_SIDEBAR_ORDER]
   }
   for (const page of DEFAULT_SIDEBAR_ORDER) if (!seen.has(page)) order.push(page)
   return order

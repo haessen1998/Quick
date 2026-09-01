@@ -26,9 +26,9 @@ import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { useAssistantCapability } from "@/lib/assistant-capabilities"
 import type { ProxySettings } from "@/lib/proxy"
-import { createMCPServerProfile, type MCPConnectionMode, type MCPServerProfile, type MCPTransportType } from "@/lib/saved-connections"
+import { QUICK_APP_MCP_URL, createMCPServerProfile, type MCPConnectionMode, type MCPServerProfile, type MCPTransportType } from "@/lib/saved-connections"
 import { cn } from "@/lib/utils"
-import { MCPProxyService, MCPStdioService } from "../../bindings/changeme/services"
+import { MCPProxyService, MCPStdioService } from "../../bindings/github.com/haessen1998/Quick/internal/mcp"
 
 type JSONSchema = {
   type?: string | string[]
@@ -191,7 +191,7 @@ function SchemaField({ name, schema, required, value, onChange }: {
 export default function MCPInspectorPage({ proxy, profiles, onSaveProfile }: { proxy: ProxySettings; profiles: MCPServerProfile[]; onSaveProfile: (profile: MCPServerProfile) => void }) {
   const [selectedProfileID, setSelectedProfileID] = useState(profiles[0]?.id ?? "")
   const [transportType, setTransportType] = useState<MCPTransportType>(profiles[0]?.transport ?? "streamable-http")
-  const [serverURL, setServerURL] = useState(profiles[0]?.url ?? "http://127.0.0.1:9099/mcp")
+  const [serverURL, setServerURL] = useState(profiles[0]?.url ?? QUICK_APP_MCP_URL)
   const [headersText, setHeadersText] = useState("")
   const [connectionMode, setConnectionMode] = useState<MCPConnectionMode>("quick-proxy")
   const [command, setCommand] = useState("")
@@ -430,7 +430,7 @@ export default function MCPInspectorPage({ proxy, profiles, onSaveProfile }: { p
       } else {
         requestHeaders = parseHeaderLines(headersText)
       }
-      const client = new Client({ name: "quick-mcp-tester", version: "0.3.0" })
+      const client = new Client({ name: "quick-mcp-tester", version: "0.3.1" })
       transport = transportType === "sse"
         ? new SSEClientTransport(new URL(endpoint), {
             requestInit: { headers: requestHeaders },
@@ -580,7 +580,7 @@ export default function MCPInspectorPage({ proxy, profiles, onSaveProfile }: { p
                 ) : (
                   <label className="block space-y-1.5 text-xs font-medium">
                     <span>Server URL</span>
-                    <input className={INPUT_CLASS} value={serverURL} disabled={connected || connecting} onChange={(event) => setServerURL(event.target.value)} placeholder={transportType === "sse" ? "http://127.0.0.1:3001/sse" : "http://127.0.0.1:9099/mcp"} />
+                    <input className={INPUT_CLASS} value={serverURL} disabled={connected || connecting} onChange={(event) => setServerURL(event.target.value)} placeholder={transportType === "sse" ? "http://127.0.0.1:3001/sse" : QUICK_APP_MCP_URL} />
                   </label>
                 )}
               </div>

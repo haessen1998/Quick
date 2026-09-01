@@ -73,14 +73,17 @@ function Write-LogoAsset {
     $bitmap = [System.Drawing.Bitmap]::new($Width, $Height, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
     $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
     try {
-        $graphics.Clear([System.Drawing.Color]::Transparent)
+        # Packaged desktop apps otherwise receive a Windows-generated colour
+        # plate in the taskbar/start menu. Quick's Windows icon is deliberately
+        # rendered on its white application tile.
+        $graphics.Clear([System.Drawing.Color]::White)
         $graphics.CompositingMode = [System.Drawing.Drawing2D.CompositingMode]::SourceOver
         $graphics.CompositingQuality = [System.Drawing.Drawing2D.CompositingQuality]::HighQuality
         $graphics.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
         $graphics.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
         $graphics.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::HighQuality
 
-        $targetSize = [Math]::Max(1, [Math]::Min($Width, $Height))
+        $targetSize = [Math]::Max(1, [int]([Math]::Min($Width, $Height) * 0.78))
         $x = [int](($Width - $targetSize) / 2)
         $y = [int](($Height - $targetSize) / 2)
         $graphics.DrawImage($Source, $x, $y, $targetSize, $targetSize)
@@ -158,6 +161,8 @@ try {
         Write-LogoAsset $sourceBitmap 50 50 (Join-Path $assetsDirectory "StoreLogo.png")
         Write-LogoAsset $sourceBitmap 44 44 (Join-Path $assetsDirectory "Square44x44Logo.png")
         Write-LogoAsset $sourceBitmap 150 150 (Join-Path $assetsDirectory "Square150x150Logo.png")
+        Write-LogoAsset $sourceBitmap 44 44 (Join-Path $assetsDirectory "Square44x44Logo.targetsize-44_altform-unplated.png")
+        Write-LogoAsset $sourceBitmap 256 256 (Join-Path $assetsDirectory "Square44x44Logo.targetsize-256_altform-unplated.png")
     }
     finally {
         $sourceBitmap.Dispose()

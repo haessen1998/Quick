@@ -1,4 +1,4 @@
-import * as ConfigService from "@/../bindings/changeme/services/configservice"
+import * as ConfigService from "@/../bindings/github.com/haessen1998/Quick/internal/config/configservice"
 
 export type PersistentConfigKey = "ai-profiles" | "mcp-servers" | "navigation-groups" | "sidebar-order"
 

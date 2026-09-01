@@ -6,8 +6,8 @@ import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { useAssistantCapability } from "@/lib/assistant-capabilities"
-import { ChooseFolder, ExecuteRename, ListFiles, PreviewRename, UndoLastRename } from "../../bindings/changeme/services/filerenameservice"
-import type { RenameFileInfo, RenamePlanItem, RenamePreview, RenameRequest } from "../../bindings/changeme/services/models"
+import { ChooseFolder, ExecuteRename, ListFiles, PreviewRename, UndoLastRename } from "../../bindings/github.com/haessen1998/Quick/internal/files/filerenameservice"
+import type { RenameFileInfo, RenamePlanItem, RenamePreview, RenameRequest } from "../../bindings/github.com/haessen1998/Quick/internal/files/models"
 
 type RenameRules = Omit<RenameRequest, "paths">
 

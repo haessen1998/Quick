@@ -49,8 +49,8 @@ function minifyHtmlText(input: string) {
     .trim()
 }
 
-const jsonSample = '{"name":"Quick","features":["Wails","shadcn/ui"],"ready":true}'
-const xmlSample = '<tool name="Quick"><runtime>Wails</runtime><ready>true</ready></tool>'
+const jsonSample = '{"name":"Quick","features":["Go","React"],"ready":true}'
+const xmlSample = '<tool name="Quick"><runtime>Go</runtime><ready>true</ready></tool>'
 const htmlSample = '<main><h1>Quick</h1><p>Developer tools</p><button type="button">Start</button></main>'
 const cssSample = '.card{display:grid;gap:12px;color:#111;background:#fff}.card:hover{transform:translateY(-2px)}'
 const jsSample = 'const tools=["format","convert"];function ready(name){return `${name}: ${tools.join(", ")}`}'
@@ -74,7 +74,7 @@ function createTools(formatEmbeddedJSON: boolean): TextTool[] {
   return [
   { id: "json-format", group: "JSON", label: "JSON 格式化", description: formatEmbeddedJSON ? "校验 JSON，并递归展开字符串中的 JSON 对象或数组" : "校验 JSON 并使用两个空格缩进", icon: FileJson, sample: jsonSample, run: (input) => { const parsed = JSON.parse(input); return JSON.stringify(formatEmbeddedJSON ? parseEmbeddedJSON(parsed) : parsed, null, 2) } },
   { id: "json-minify", group: "JSON", label: "JSON 压缩", description: "移除 JSON 中不必要的空白", icon: Braces, sample: JSON.stringify(JSON.parse(jsonSample), null, 2), run: (input) => JSON.stringify(JSON.parse(input)) },
-  { id: "yaml-format", group: "YAML", label: "YAML 格式化", description: "校验并规范 YAML 缩进", icon: FileType2, sample: "name: Quick\nfeatures:\n  - Wails\n  - shadcn/ui\nready: true", run: (input) => { const document = parseDocument(input); if (document.errors.length) throw document.errors[0]; return document.toString({ indent: 2, lineWidth: 0 }) } },
+  { id: "yaml-format", group: "YAML", label: "YAML 格式化", description: "校验并规范 YAML 缩进", icon: FileType2, sample: "name: Quick\nfeatures:\n  - Go\n  - React\nready: true", run: (input) => { const document = parseDocument(input); if (document.errors.length) throw document.errors[0]; return document.toString({ indent: 2, lineWidth: 0 }) } },
   { id: "xml-format", group: "XML", label: "XML 格式化", description: "校验 XML 并整理元素缩进", icon: FileCode2, sample: xmlSample, run: (input) => buildXml(input, true) },
   { id: "xml-minify", group: "XML", label: "XML 压缩", description: "移除 XML 元素间不必要的空白", icon: FileCode2, sample: buildXml(xmlSample, true), run: (input) => buildXml(input, false) },
   { id: "html-format", group: "HTML", label: "HTML 格式化", description: "使用 Prettier 整理 HTML 结构", icon: Code2, sample: htmlSample, run: formatHtml },

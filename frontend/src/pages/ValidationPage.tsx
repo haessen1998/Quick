@@ -49,16 +49,16 @@ function evaluate(mode: Mode, expression: string, input: string, flags: string) 
 export default function ValidationPage() {
   const [mode, setMode] = useState<Mode>("jsonpath")
   const [expression, setExpression] = useState("$.store.books[?(@.price < 20)].title")
-  const [input, setInput] = useState('{"store":{"books":[{"title":"Go","price":18},{"title":"Wails","price":26}]}}')
+  const [input, setInput] = useState('{"store":{"books":[{"title":"Go","price":18},{"title":"React","price":26}]}}')
   const [flags, setFlags] = useState("gi")
   const [output, setOutput] = useState("")
   const [error, setError] = useState("")
 
   const selectMode = (next: Mode) => {
     setMode(next); setOutput(""); setError("")
-    if (next === "jsonpath") { setExpression("$.store.books[?(@.price < 20)].title"); setInput('{"store":{"books":[{"title":"Go","price":18},{"title":"Wails","price":26}]}}') }
-    if (next === "xpath") { setExpression("//book[@price < 20]/title"); setInput('<store><book price="18"><title>Go</title></book><book price="26"><title>Wails</title></book></store>') }
-    if (next === "regex") { setExpression("(?<protocol>https?)://(?<host>[^/\\s]+)"); setInput("访问 https://github.com/haessen1998/Quick 或 https://v3.wails.io"); setFlags("gi") }
+    if (next === "jsonpath") { setExpression("$.store.books[?(@.price < 20)].title"); setInput('{"store":{"books":[{"title":"Go","price":18},{"title":"React","price":26}]}}') }
+    if (next === "xpath") { setExpression("//book[@price < 20]/title"); setInput('<store><book price="18"><title>Go</title></book><book price="26"><title>React</title></book></store>') }
+    if (next === "regex") { setExpression("(?<protocol>https?)://(?<host>[^/\\s]+)"); setInput("访问 https://github.com/haessen1998/Quick 或 https://go.dev"); setFlags("gi") }
   }
 
   const run = () => {

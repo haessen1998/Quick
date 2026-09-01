@@ -27,8 +27,8 @@ public class WailsForegroundService extends android.app.Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        String title = "Wails";
-        String text = "Running in the background";
+        String title = "Quick";
+        String text = "Quick is running in the background";
         if (intent != null) {
             if (intent.getStringExtra("title") != null) title = intent.getStringExtra("title");
             if (intent.getStringExtra("text") != null) text = intent.getStringExtra("text");

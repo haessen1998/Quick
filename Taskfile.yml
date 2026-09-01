@@ -1,17 +1,17 @@
 version: '3'
 
 env:
-  # Enable Wails' experimental application MCP service for local development
-  # and CLI-driven builds. Packaged binaries use the built-in loopback defaults.
+  # Quick-specific runtime endpoint. main.go applies the same defaults to
+  # packaged binaries; explicit process environment values still win.
   WAILS_MCP: "1"
-  WAILS_MCP_HOST: "127.0.0.1"
-  WAILS_MCP_PORT: "9099"
+  QUICK_MCP_HOST: "127.0.0.1"
+  QUICK_MCP_PORT: "43122"
 
 vars:
   APP_NAME: "quick"
   BIN_DIR: "bin"
   PACKAGE_MANAGER: '{{.PACKAGE_MANAGER | default "npm"}}'
-  VITE_PORT: '{{.WAILS_VITE_PORT | default 9245}}'
+  VITE_PORT: '{{.QUICK_APP_PORT | default 43121}}'
   # Target OS for build/package/run. Defaults to the host OS, and is overridden
   # by `wails3 build GOOS=...` (or the GOOS env var) for cross-compilation. The
   # tasks below dispatch to the matching platform Taskfile via this variable.

@@ -34,6 +34,10 @@ export type MCPServerProfile = {
 
 const AI_STORAGE_KEY = "quick-ai-profiles-v1"
 const MCP_STORAGE_KEY = "quick-mcp-servers-v1"
+export const QUICK_APP_MCP_ID = "mcp-quick-app"
+export const QUICK_APP_MCP_URL = "http://127.0.0.1:43122/mcp"
+const LEGACY_QUICK_APP_MCP_IDS = new Set(["mcp-wails3-app", "mcp-local-http"])
+const LEGACY_QUICK_APP_MCP_URLS = new Set(["http://127.0.0.1:9099/mcp", "http://127.0.0.1:3000/mcp"])
 const DEFAULT_SYSTEM_PROMPT = "你是 Quick 开发者工具箱中的 AI 助手。回答应准确、清晰、简洁；优先理解开发任务的真实目的，给出可核验的结果和可执行建议。遇到不确定信息要明确说明，不编造执行结果。"
 
 function createID(prefix: string) {
@@ -62,7 +66,7 @@ export function createMCPServerProfile(overrides: Partial<MCPServerProfile> = {}
     name: "新的 MCP Server",
     enabled: true,
     transport: "streamable-http",
-    url: "http://127.0.0.1:9099/mcp",
+    url: QUICK_APP_MCP_URL,
     headers: "",
     connectionMode: "quick-proxy",
     command: "",
@@ -78,7 +82,7 @@ const DEFAULT_AI_PROFILES: AIProfile[] = [
 ]
 
 const DEFAULT_MCP_SERVERS: MCPServerProfile[] = [
-  createMCPServerProfile({ id: "mcp-wails3-app", name: "Quick App MCP", url: "http://127.0.0.1:9099/mcp" }),
+  createMCPServerProfile({ id: QUICK_APP_MCP_ID, name: "Quick App MCP", url: QUICK_APP_MCP_URL }),
 ]
 
 const LEGACY_AI_DEFAULTS = [
@@ -164,11 +168,10 @@ export function getInitialMCPServers() {
 function normalizeMCPServers(profiles: MCPServerProfile[]) {
   return profiles.map((profile) => {
     const enabled = typeof profile.enabled === "boolean" ? profile.enabled : true
-    if (profile.id === "mcp-local-http" && profile.url === "http://127.0.0.1:3000/mcp") {
-      return { ...profile, id: "mcp-wails3-app", name: "Quick App MCP", enabled, url: "http://127.0.0.1:9099/mcp" }
-    }
-    if (profile.id === "mcp-wails3-app" && profile.name === "Wails 3 应用 MCP" && profile.url === "http://127.0.0.1:9099/mcp") {
-      return { ...profile, name: "Quick App MCP", enabled }
+    const legacyBuiltIn = LEGACY_QUICK_APP_MCP_IDS.has(profile.id)
+      || (LEGACY_QUICK_APP_MCP_URLS.has(profile.url) && (profile.name === "Quick App MCP" || profile.name === "Wails 3 应用 MCP"))
+    if (legacyBuiltIn) {
+      return { ...profile, id: QUICK_APP_MCP_ID, name: "Quick App MCP", enabled, url: QUICK_APP_MCP_URL }
     }
     return { ...profile, enabled }
   })

@@ -152,7 +152,7 @@ tasks:
       ARCH: '{{.ARCH | default ARCH}}'
       IDENTITY_NAME: '{{.IDENTITY_NAME | default "haessen.QuickDev"}}'
       PUBLISHER: '{{.PUBLISHER | default "CN=248AC9D1-95E3-40D3-B8EF-1D38B72432B7"}}'
-      VERSION: '{{.VERSION | default "0.3.0"}}'
+      VERSION: '{{.VERSION | default "0.3.1"}}'
 
   run:
     cmds:

@@ -24,7 +24,6 @@ import {
   Network,
   Pencil,
   Plus,
-  RotateCcw,
   PanelRightClose,
   PanelRightOpen,
   ShieldCheck,
@@ -37,7 +36,7 @@ import {
   EyeOff,
   type LucideIcon,
 } from "lucide-react"
-import { Events, WML } from "@wailsio/runtime"
+import { WML } from "@wailsio/runtime"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
@@ -70,7 +69,7 @@ import type { PageId } from "@/lib/pages"
 import { getInitialTheme, type AppTheme } from "@/lib/theme"
 import { getInitialProxySettings, saveProxySettings, type ProxySettings } from "@/lib/proxy"
 import { NAVIGATION_GROUPS_CHANGED_EVENT, loadNavigationGroups, mergeNavigationGroups, navigationCSVTemplate, navigationGroupsToCSV, parseNavigationCSV, persistNavigationGroups, saveNavigationGroups } from "@/lib/navigation-sites"
-import { DEFAULT_SIDEBAR_ORDER, hydrateSidebarOrder, loadSidebarOrder, normalizeSidebarOrder, persistSidebarOrder, saveSidebarOrder } from "@/lib/sidebar-order"
+import { hydrateSidebarOrder, loadSidebarOrder, normalizeSidebarOrder, persistSidebarOrder, saveSidebarOrder } from "@/lib/sidebar-order"
 import {
   clearLegacySensitiveConnectionCache,
   createAIProfile,
@@ -126,7 +125,7 @@ const pages: PageDefinition[] = [
   { id: "settings", label: "设置", description: "应用偏好选项", icon: Settings },
 ]
 
-const appVersion = import.meta.env.VITE_APP_VERSION || "v0.3.0"
+const appVersion = import.meta.env.VITE_APP_VERSION || "v0.3.1"
 
 function SidebarPageLink({ page, activePage, onNavigate }: { page: PageDefinition; activePage: PageId; onNavigate: (page: PageId) => void }) {
   const { open } = useSidebar()
@@ -163,8 +162,6 @@ function AppSidebar({ activePage, order, onNavigate, onOrderChange }: { activePa
   const orderedPages = normalizeSidebarOrder(order).map((id) => pages.find((page) => page.id === id)).filter((page): page is PageDefinition => Boolean(page))
   const homePage = pages.find((page) => page.id === "home")!
   const settingsPage = pages.find((page) => page.id === "settings")!
-  const defaultOrder = order.length === DEFAULT_SIDEBAR_ORDER.length && order.every((page, index) => page === DEFAULT_SIDEBAR_ORDER[index])
-
   const dragEnd = ({ active, over }: DragEndEvent) => {
     if (!over || active.id === over.id) return
     const from = order.indexOf(String(active.id) as PageId)
@@ -188,10 +185,7 @@ function AppSidebar({ activePage, order, onNavigate, onOrderChange }: { activePa
 
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel className="flex items-center justify-between gap-2">
-            <span>应用导航</span>
-            <button type="button" className="app-interactive flex size-6 shrink-0 items-center justify-center rounded-md hover:bg-sidebar-accent hover:text-sidebar-accent-foreground disabled:pointer-events-none disabled:opacity-30" disabled={defaultOrder} onClick={() => { onOrderChange([...DEFAULT_SIDEBAR_ORDER]); toast.success("已恢复默认导航顺序") }} aria-label="恢复默认导航顺序" title="恢复默认顺序"><RotateCcw className="size-3.5" /></button>
-          </SidebarGroupLabel>
+          <SidebarGroupLabel>应用导航</SidebarGroupLabel>
           <SidebarGroupContent>
             <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={dragEnd}>
               <SidebarMenu>
@@ -607,7 +601,7 @@ function SettingsPage({
 function App() {
   const [activePage, setActivePage] = useState<PageId>("home")
   const [visitedPages, setVisitedPages] = useState<Set<PageId>>(() => new Set(["home"]))
-  const [time, setTime] = useState("正在同步本地时间…")
+  const [time, setTime] = useState("")
   const [theme, setTheme] = useState<AppTheme>(() => {
     const initialTheme = getInitialTheme()
     document.documentElement.classList.toggle("dark", initialTheme === "dark")
@@ -625,11 +619,12 @@ function App() {
   const currentPage = pages.find((page) => page.id === activePage) ?? pages[0]
 
   useEffect(() => {
-    return Events.On("time", (timeValue: any) => {
-      const full = String(timeValue.data ?? "")
-      const compact = (full.match(/\d{1,2}:\d{2}:\d{2}/) || [full])[0]
-      setTime(window.matchMedia("(max-width: 640px)").matches ? compact : full)
-    })
+    const update = () => setTime(new Intl.DateTimeFormat("zh-CN", window.matchMedia("(max-width: 640px)").matches
+      ? { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }
+      : { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }).format(new Date()))
+    update()
+    const timer = window.setInterval(update, 1000)
+    return () => window.clearInterval(timer)
   }, [])
 
   useEffect(() => {

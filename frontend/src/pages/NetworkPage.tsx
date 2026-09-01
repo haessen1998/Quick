@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from "react"
 import { Activity, Braces, Copy, Globe2, Network, Play, Power, Router, Search, Sparkles, TerminalSquare } from "lucide-react"
 import { toast } from "sonner"
 
-import { NetworkService } from "../../bindings/changeme/services"
+import { NetworkService } from "../../bindings/github.com/haessen1998/Quick/internal/network"
 import { Button } from "@/components/ui/button"
 import { useAssistantCapability } from "@/lib/assistant-capabilities"
 import type { ProxySettings } from "@/lib/proxy"
@@ -28,6 +28,13 @@ function calculateCIDR(input: string) {
   const format = (value: number) => [24, 16, 8, 0].map((shift) => (value >>> shift) & 255).join(".")
   const total = 2 ** (32 - prefix)
   return `网络地址：${format(network)}\n广播地址：${format(broadcast)}\n子网掩码：${format(mask)}\n地址数量：${total}\n可用主机范围：${total > 2 ? `${format(network + 1)} – ${format(broadcast - 1)}` : "无传统主机范围"}`
+}
+
+function validatedPingParameters(count: number, timeoutMS: number, packetSize: number) {
+  if (!Number.isInteger(count) || count < 1 || count > 20) throw new Error("Ping 次数必须在 1–20 之间")
+  if (!Number.isInteger(timeoutMS) || timeoutMS < 100 || timeoutMS > 60000) throw new Error("Ping 总超时必须在 100–60000 ms 之间")
+  if (!Number.isInteger(packetSize) || packetSize < 1 || packetSize > 65500) throw new Error("Ping 数据包大小必须在 1–65500 字节之间")
+  return { count, timeoutMS, packetSize }
 }
 
 function shellQuote(value: string) {
@@ -95,6 +102,9 @@ function curlToHTTP(command: string): HTTPRequest {
 export default function NetworkPage({ proxy }: { proxy: ProxySettings }) {
   const [mode, setMode] = useState<Mode>("ping")
   const [host, setHost] = useState("github.com")
+  const [pingCount, setPingCount] = useState(4)
+  const [pingTimeoutMS, setPingTimeoutMS] = useState(5000)
+  const [pingPacketSize, setPingPacketSize] = useState(32)
   const [port, setPort] = useState(443)
   const [recordType, setRecordType] = useState("A")
   const [cidr, setCIDR] = useState("192.168.1.10/24")
@@ -118,7 +128,7 @@ export default function NetworkPage({ proxy }: { proxy: ProxySettings }) {
       ? { mode, method, url, hasHeaders: Boolean(headers.trim()), bodyLength: body.length, hasCurl: Boolean(curl.trim()), requestSentByAssistant: false, output: output.slice(0, 4000) }
       : mode === "process"
         ? { mode, searchType: processSearchType, query: processQuery, resultCount: processes.length, canTerminate: processCanTerminate, output: output.slice(0, 2000) }
-        : { mode, host: mode === "cidr" ? undefined : host, port: mode === "port" ? port : undefined, recordType: mode === "dns" ? recordType : undefined, cidr: mode === "cidr" ? cidr : undefined, output: output.slice(0, 4000) },
+        : { mode, host: mode === "cidr" ? undefined : host, ping: mode === "ping" ? { count: pingCount, timeoutMS: pingTimeoutMS, packetSize: pingPacketSize } : undefined, port: mode === "port" ? port : undefined, recordType: mode === "dns" ? recordType : undefined, cidr: mode === "cidr" ? cidr : undefined, output: output.slice(0, 4000) },
     actions: {
       fill_http: (values) => {
         const nextMethod = String(values.method ?? "GET").toUpperCase()
@@ -217,7 +227,9 @@ export default function NetworkPage({ proxy }: { proxy: ProxySettings }) {
           setHost(nextHost); setRunning(true)
           if (operation === "ping") {
             setMode("ping")
-            const result = await NetworkService.Ping(nextHost, 5000) as unknown as NetworkResult
+            const parameters = validatedPingParameters(Number(values.count ?? pingCount), Number(values.timeoutMS ?? pingTimeoutMS), Number(values.packetSize ?? pingPacketSize))
+            setPingCount(parameters.count); setPingTimeoutMS(parameters.timeoutMS); setPingPacketSize(parameters.packetSize)
+            const result = await NetworkService.Ping(nextHost, parameters.count, parameters.timeoutMS, parameters.packetSize) as unknown as NetworkResult
             const formatted = `${result.success ? "成功" : "失败"} · ${result.durationMs} ms\n\n${result.output}`
             setOutput(formatted)
             return { success: result.success, operation, output: result.output, durationMs: result.durationMs, executed: true }
@@ -260,11 +272,12 @@ export default function NetworkPage({ proxy }: { proxy: ProxySettings }) {
     try {
       if (mode === "cidr") { setOutput(calculateCIDR(cidr)); return }
       if (mode === "http") { await executeHTTP({ method, url, headers, body }); return }
-      const result = mode === "ping"
-        ? await NetworkService.Ping(host, 5000) as unknown as NetworkResult
-        : mode === "dns"
-          ? await NetworkService.DNSQuery(host, recordType, 5000) as unknown as NetworkResult
-          : await NetworkService.CheckPort(host, port, 5000) as unknown as NetworkResult
+      let result: NetworkResult
+      if (mode === "ping") {
+        const parameters = validatedPingParameters(pingCount, pingTimeoutMS, pingPacketSize)
+        result = await NetworkService.Ping(host, parameters.count, parameters.timeoutMS, parameters.packetSize) as unknown as NetworkResult
+      } else if (mode === "dns") result = await NetworkService.DNSQuery(host, recordType, 5000) as unknown as NetworkResult
+      else result = await NetworkService.CheckPort(host, port, 5000) as unknown as NetworkResult
       setOutput(`${result.success ? "成功" : "失败"} · ${result.durationMs} ms\n\n${result.output}`)
     } catch (caught) { const message = caught instanceof Error ? caught.message : String(caught); setOutput(message); toast.error("网络操作失败", { description: message }) } finally { setRunning(false) }
   }
@@ -310,7 +323,7 @@ export default function NetworkPage({ proxy }: { proxy: ProxySettings }) {
         <div className="mb-4 flex flex-wrap gap-2">{modes.map(({ id, label, icon: Icon }) => <Button key={id} variant={mode === id ? "default" : "outline"} onClick={() => { setMode(id); setOutput("") }}><Icon />{label}</Button>)}</div>
         <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
           <div className="border-b p-4">
-            {mode === "ping" && <div className="grid gap-3 sm:grid-cols-[1fr_auto]"><input className={inputClass} value={host} onChange={(event) => setHost(event.target.value)} placeholder="主机名或 IP" /><Button onClick={run} disabled={running}><Activity />Ping</Button></div>}
+            {mode === "ping" && <div className="space-y-3"><div className="grid gap-3 sm:grid-cols-[1fr_auto]"><input className={inputClass} value={host} onChange={(event) => setHost(event.target.value)} placeholder="主机名或 IP" /><Button onClick={run} disabled={running}><Activity />Ping</Button></div><div className="grid gap-3 sm:grid-cols-3"><label className="space-y-1 text-xs text-muted-foreground"><span>次数（1–20）</span><input className={inputClass} type="number" min={1} max={20} value={pingCount} onChange={(event) => setPingCount(Number(event.target.value))} /></label><label className="space-y-1 text-xs text-muted-foreground"><span>总超时（ms）</span><input className={inputClass} type="number" min={100} max={60000} step={100} value={pingTimeoutMS} onChange={(event) => setPingTimeoutMS(Number(event.target.value))} /></label><label className="space-y-1 text-xs text-muted-foreground"><span>数据包（字节）</span><input className={inputClass} type="number" min={1} max={65500} value={pingPacketSize} onChange={(event) => setPingPacketSize(Number(event.target.value))} /></label></div></div>}
             {mode === "dns" && <div className="grid gap-3 sm:grid-cols-[1fr_8rem_auto]"><input className={inputClass} value={host} onChange={(event) => setHost(event.target.value)} placeholder="域名" /><select className={inputClass} value={recordType} onChange={(event) => setRecordType(event.target.value)}>{["A", "AAAA", "CNAME", "MX", "NS", "TXT"].map((value) => <option key={value}>{value}</option>)}</select><Button onClick={run} disabled={running}><Search />查询</Button></div>}
             {mode === "port" && <div className="grid gap-3 sm:grid-cols-[1fr_8rem_auto]"><input className={inputClass} value={host} onChange={(event) => setHost(event.target.value)} /><input className={inputClass} type="number" min={1} max={65535} value={port} onChange={(event) => setPort(Number(event.target.value))} /><Button onClick={run} disabled={running}><Router />连接</Button></div>}
             {mode === "cidr" && <div className="grid gap-3 sm:grid-cols-[1fr_auto]"><input className={inputClass} value={cidr} onChange={(event) => setCIDR(event.target.value)} placeholder="192.168.1.10/24" /><Button onClick={run}><Play />计算</Button></div>}

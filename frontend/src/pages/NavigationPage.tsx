@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { Browser, Events } from "@wailsio/runtime"
-import * as NavigationService from "@/../bindings/changeme/services/navigationservice"
+import * as NavigationService from "@/../bindings/github.com/haessen1998/Quick/internal/navigation/navigationservice"
 import { DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core"
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
@@ -10,7 +10,7 @@ import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { useAssistantCapability } from "@/lib/assistant-capabilities"
-import { NAVIGATION_GROUPS_CHANGED_EVENT, automaticSiteIcon, hydrateNavigationGroups, loadNavigationGroups, navigationId, normalizeNavigationURL, parseNavigationGroupsPayload, persistNavigationGroups, publishNavigationGroups, saveNavigationGroups, type NavigationCardSize, type NavigationGroup, type NavigationItem } from "@/lib/navigation-sites"
+import { NAVIGATION_GROUPS_CHANGED_EVENT, hydrateNavigationGroups, loadNavigationGroups, navigationId, normalizeNavigationURL, parseNavigationGroupsPayload, persistNavigationGroups, publishNavigationGroups, saveNavigationGroups, type NavigationCardSize, type NavigationGroup, type NavigationItem } from "@/lib/navigation-sites"
 import { cn } from "@/lib/utils"
 
 const sizeClasses: Record<NavigationCardSize, string> = {
@@ -48,11 +48,26 @@ function siteHost(url: string) {
 }
 
 function SiteIcon({ item, className }: { item: NavigationItem; className?: string }) {
-  const source = item.icon || automaticSiteIcon(item.url)
+  const source = item.icon.trim()
+  const [resolvedSource, setResolvedSource] = useState(source.startsWith("quick-icon:") ? "" : source)
   const [failed, setFailed] = useState(false)
-  useEffect(() => setFailed(false), [source])
-  if (!source || failed) return <span className={cn("flex size-full items-center justify-center", className)}>{item.title.trim().slice(0, 1).toUpperCase() || "?"}</span>
-  return <img src={source} alt="" className={cn("size-full object-cover", className)} onError={() => setFailed(true)} />
+  useEffect(() => {
+    let cancelled = false
+    setFailed(false)
+    if (!source.startsWith("quick-icon:")) {
+      setResolvedSource(source)
+      return () => { cancelled = true }
+    }
+    setResolvedSource("")
+    NavigationService.GetCachedSiteIcon(source).then((value) => {
+      if (!cancelled) setResolvedSource(value)
+    }).catch(() => {
+      if (!cancelled) setFailed(true)
+    })
+    return () => { cancelled = true }
+  }, [source])
+  if (!resolvedSource || failed) return <span className={cn("flex size-full items-center justify-center", className)}>{item.title.trim().slice(0, 1).toUpperCase() || "?"}</span>
+  return <img src={resolvedSource} alt="" className={cn("size-full object-cover", className)} onError={() => setFailed(true)} />
 }
 
 async function localIconDataURL(file: File) {
@@ -84,11 +99,7 @@ async function localIconDataURL(file: File) {
 }
 
 async function discoverSiteIcon(url: string) {
-  try {
-    return await NavigationService.DiscoverSiteIcon(normalizeNavigationURL(url))
-  } catch {
-    return automaticSiteIcon(url)
-  }
+  return NavigationService.DiscoverSiteIcon(normalizeNavigationURL(url))
 }
 
 function SortableCard({ item, onEdit }: { item: NavigationItem; onEdit: () => void }) {
@@ -250,8 +261,7 @@ export default function NavigationPage() {
     if (!itemEditor) return
     try {
       const url = normalizeNavigationURL(itemEditor.value.url)
-      const configuredIcon = itemEditor.value.icon.trim()
-      const value = { ...itemEditor.value, title: itemEditor.value.title.trim(), url, icon: configuredIcon || await discoverSiteIcon(url), description: itemEditor.value.description.trim(), list: itemEditor.value.list.trim() }
+      const value = { ...itemEditor.value, title: itemEditor.value.title.trim(), url, icon: itemEditor.value.icon.trim(), description: itemEditor.value.description.trim(), list: itemEditor.value.list.trim() }
       if (!value.title) throw new Error("请输入站点名称")
       setGroups((current) => saveItemToGroup(current, itemEditor.groupId, value, itemEditor.isNew))
       setItemEditor(null)
@@ -276,15 +286,15 @@ export default function NavigationPage() {
     }
   }
 
-  const discoverEditorIcon = async (quiet = false) => {
+  const discoverEditorIcon = async () => {
     if (!itemEditor) return
     setIconBusy(true)
     try {
       const icon = await discoverSiteIcon(itemEditor.value.url)
       if (icon) updateItem({ icon })
-      if (!quiet) toast.success(icon ? "已获取站点图标" : "没有找到可用图标")
+      toast.success("已验证并缓存站点图标")
     } catch (error) {
-      if (!quiet) toast.error(error instanceof Error ? error.message : String(error))
+      toast.error("没有找到有效的站点图标", { description: error instanceof Error ? error.message : String(error) })
     } finally {
       setIconBusy(false)
     }
@@ -480,7 +490,7 @@ export default function NavigationPage() {
                   {itemEditor.value.size !== "1x1" && <span className="min-w-0"><span className="block truncate text-sm font-medium">{itemEditor.value.title || "站点名称"}</span>{itemEditor.value.size === "4x2" && <span className="mt-1 line-clamp-2 block text-xs leading-5 text-muted-foreground">{itemEditor.value.description || siteHost(itemEditor.value.url) || "站点说明"}</span>}</span>}
                 </div>
               </div>
-              <p className="mt-4 text-center text-[11px] leading-4 text-muted-foreground">自动读取页面声明的 favicon，找不到时回退到站点根目录。</p>
+              <p className="mt-4 text-center text-[11px] leading-4 text-muted-foreground">自动获取会验证图像并缓存到 Quick 配置目录，再次点击可刷新。</p>
             </aside>
 
             <div className="space-y-5 p-5">
@@ -489,7 +499,7 @@ export default function NavigationPage() {
                 <div className="grid gap-3 sm:grid-cols-2">
                   <label className="text-sm"><span className="mb-1.5 block text-xs font-medium">名称</span><input autoFocus className="app-interactive w-full rounded-lg border bg-background px-3 py-2" placeholder="例如 GitHub" value={itemEditor.value.title} onChange={(event) => updateItem({ title: event.target.value })} /></label>
                   <label className="text-sm"><span className="mb-1.5 block text-xs font-medium">所属分组</span><select className="app-interactive w-full rounded-lg border bg-background px-3 py-2" value={itemEditor.groupId} onChange={(event) => setItemEditor({ ...itemEditor, groupId: event.target.value })}>{groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}</select></label>
-                  <label className="text-sm sm:col-span-2"><span className="mb-1.5 block text-xs font-medium">网址</span><div className="relative"><Globe2 className="pointer-events-none absolute left-3 top-2.5 size-4 text-muted-foreground" /><input className="app-interactive w-full rounded-lg border bg-background py-2 pl-9 pr-3 font-mono text-sm" placeholder="https://example.com" value={itemEditor.value.url} onChange={(event) => updateItem({ url: event.target.value })} onBlur={() => { if (!itemEditor.value.icon) void discoverEditorIcon(true) }} /></div></label>
+                  <label className="text-sm sm:col-span-2"><span className="mb-1.5 block text-xs font-medium">网址</span><div className="relative"><Globe2 className="pointer-events-none absolute left-3 top-2.5 size-4 text-muted-foreground" /><input className="app-interactive w-full rounded-lg border bg-background py-2 pl-9 pr-3 font-mono text-sm" placeholder="https://example.com" value={itemEditor.value.url} onChange={(event) => updateItem({ url: event.target.value, ...(itemEditor.value.icon.startsWith("quick-icon:") ? { icon: "" } : {}) })} /></div></label>
                   <label className="text-sm"><span className="mb-1.5 block text-xs font-medium">列表小组 <span className="font-normal text-muted-foreground">（可选）</span></span><input list="navigation-list-options" className="app-interactive w-full rounded-lg border bg-background px-3 py-2" placeholder="选择已有小组或输入新名称" value={itemEditor.value.list} onChange={(event) => updateItem({ list: event.target.value })} /><datalist id="navigation-list-options">{availableLists.map((name) => <option key={name.toLocaleLowerCase()} value={name} />)}</datalist><span className="mt-1 block text-[11px] leading-4 text-muted-foreground">{availableLists.length ? "可选择当前 Tab 的已有小组，也可以直接输入新名称。" : "直接输入名称即可在当前 Tab 中创建新的 list。"}</span></label>
                   <label className="text-sm"><span className="mb-1.5 block text-xs font-medium">说明 <span className="font-normal text-muted-foreground">（可选）</span></span><input className="app-interactive w-full rounded-lg border bg-background px-3 py-2" placeholder="描述这个入口的用途" value={itemEditor.value.description} onChange={(event) => updateItem({ description: event.target.value })} /></label>
                 </div>
@@ -506,11 +516,11 @@ export default function NavigationPage() {
                 <div>
                   <span className="mb-1.5 block text-xs font-medium">站点图标</span>
                   <div className="flex flex-wrap gap-2">
-                    <Button type="button" variant={!itemEditor.value.icon ? "secondary" : "outline"} size="sm" disabled={iconBusy} onClick={() => void discoverEditorIcon()}><Globe2 />{iconBusy ? "正在获取…" : "自动获取"}</Button>
+                    <Button type="button" variant={itemEditor.value.icon.startsWith("quick-icon:") ? "secondary" : "outline"} size="sm" disabled={iconBusy} onClick={() => void discoverEditorIcon()}><Globe2 />{iconBusy ? "正在获取…" : "自动获取"}</Button>
                     <Button type="button" variant={itemEditor.value.icon.startsWith("data:") ? "secondary" : "outline"} size="sm" disabled={iconBusy} onClick={() => iconInputRef.current?.click()}><ImagePlus />{iconBusy ? "正在处理…" : "本地图片"}</Button>
                     <input ref={iconInputRef} type="file" accept="image/*" className="hidden" onChange={(event) => void chooseLocalIcon(event.target.files?.[0])} />
                   </div>
-                  <input className="app-interactive mt-2 w-full rounded-lg border bg-background px-3 py-2 text-sm" placeholder={itemEditor.value.icon.startsWith("data:") ? "已使用本地图片；输入地址可替换" : "或粘贴自定义图片 URL"} value={itemEditor.value.icon.startsWith("data:") ? "" : itemEditor.value.icon} onChange={(event) => updateItem({ icon: event.target.value })} />
+                  <input className="app-interactive mt-2 w-full rounded-lg border bg-background px-3 py-2 text-sm" placeholder={itemEditor.value.icon.startsWith("data:") ? "已使用本地图片；输入地址可替换" : itemEditor.value.icon.startsWith("quick-icon:") ? "已缓存到配置目录；输入地址可替换" : "或粘贴自定义图片 URL"} value={itemEditor.value.icon.startsWith("data:") || itemEditor.value.icon.startsWith("quick-icon:") ? "" : itemEditor.value.icon} onChange={(event) => updateItem({ icon: event.target.value })} />
                 </div>
               </section>
             </div>

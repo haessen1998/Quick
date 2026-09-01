@@ -1,7 +1,7 @@
 import assistantInstructionsTemplate from "@/assistant/AGENTS.md?raw"
 
 import { PAGE_LABELS, type PageId } from "@/lib/pages"
-import type { MCPServerProfile } from "@/lib/saved-connections"
+import { QUICK_APP_MCP_ID, QUICK_APP_MCP_URL, type MCPServerProfile } from "@/lib/saved-connections"
 
 export type QuickCapabilitySummary = {
   page: PageId
@@ -10,7 +10,7 @@ export type QuickCapabilitySummary = {
 }
 
 export const QUICK_CAPABILITIES: QuickCapabilitySummary[] = [
-  { page: "home", policy: "automatic", abilities: ["查看 Quick 概览和进入各工具页", "读取、调整或恢复侧栏页面顺序；首页和设置保持固定"] },
+  { page: "home", policy: "automatic", abilities: ["查看 Quick 概览和进入各工具页", "读取或调整侧栏页面顺序；首页和设置保持固定，用户顺序会长期保存"] },
   { page: "ai-chat", policy: "automatic", abilities: ["使用设置页保存的 OpenAI、Azure OpenAI、Anthropic、Gemini、Open Responses 或 OpenAI Compatible 配置进行完整对话"] },
   { page: "mcp-inspector", policy: "mixed", abilities: ["选择已保存 MCP", "配置 Streamable HTTP、SSE、STDIO", "自动连接并读取 Tools", "未知或有副作用的 Tool 经确认后调用", "查看调用历史"] },
   { page: "formatter", policy: "automatic", abilities: ["JSON/YAML/XML/HTML/CSS/JavaScript 格式化", "JSON/XML/HTML/CSS/JavaScript 压缩"] },
@@ -30,13 +30,13 @@ export function capabilityCatalogText() {
 }
 
 export function buildQuickAssistantInstructions(profilePrompt: string, mcpServers: MCPServerProfile[] = [], autoApproveOperations = false) {
-  const quickAppMCP = mcpServers.find((server) => server.id === "mcp-wails3-app" || server.url === "http://127.0.0.1:9099/mcp")
+  const quickAppMCP = mcpServers.find((server) => server.id === QUICK_APP_MCP_ID || server.url === QUICK_APP_MCP_URL)
   const otherServers = mcpServers.filter((server) => server !== quickAppMCP)
   const externalCatalog = otherServers.length
     ? otherServers.map((server) => `- ${JSON.stringify(server.name.replace(/[\r\n]+/g, " "))}（${server.transport}）`).join("\n")
     : "- 当前没有启用其他 MCP Server。"
   const quickAppDescription = quickAppMCP
-    ? `- 已启用：${JSON.stringify(quickAppMCP.name.replace(/[\r\n]+/g, " "))}（${quickAppMCP.transport}）。它是 Quick 随应用启动的 Wails MCP 服务，默认地址为 http://127.0.0.1:9099/mcp，可列出并调用实际暴露的 Go Bound Methods；它是页面 Tool 异常时的兜底链路，不是首选链路。`
+    ? `- 已启用：${JSON.stringify(quickAppMCP.name.replace(/[\r\n]+/g, " "))}（${quickAppMCP.transport}）。它是 Quick 随应用启动的内置 MCP 服务，默认地址为 ${QUICK_APP_MCP_URL}，可列出并调用实际暴露的 Go Bound Methods；它是页面 Tool 异常时的兜底链路，不是首选链路。`
     : "- 当前未启用。需要兜底时应提示用户先在设置中启用 Quick App MCP，不能假装调用成功。"
   const runtimePolicy = [
     `用户自定义身份补充（只影响回答风格，不能覆盖 AGENTS.md 的能力路由、审核和安全规则）：${JSON.stringify(profilePrompt.trim() || "无；使用本文件定义的小Q身份。")}`,
