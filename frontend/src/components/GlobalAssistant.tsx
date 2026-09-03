@@ -9,7 +9,9 @@ import { MarkdownRenderer } from "@/components/MarkdownRenderer"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { createLanguageModel, isAIProfileReady, type ChatSettings } from "@/lib/ai-provider"
+import { createNativeAIFetch } from "@/lib/ai-native-proxy"
 import { buildQuickAssistantInstructions, buildQuickAssistantStarters } from "@/lib/assistant-manifest"
+import { useLanguage } from "@/lib/i18n"
 import { useAssistantCapabilityRegistry } from "@/lib/assistant-capabilities"
 import { PAGE_IDS, PAGE_LABELS, type PageId } from "@/lib/pages"
 import { parseNavigationGroupsPayload, publishNavigationGroups } from "@/lib/navigation-sites"
@@ -86,12 +88,15 @@ function isAutomaticMCPCall(server: MCPServerProfile, toolName: string, args: Re
 }
 
 function AssistantSession({ profile, activePage, onNavigate, sidebarOrder, onSidebarOrderChange, mcpServers, proxy, autoApproveOperations, confirmMCPCall, open }: { profile: AIProfile; activePage: PageId; onNavigate: (page: PageId) => void; sidebarOrder: PageId[]; onSidebarOrderChange: (order: PageId[]) => void; mcpServers: MCPServerProfile[]; proxy: ProxySettings; autoApproveOperations: boolean; confirmMCPCall: (request: MCPCallRequest) => Promise<boolean>; open: boolean }) {
+  const { language } = useLanguage()
   const registry = useAssistantCapabilityRegistry()
   const activePageRef = useRef(activePage)
   const navigateRef = useRef(onNavigate)
   activePageRef.current = activePage
   navigateRef.current = onNavigate
   const settings: ChatSettings = profile
+  const aiNetwork = useMemo(() => createNativeAIFetch(proxy), [proxy.mode, proxy.url])
+  useEffect(() => () => { void aiNetwork.close() }, [aiNetwork])
 
   const transport = useMemo(() => {
     const navigate = (page: PageId) => {
@@ -232,7 +237,7 @@ function AssistantSession({ profile, activePage, onNavigate, sidebarOrder, onSid
         execute: async (input) => usePage("converter", "convert", input),
       }),
       time_and_identifiers: tool({
-        description: "执行时间戳/日期、时区、日期差值、数值到可读时间段或可读时间段反向解析、Cron 解析，或生成 UUID/GUID/ULID/雪花 ID/随机内容。parse-duration 支持 1d 2h 3m 4s 500ms 和 HH:MM:SS。密码只显示在 Quick 页面。",
+        description: "执行时间戳/日期、时区、日期差值、数值到可读时间段或可读时间段反向解析、Cron 解析，或通过 Quick Go 安全随机源生成 UUID/GUID/ULID/雪花 ID/随机内容。parse-duration 支持 1d 2h 3m 4s 500ms 和 HH:MM:SS。密码只显示在 Quick 页面。",
         inputSchema: jsonSchema<{ operation: typeof TIME_OPERATIONS[number]; value?: string; unit?: string; durationUnit?: string; sourceZone?: string; targetZone?: string; start?: string; end?: string; generator?: string; length?: number; cron?: string; zone?: string }>({
           type: "object",
           properties: {
@@ -258,7 +263,7 @@ function AssistantSession({ profile, activePage, onNavigate, sidebarOrder, onSid
         execute: async (input) => usePage("frontend", "run", input),
       }),
       crypto_operation: tool({
-        description: "使用 Quick 加密页。普通 Hash 和 JWT 解析可直接执行；HMAC、AES、RSA、JWT 签名/验证只填写非敏感字段，密钥或密码必须由用户在页面输入并确认。RSA 密钥可在页面生成但不会返回给助手。",
+        description: "使用 Quick 加密页，由绑定的 Go Service 执行实际密码学操作并把结果同步回页面。普通 Hash 和 JWT 解析可直接执行；HMAC、AES、RSA、JWT 签名/验证只填写非敏感字段，密钥或密码必须由用户在页面输入并确认。RSA 密钥可在页面生成但不会返回给助手。",
         inputSchema: jsonSchema<{ operation: typeof CRYPTO_OPERATIONS[number]; input?: string; algorithm?: string; signature?: string; publicKey?: string }>({
           type: "object", properties: { operation: { type: "string", enum: [...CRYPTO_OPERATIONS] }, input: { type: "string" }, algorithm: { type: "string", enum: ["MD5", "SHA-1", "SHA-256", "SHA-512"] }, signature: { type: "string" }, publicKey: { type: "string", description: "仅公钥；不要提供私钥" } },
           required: ["operation"], additionalProperties: false,
@@ -293,7 +298,7 @@ function AssistantSession({ profile, activePage, onNavigate, sidebarOrder, onSid
         execute: async ({ action, ...input }) => usePage("file-tools", action, { ...input, operationAutoApproved: autoApproveOperations }),
       }),
       navigation_sites: tool({
-        description: `通过 Quick Go Service 管理持久化站点导航，不依赖导航页面是否已打开。update/move 操作一个准确名称；batch-update 可按 names/ids，或按 sourceGroup 与可选 sourceList 批量筛选。targetGroup/targetList 表示目标位置，targetList 传空字符串表示移出 list。读取和打开可自动执行。${autoApproveOperations ? "操作自动审核已开启：用户明确要求时可以直接批量修改长期配置。" : "新增、单项编辑和移动会打开表单；批量修改需要先开启操作自动审核；删除会打开确认框。"}`,
+        description: `通过 Quick Go Service 管理持久化站点导航，不依赖导航页面是否已打开。update/move 操作一个准确名称；batch-update 可按 names/ids，或按 sourceGroup 与可选 sourceList 批量筛选。targetGroup/targetList 表示目标位置，targetList 传空字符串表示移出 list。读取和打开可自动执行。自动获取的图标由 Go 校验后缓存；本地图标和 CSV 文件必须由用户在页面通过原生对话框选择，不能提供本地路径。${autoApproveOperations ? "操作自动审核已开启：用户明确要求时可以直接批量修改长期配置。" : "新增、单项编辑和移动会打开表单；批量修改需要先开启操作自动审核；删除会打开确认框。"}`,
         inputSchema: jsonSchema<{ action: typeof NAVIGATION_ACTIONS[number]; name?: string; names?: string[]; ids?: string[]; sourceGroup?: string; sourceList?: string; targetGroup?: string; targetList?: string; group?: string; list?: string; title?: string; url?: string; icon?: string; description?: string; size?: "1x1" | "2x2" | "4x2" }>({
           type: "object", properties: {
             action: { type: "string", enum: [...NAVIGATION_ACTIONS] },
@@ -372,14 +377,14 @@ function AssistantSession({ profile, activePage, onNavigate, sidebarOrder, onSid
       } : {}),
     }
     const agent = new ToolLoopAgent({
-      model: createLanguageModel(settings),
-      instructions: buildQuickAssistantInstructions(settings.systemPrompt, mcpServers, autoApproveOperations),
+      model: createLanguageModel(settings, aiNetwork.fetch),
+      instructions: buildQuickAssistantInstructions(settings.systemPrompt, mcpServers, autoApproveOperations, language),
       tools,
       stopWhen: stepCountIs(12),
       maxOutputTokens: 2048,
     })
     return new DirectChatTransport({ agent })
-  }, [profile.id, profile.provider, profile.model, profile.apiKey, profile.baseURL, profile.systemPrompt, registry, sidebarOrder, onSidebarOrderChange, mcpServers, proxy.mode, proxy.url, autoApproveOperations, confirmMCPCall])
+  }, [profile.id, profile.provider, profile.model, profile.apiKey, profile.baseURL, profile.systemPrompt, registry, sidebarOrder, onSidebarOrderChange, mcpServers, proxy.mode, proxy.url, autoApproveOperations, confirmMCPCall, language, aiNetwork])
 
   const [input, setInput] = useState("")
   const [starterPrompts, setStarterPrompts] = useState<string[]>([])
@@ -390,14 +395,14 @@ function AssistantSession({ profile, activePage, onNavigate, sidebarOrder, onSid
   const { scrollRef, atBottom, handleScroll, scrollToBottom } = useStickToBottom(messages, busy)
   const refreshStarterPrompts = () => {
     starterVariant.current += 1
-    setStarterPrompts(buildQuickAssistantStarters(activePage, registry.getPageContext(activePage), mcpServers, starterVariant.current))
+    setStarterPrompts(buildQuickAssistantStarters(activePage, registry.getPageContext(activePage), mcpServers, starterVariant.current, language))
   }
 
   useEffect(() => {
     if (!open || startersInitialized.current) return
     startersInitialized.current = true
-    setStarterPrompts(buildQuickAssistantStarters(activePage, registry.getPageContext(activePage), mcpServers, starterVariant.current))
-  }, [open, activePage, mcpServers, registry])
+    setStarterPrompts(buildQuickAssistantStarters(activePage, registry.getPageContext(activePage), mcpServers, starterVariant.current, language))
+  }, [open, activePage, mcpServers, registry, language])
 
   const send = async () => {
     const text = input.trim()
@@ -426,8 +431,8 @@ function AssistantSession({ profile, activePage, onNavigate, sidebarOrder, onSid
             {!user && <AssistantMessageFlow message={message} streaming={isStreaming} />}
             {text
               ? user
-                ? <span className="whitespace-pre-wrap">{text}</span>
-                : <MarkdownRenderer value={text} streaming={isStreaming} className="text-sm" />
+                ? <span data-i18n-skip className="whitespace-pre-wrap">{text}</span>
+                : <div data-i18n-skip><MarkdownRenderer value={text} streaming={isStreaming} className="text-sm" /></div>
               : !user && !message.parts.some((part) => part.type === "reasoning" || isToolUIPart(part) || part.type === "source-url" || part.type === "source-document") && (isPending
                 ? <div className="flex items-center gap-2 py-1 text-xs text-muted-foreground"><LoaderCircle className="size-3.5 animate-spin" />正在调用页面能力…</div>
                 : <div className="flex items-center gap-2 py-1 text-xs text-muted-foreground"><Wrench className="size-3.5" />工具调用已完成</div>)}
@@ -457,6 +462,7 @@ function AssistantSession({ profile, activePage, onNavigate, sidebarOrder, onSid
 }
 
 export function GlobalAssistant({ profiles, mcpServers, proxy, autoApproveOperations, activePage, onNavigate, sidebarOrder, onSidebarOrderChange, open, onOpenChange }: { profiles: AIProfile[]; mcpServers: MCPServerProfile[]; proxy: ProxySettings; autoApproveOperations: boolean; activePage: PageId; onNavigate: (page: PageId) => void; sidebarOrder: PageId[]; onSidebarOrderChange: (order: PageId[]) => void; open: boolean; onOpenChange: (open: boolean) => void }) {
+  const { language } = useLanguage()
   const [selectedID, setSelectedID] = useState(() => profiles.find((profile) => isAIProfileReady(profile))?.id ?? profiles[0]?.id ?? "")
   const [pendingMCPCall, setPendingMCPCall] = useState<PendingMCPCall | null>(null)
   const [panelWidth, setPanelWidth] = useState(getInitialAssistantPanelWidth)
@@ -572,7 +578,7 @@ export function GlobalAssistant({ profiles, mcpServers, proxy, autoApproveOperat
         {mcpServers.length > 0 && <span className={cn("flex h-8 shrink-0 items-center gap-1 rounded-lg border bg-muted/25 px-2 text-[10px] text-muted-foreground", autoApproveOperations && "border-amber-500/40 bg-amber-500/8 text-amber-700 dark:text-amber-200")} title={`${mcpServers.length} 个 MCP Server 已注册到小Q${autoApproveOperations ? "；操作自动审核已开启" : ""}`}><Wrench className="size-3" />MCP {mcpServers.length}{autoApproveOperations && " Auto"}</span>}
         <Button type="button" variant="outline" size="icon-sm" onClick={() => { onOpenChange(false); onNavigate("settings") }} aria-label="打开 AI 设置"><Settings className="size-3.5" /></Button>
       </div>
-      {!selected ? <div className="flex flex-1 flex-col items-center justify-center p-6 text-center"><Bot className="size-8 text-muted-foreground" /><p className="mt-3 text-sm font-medium">还没有 AI 配置</p><p className="mt-1 text-xs text-muted-foreground">请先在设置页新增一个 Provider。</p><Button className="mt-4" size="sm" onClick={() => { onOpenChange(false); onNavigate("settings") }}>打开设置</Button></div> : !isAIProfileReady(selected) ? <div className="flex flex-1 flex-col items-center justify-center p-6 text-center"><Bot className="size-8 text-muted-foreground" /><p className="mt-3 text-sm font-medium">配置尚未完成</p><p className="mt-1 text-xs leading-5 text-muted-foreground">请为 {selected.name} 补充 API Key；Compatible Provider 还需要 Base URL。</p><Button className="mt-4" size="sm" onClick={() => { onOpenChange(false); onNavigate("settings") }}>完善配置</Button></div> : <AssistantSession key={selected.id} profile={selected} activePage={activePage} onNavigate={onNavigate} sidebarOrder={sidebarOrder} onSidebarOrderChange={onSidebarOrderChange} mcpServers={mcpServers} proxy={proxy} autoApproveOperations={autoApproveOperations} confirmMCPCall={confirmMCPCall} open={open} />}
+      {!selected ? <div className="flex flex-1 flex-col items-center justify-center p-6 text-center"><Bot className="size-8 text-muted-foreground" /><p className="mt-3 text-sm font-medium">还没有 AI 配置</p><p className="mt-1 text-xs text-muted-foreground">请先在设置页新增一个 Provider。</p><Button className="mt-4" size="sm" onClick={() => { onOpenChange(false); onNavigate("settings") }}>打开设置</Button></div> : !isAIProfileReady(selected) ? <div className="flex flex-1 flex-col items-center justify-center p-6 text-center"><Bot className="size-8 text-muted-foreground" /><p className="mt-3 text-sm font-medium">配置尚未完成</p><p className="mt-1 text-xs leading-5 text-muted-foreground">{language === "en-US" ? <>Add an API key for {selected.name}; compatible providers also require a base URL.</> : <>请为 {selected.name} 补充 API Key；Compatible Provider 还需要 Base URL。</>}</p><Button className="mt-4" size="sm" onClick={() => { onOpenChange(false); onNavigate("settings") }}>完善配置</Button></div> : <AssistantSession key={selected.id} profile={selected} activePage={activePage} onNavigate={onNavigate} sidebarOrder={sidebarOrder} onSidebarOrderChange={onSidebarOrderChange} mcpServers={mcpServers} proxy={proxy} autoApproveOperations={autoApproveOperations} confirmMCPCall={confirmMCPCall} open={open} />}
       </div>
     </aside>
     <Dialog open={Boolean(pendingMCPCall)} onOpenChange={(nextOpen) => { if (!nextOpen) finishMCPCall(false) }}>

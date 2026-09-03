@@ -1,6 +1,6 @@
 import * as ConfigService from "@/../bindings/github.com/haessen1998/Quick/internal/config/configservice"
 
-export type PersistentConfigKey = "ai-profiles" | "mcp-servers" | "navigation-groups" | "sidebar-order"
+export type PersistentConfigKey = "app-language" | "ai-profiles" | "mcp-servers" | "navigation-groups" | "sidebar-order"
 
 export async function loadPersistentConfig(key: PersistentConfigKey) {
   return ConfigService.Load(key)

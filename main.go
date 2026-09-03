@@ -5,7 +5,9 @@ import (
 	"log"
 	"os"
 
+	quickai "github.com/haessen1998/Quick/internal/ai"
 	"github.com/haessen1998/Quick/internal/config"
+	quickcrypto "github.com/haessen1998/Quick/internal/crypto"
 	"github.com/haessen1998/Quick/internal/files"
 	quickmcp "github.com/haessen1998/Quick/internal/mcp"
 	"github.com/haessen1998/Quick/internal/navigation"
@@ -48,6 +50,8 @@ func main() {
 		Name:        "Quick",
 		Description: "A local-first cross-platform developer toolkit",
 		Services: []application.Service{
+			application.NewService(&quickai.AIProxyService{}),
+			application.NewService(&quickcrypto.CryptoService{}),
 			application.NewService(&network.NetworkService{}),
 			application.NewService(&quickmcp.MCPProxyService{}),
 			application.NewService(&quickmcp.MCPStdioService{}),
@@ -60,6 +64,7 @@ func main() {
 			ApplicationShouldTerminateAfterLastWindowClosed: true,
 		},
 	})
+	app.RegisterService(application.NewService(files.NewFileDialogService(app)))
 	app.RegisterService(application.NewService(files.NewFileRenameService(app)))
 	app.RegisterService(application.NewService(navigation.NewNavigationService(configService, app)))
 

@@ -150,5 +150,20 @@ jobs:
           if ($LASTEXITCODE -eq 0) {
             gh release upload "${{ github.ref_name }}" $files --clobber
           } else {
-            gh release create "${{ github.ref_name }}" $files --verify-tag --generate-notes --title "Quick ${{ github.ref_name }}"
+            $releaseArgs = @(
+              "${{ github.ref_name }}"
+              $files
+              "--verify-tag"
+              "--generate-notes"
+              "--title"
+              "Quick ${{ github.ref_name }}"
+            )
+            $notesPath = ".github\release-notes\${{ github.ref_name }}.md"
+            if (Test-Path -LiteralPath $notesPath) {
+              $releaseArgs += @("--notes", (Get-Content -Raw -LiteralPath $notesPath))
+            }
+            gh release create @releaseArgs
+            if ($LASTEXITCODE -ne 0) {
+              throw "Failed to create GitHub Release ${{ github.ref_name }}"
+            }
           }

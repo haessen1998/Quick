@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Browser, Events } from "@wailsio/runtime"
 import * as NavigationService from "@/../bindings/github.com/haessen1998/Quick/internal/navigation/navigationservice"
 import { DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core"
@@ -70,34 +70,6 @@ function SiteIcon({ item, className }: { item: NavigationItem; className?: strin
   return <img src={resolvedSource} alt="" className={cn("size-full object-cover", className)} onError={() => setFailed(true)} />
 }
 
-async function localIconDataURL(file: File) {
-  if (!file.type.startsWith("image/")) throw new Error("请选择图片文件")
-  if (file.size > 5 * 1024 * 1024) throw new Error("图片不能超过 5 MB")
-  const source = await new Promise<string>((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(String(reader.result))
-    reader.onerror = () => reject(new Error("读取本地图片失败"))
-    reader.readAsDataURL(file)
-  })
-  const image = await new Promise<HTMLImageElement>((resolve, reject) => {
-    const element = new Image()
-    element.onload = () => resolve(element)
-    element.onerror = () => reject(new Error("无法解析这张图片"))
-    element.src = source
-  })
-  const edge = 256
-  const scale = Math.min(1, edge / Math.max(image.naturalWidth, image.naturalHeight))
-  const width = Math.max(1, Math.round(image.naturalWidth * scale))
-  const height = Math.max(1, Math.round(image.naturalHeight * scale))
-  const canvas = document.createElement("canvas")
-  canvas.width = width
-  canvas.height = height
-  const context = canvas.getContext("2d")
-  if (!context) throw new Error("当前环境无法处理图片")
-  context.drawImage(image, 0, 0, width, height)
-  return canvas.toDataURL("image/webp", 0.9)
-}
-
 async function discoverSiteIcon(url: string) {
   return NavigationService.DiscoverSiteIcon(normalizeNavigationURL(url))
 }
@@ -132,7 +104,6 @@ export default function NavigationPage() {
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null)
   const [persistentConfigReady, setPersistentConfigReady] = useState(false)
   const [iconBusy, setIconBusy] = useState(false)
-  const iconInputRef = useRef<HTMLInputElement>(null)
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }))
 
   useEffect(() => {
@@ -272,17 +243,17 @@ export default function NavigationPage() {
     setItemEditor((current) => current ? { ...current, value: { ...current.value, ...changes } } : current)
   }
 
-  const chooseLocalIcon = async (file: File | undefined) => {
-    if (!file) return
+  const chooseLocalIcon = async () => {
     setIconBusy(true)
     try {
-      updateItem({ icon: await localIconDataURL(file) })
-      toast.success("已使用本地图片，并压缩到导航配置中")
+      const icon = await NavigationService.ImportLocalIcon()
+      if (!icon) return
+      updateItem({ icon })
+      toast.success("已验证并缓存本地图片")
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error))
     } finally {
       setIconBusy(false)
-      if (iconInputRef.current) iconInputRef.current.value = ""
     }
   }
 
@@ -517,8 +488,7 @@ export default function NavigationPage() {
                   <span className="mb-1.5 block text-xs font-medium">站点图标</span>
                   <div className="flex flex-wrap gap-2">
                     <Button type="button" variant={itemEditor.value.icon.startsWith("quick-icon:") ? "secondary" : "outline"} size="sm" disabled={iconBusy} onClick={() => void discoverEditorIcon()}><Globe2 />{iconBusy ? "正在获取…" : "自动获取"}</Button>
-                    <Button type="button" variant={itemEditor.value.icon.startsWith("data:") ? "secondary" : "outline"} size="sm" disabled={iconBusy} onClick={() => iconInputRef.current?.click()}><ImagePlus />{iconBusy ? "正在处理…" : "本地图片"}</Button>
-                    <input ref={iconInputRef} type="file" accept="image/*" className="hidden" onChange={(event) => void chooseLocalIcon(event.target.files?.[0])} />
+                    <Button type="button" variant={itemEditor.value.icon.startsWith("quick-icon:local-") ? "secondary" : "outline"} size="sm" disabled={iconBusy} onClick={() => void chooseLocalIcon()}><ImagePlus />{iconBusy ? "正在处理…" : "本地图片"}</Button>
                   </div>
                   <input className="app-interactive mt-2 w-full rounded-lg border bg-background px-3 py-2 text-sm" placeholder={itemEditor.value.icon.startsWith("data:") ? "已使用本地图片；输入地址可替换" : itemEditor.value.icon.startsWith("quick-icon:") ? "已缓存到配置目录；输入地址可替换" : "或粘贴自定义图片 URL"} value={itemEditor.value.icon.startsWith("data:") || itemEditor.value.icon.startsWith("quick-icon:") ? "" : itemEditor.value.icon} onChange={(event) => updateItem({ icon: event.target.value })} />
                 </div>

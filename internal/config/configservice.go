@@ -26,6 +26,7 @@ const (
 var configEncryptionKey = sha256.Sum256([]byte(configEncryptionPassword))
 
 var persistentConfigKeys = map[string]struct{}{
+	"app-language":      {},
 	"ai-profiles":       {},
 	"mcp-servers":       {},
 	"navigation-groups": {},

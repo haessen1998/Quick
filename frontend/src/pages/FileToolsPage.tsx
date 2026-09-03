@@ -6,6 +6,8 @@ import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { useAssistantCapability } from "@/lib/assistant-capabilities"
+import { writeClipboard } from "@/lib/clipboard"
+import { useLanguage } from "@/lib/i18n"
 import { ChooseFolder, ExecuteRename, InspectFiles, ListFiles, PreviewRename, UndoLastRename } from "../../bindings/github.com/haessen1998/Quick/internal/files/filerenameservice"
 import type { FileInspection, RenameFileInfo, RenamePlanItem, RenamePreview, RenameRequest } from "../../bindings/github.com/haessen1998/Quick/internal/files/models"
 
@@ -46,6 +48,7 @@ function remapSourcePaths(paths: string[], items: RenamePlanItem[] | null) {
 }
 
 export default function FileToolsPage() {
+  const { language, t } = useLanguage()
   const [sourcePaths, setSourcePaths] = useState<string[]>([])
   const [files, setFiles] = useState<RenameFileInfo[]>([])
   const [rules, setRules] = useState<RenameRules>(initialRules)
@@ -191,7 +194,7 @@ export default function FileToolsPage() {
     },
   })
 
-  const rootLabel = useMemo(() => sourcePaths.length === 1 ? sourcePaths[0] : sourcePaths.length ? `已选择 ${sourcePaths.length} 个路径` : "尚未选择文件", [sourcePaths])
+  const rootLabel = useMemo(() => sourcePaths.length === 1 ? sourcePaths[0] : sourcePaths.length ? (language === "en-US" ? `${sourcePaths.length} paths selected` : `已选择 ${sourcePaths.length} 个路径`) : t("尚未选择文件"), [language, sourcePaths, t])
 
   return (
     <section className="page-shell" data-wails-no-drag>
@@ -236,7 +239,7 @@ export default function FileToolsPage() {
 
           <article className="flex min-h-[42rem] min-w-0 flex-col overflow-hidden rounded-xl border bg-card shadow-sm">
             <div className="flex flex-wrap items-center gap-2 border-b px-4 py-3">
-              <div className="mr-auto"><div className="font-medium">3. 预览与执行</div><div className="mt-0.5 text-xs text-muted-foreground">共 {files.length} 个文件{preview ? `，匹配 ${preview.matched}，待执行 ${preview.ready}` : ""}</div></div>
+              <div className="mr-auto"><div className="font-medium">3. 预览与执行</div><div className="mt-0.5 text-xs text-muted-foreground">{language === "en-US" ? `${files.length} files${preview ? `, ${preview.matched} matched, ${preview.ready} ready` : ""}` : `共 ${files.length} 个文件${preview ? `，匹配 ${preview.matched}，待执行 ${preview.ready}` : ""}`}</div></div>
               <Button variant="outline" size="sm" onClick={undo} disabled={busy || !canUndo}><RotateCcw />撤销上次</Button>
               <Button variant="outline" size="sm" onClick={previewClick} disabled={busy || !sourcePaths.length}><FilePenLine />生成预览</Button>
               <Button size="sm" onClick={() => setConfirmOpen(true)} disabled={busy || !preview?.ready || Boolean(preview?.conflicts)}><CheckCircle2 />执行重命名</Button>
@@ -251,7 +254,7 @@ export default function FileToolsPage() {
         </div>
         <article className="mt-5 overflow-hidden rounded-xl border bg-card shadow-sm">
           <div className="flex flex-wrap items-center gap-2 border-b px-4 py-3"><div className="mr-auto"><div className="flex items-center gap-2 font-medium"><FileSearch className="size-4" />文件摘要与元信息</div><div className="mt-0.5 text-xs text-muted-foreground">只读检查，支持流式摘要；文本编码分析限制在 2 MiB 内。</div></div><select className="app-interactive rounded-lg border bg-background px-3 py-2 text-sm" value={digestAlgorithm} onChange={(event) => setDigestAlgorithm(event.target.value)}><option>SHA-256</option><option>SHA-512</option><option>MD5</option></select><Button size="sm" variant="outline" disabled={busy || !sourcePaths.length} onClick={() => void inspectFiles().catch((error) => toast.error("文件检查失败", { description: error instanceof Error ? error.message : String(error) }))}><FileSearch />开始检查</Button></div>
-          <div className="max-h-96 overflow-auto"><table className="w-full min-w-[62rem] text-left text-xs"><thead className="sticky top-0 bg-card shadow-[0_1px_0_var(--border)]"><tr><th className="px-4 py-3">文件</th><th className="px-3 py-3">大小</th><th className="px-3 py-3">类型 / 文本</th><th className="px-3 py-3">尺寸</th><th className="px-3 py-3">{digestAlgorithm}</th><th className="w-12"></th></tr></thead><tbody>{inspections.length ? inspections.map((item) => <tr key={item.path} className="border-t"><td className="max-w-56 truncate px-4 py-3" title={item.path}>{item.name}</td><td className="px-3 py-3">{new Intl.NumberFormat("zh-CN", { style: "unit", unit: "byte", unitDisplay: "narrow" }).format(item.size)}</td><td className="px-3 py-3">{item.mime || "未知"}{item.utf8 ? ` · UTF-8${item.lineEnding ? `/${item.lineEnding}` : ""}` : ""}</td><td className="px-3 py-3">{item.width && item.height ? `${item.width} × ${item.height}` : "—"}</td><td className="max-w-80 truncate px-3 py-3 font-mono" title={item.digest}>{item.digest}</td><td><Button variant="ghost" size="icon-xs" onClick={async () => { await navigator.clipboard.writeText(item.digest); toast.success("摘要已复制") }}><Copy /></Button></td></tr>) : <tr><td colSpan={6} className="p-10 text-center text-muted-foreground">选择文件后开始检查。</td></tr>}</tbody></table></div>
+          <div className="max-h-96 overflow-auto"><table className="w-full min-w-[62rem] text-left text-xs"><thead className="sticky top-0 bg-card shadow-[0_1px_0_var(--border)]"><tr><th className="px-4 py-3">文件</th><th className="px-3 py-3">大小</th><th className="px-3 py-3">类型 / 文本</th><th className="px-3 py-3">尺寸</th><th className="px-3 py-3">{digestAlgorithm}</th><th className="w-12"></th></tr></thead><tbody>{inspections.length ? inspections.map((item) => <tr key={item.path} className="border-t"><td className="max-w-56 truncate px-4 py-3" title={item.path}>{item.name}</td><td className="px-3 py-3">{new Intl.NumberFormat("zh-CN", { style: "unit", unit: "byte", unitDisplay: "narrow" }).format(item.size)}</td><td className="px-3 py-3">{item.mime || "未知"}{item.utf8 ? ` · UTF-8${item.lineEnding ? `/${item.lineEnding}` : ""}` : ""}</td><td className="px-3 py-3">{item.width && item.height ? `${item.width} × ${item.height}` : "—"}</td><td className="max-w-80 truncate px-3 py-3 font-mono" title={item.digest}>{item.digest}</td><td><Button variant="ghost" size="icon-xs" onClick={async () => { await writeClipboard(item.digest); toast.success("摘要已复制") }}><Copy /></Button></td></tr>) : <tr><td colSpan={6} className="p-10 text-center text-muted-foreground">选择文件后开始检查。</td></tr>}</tbody></table></div>
         </article>
       </div>
 

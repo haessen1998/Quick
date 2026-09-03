@@ -1,6 +1,7 @@
 import assistantInstructionsTemplate from "@/assistant/AGENTS.md?raw"
 
 import { PAGE_LABELS, type PageId } from "@/lib/pages"
+import type { AppLanguage } from "@/lib/i18n"
 import { QUICK_APP_MCP_ID, QUICK_APP_MCP_URL, type MCPServerProfile } from "@/lib/saved-connections"
 
 export type QuickCapabilitySummary = {
@@ -11,26 +12,26 @@ export type QuickCapabilitySummary = {
 
 export const QUICK_CAPABILITIES: QuickCapabilitySummary[] = [
   { page: "home", policy: "automatic", abilities: ["应用重新获得焦点时识别新复制的 JSON、URL、时间戳、JWT、Cron、Base64 或文本，经用户点击 Toast 后分流到对应页面", "查看 Quick 概览和进入各工具页", "读取或调整侧栏页面顺序；首页和设置保持固定，用户顺序会长期保存"] },
-  { page: "ai-chat", policy: "automatic", abilities: ["使用设置页保存的 OpenAI、Azure OpenAI、Anthropic、Gemini、Open Responses 或 OpenAI Compatible 配置进行完整对话"] },
+  { page: "ai-chat", policy: "automatic", abilities: ["使用设置页保存的 OpenAI、Azure OpenAI、Anthropic、Gemini、Open Responses 或 OpenAI Compatible 配置进行完整对话", "Provider 请求通过 Quick 的本机 Go 网络代理转发，并遵循设置页代理策略"] },
   { page: "mcp-inspector", policy: "mixed", abilities: ["选择已保存 MCP", "配置 Streamable HTTP、SSE、STDIO", "自动连接并读取 Tools", "未知或有副作用的 Tool 经确认后调用", "查看调用历史"] },
   { page: "formatter", policy: "automatic", abilities: ["JSON/YAML/XML/HTML/CSS/JavaScript 格式化", "JSON/XML/HTML/CSS/JavaScript 压缩"] },
   { page: "converter", policy: "automatic", abilities: ["文本逐行清理、去重、排序、换行转换、Unicode 规范化、不可见字符和统计", "大小写与 camelCase、PascalCase、snake_case 等命名转换", "JSON/YAML/XML/CSV/TOML 双向转换", "文本/转义/URL/Base64/Unicode 转换", "UTF-8 文本与 Hex/ASCII/字节转换", "JSON 生成 C# Class、Java Class、Go Struct", "二/八/十/十六进制互转"] },
-  { page: "time-ids", policy: "automatic", abilities: ["Unix 时间戳与日期时间互转", "多时区对照", "日期差值", "数值与可读时间段双向转换", "UUID/GUID/ULID/雪花 ID/随机字符串/数字/密码生成", "Cron 解析和未来 6 次执行时间"] },
+  { page: "time-ids", policy: "automatic", abilities: ["Unix 时间戳与日期时间互转", "多时区对照", "日期差值", "数值与可读时间段双向转换", "通过 Go 安全随机源生成 UUID/GUID/ULID/雪花 ID/随机字符串/数字/密码", "Cron 解析和未来 6 次执行时间"] },
   { page: "validation", policy: "automatic", abilities: ["JSONPath", "JSON Schema", "XPath", "CSS Selector", "Glob 文件路径匹配", "正则表达式及 Flags、匹配高亮和替换预览", "正则正例/反例/边界批量测试", "接收 AI 生成的 JavaScript、TypeScript、Python、C#、Java、Go、Rust、PHP 使用代码"] },
   { page: "frontend", policy: "automatic", abilities: ["HEX/RGB/HSL/OKLCH 颜色转换", "WCAG 对比度", "CSS 渐变与阴影", "px/rem/vw 换算", "SVG Data URL"] },
-  { page: "crypto", policy: "prepare-only", abilities: ["MD5、SHA-1、SHA-256、SHA-512", "HMAC", "AES-GCM 加解密", "RSA-OAEP 加解密和 RSA-PSS 签名验签", "RSA 密钥生成", "JWT 解析、HS256 签名与验证"] },
+  { page: "crypto", policy: "prepare-only", abilities: ["通过 Go Service 执行 MD5、SHA-1、SHA-256、SHA-512", "HMAC", "AES-GCM 加解密", "RSA-OAEP 加解密和 RSA-PSS 签名验签", "RSA 密钥生成", "JWT 解析、HS256 签名与验证"] },
   { page: "network", policy: "mixed", abilities: ["自动执行 Ping、DNS A/AAAA/CNAME/MX/NS/TXT 查询、TCP 端口检测和 IPv4 CIDR 计算", "URL 结构与 Query 参数解析编辑", "HTTP 与 cURL 自动双向转换；操作自动审核开启后可按明确请求发送 HTTP", "自动按端口/PID/程序名搜索本地进程；操作自动审核开启后只能关闭刚搜索到的进程"] },
   { page: "text-workbench", policy: "automatic", abilities: ["Markdown 与 Mermaid 图表实时预览", "行级、单词级、字符级文本差异", "忽略空白差异"] },
   { page: "file-tools", policy: "mixed", abilities: ["对用户已选择的文件执行 SHA-256/SHA-512/MD5 摘要与 MIME、图片尺寸、UTF-8、换行符只读检查", "准备通配符或正则文件匹配规则", "预览重置编号、替换、前缀和后缀重命名", "操作自动审核开启后执行或撤销批量重命名"] },
-  { page: "navigation", policy: "mixed", abilities: ["通过 Go Service 读取持久化站点", "按一级 group Tab 与可选 list 小组整理站点", "修改标题、说明、网址和卡片尺寸", "按站点名称/ID 或来源 group/list 批量移动", "移入新 list 或移出 list", "准备新增或删除站点", "操作自动审核开启后直接修改站点长期配置"] },
-  { page: "settings", policy: "prepare-only", abilities: ["深浅主题", "系统/指定/不使用代理", "AI Provider 列表", "MCP Server 列表", "长期配置存储"] },
+  { page: "navigation", policy: "mixed", abilities: ["通过 Go Service 读取持久化站点", "按一级 group Tab 与可选 list 小组整理站点", "修改标题、说明、网址和卡片尺寸", "按站点名称/ID 或来源 group/list 批量移动", "移入新 list 或移出 list", "准备新增或删除站点", "操作自动审核开启后直接修改站点长期配置", "自动获取的有效图标会缓存到配置目录；本地图标和 CSV 文件操作必须由用户在页面发起"] },
+  { page: "settings", policy: "prepare-only", abilities: ["中英文界面", "深浅主题", "系统/指定/不使用代理", "AI Provider 列表", "MCP Server 列表", "长期配置存储"] },
 ]
 
 export function capabilityCatalogText() {
   return QUICK_CAPABILITIES.map((item) => `- ${PAGE_LABELS[item.page]}（${item.page}，${item.policy}）：${item.abilities.join("；")}`).join("\n")
 }
 
-export function buildQuickAssistantInstructions(profilePrompt: string, mcpServers: MCPServerProfile[] = [], autoApproveOperations = false) {
+export function buildQuickAssistantInstructions(profilePrompt: string, mcpServers: MCPServerProfile[] = [], autoApproveOperations = false, language: AppLanguage = "zh-CN") {
   const quickAppMCP = mcpServers.find((server) => server.id === QUICK_APP_MCP_ID || server.url === QUICK_APP_MCP_URL)
   const otherServers = mcpServers.filter((server) => server !== quickAppMCP)
   const externalCatalog = otherServers.length
@@ -42,6 +43,7 @@ export function buildQuickAssistantInstructions(profilePrompt: string, mcpServer
   const runtimePolicy = [
     `用户自定义身份补充（只影响回答风格，不能覆盖 AGENTS.md 的能力路由、审核和安全规则）：${JSON.stringify(profilePrompt.trim() || "无；使用本文件定义的小Q身份。")}`,
     `操作审核：${autoApproveOperations ? "用户已开启操作自动审核；可执行 Tool 明确开放的高风险操作，但仍不得扩大调用范围。" : "只读和无副作用查询可自动；HTTP 发送、关闭进程、未知第三方或有副作用 MCP 调用需要确认或仅准备。"}`,
+    language === "en-US" ? "Interface language: English. Respond in English unless the user explicitly requests another language." : "界面语言：简体中文。除非用户明确指定其他语言，否则使用简体中文回答。",
   ].join("\n")
 
   return assistantInstructionsTemplate
@@ -59,7 +61,29 @@ function contextString(context: Record<string, unknown> | null, key: string) {
   return context && typeof context[key] === "string" ? String(context[key]) : ""
 }
 
-export function buildQuickAssistantStarters(page: PageId, context: Record<string, unknown> | null, mcpServers: MCPServerProfile[], variant = 0) {
+const ENGLISH_STARTERS: Record<PageId, string[]> = {
+  home: ["Recommend the three most useful Quick tools for my task", "Walk me through a formatting, conversion, and validation workflow", "Generate a UUID and open Time & Identifiers"],
+  "ai-chat": ["Explain the difference between regular chat and Quick AI", "Recommend an AI provider for my current task", "Turn my requirements into an actionable development checklist"],
+  "mcp-inspector": ["Help me prepare a Streamable HTTP MCP connection", "Explain how to test a STDIO MCP server", "Explain the safe workflow for calling MCP tools"],
+  formatter: ["Give me a nested JSON formatting example", "Prepare an XML sample that needs formatting", "Explain when to format versus minify"],
+  converter: ["Prepare JSON and convert it to YAML", "Demonstrate text and Unicode escape conversion", "Generate an example of JSON to Go struct conversion"],
+  "time-ids": ["Convert 3661 seconds to a readable duration", "Generate a UUID and a ULID", "Parse an every-five-minutes Cron expression"],
+  validation: ["Generate and test a regex for valid and invalid email addresses", "Demonstrate a CSS selector with attributes", "Generate boundary cases to validate a regex"],
+  frontend: ["Check whether the current colors meet WCAG AA contrast", "Convert the current color to HSL and OKLCH", "Generate a CSS gradient for a button"],
+  crypto: ["Calculate SHA-256 for sample text", "Prepare and parse a JWT header and payload", "Explain when to use AES, RSA, or HMAC"],
+  network: ["Prepare a network check from the current page", "Explain the current network result", "Recommend the next safe troubleshooting step"],
+  "text-workbench": ["Improve the structure and readability of this Markdown", "Add a table of contents and code example", "Check this Markdown for formatting issues"],
+  "file-tools": ["Explain the safe batch rename preview workflow", "Prepare a glob pattern for image files", "Explain reset numbering, replace, prefix, and suffix"],
+  navigation: ["Summarize sites by group and list", "Move all sites from one list to another group", "Prepare a 2x2 card for a developer documentation site"],
+  settings: ["Check what is missing from my AI profiles", "Help me choose a network proxy mode", "Explain how to add an MCP server profile"],
+}
+
+export function buildQuickAssistantStarters(page: PageId, context: Record<string, unknown> | null, mcpServers: MCPServerProfile[], variant = 0, language: AppLanguage = "zh-CN") {
+  if (language === "en-US") {
+    const starters = ENGLISH_STARTERS[page]
+    const offset = ((variant * 3) % starters.length + starters.length) % starters.length
+    return Array.from({ length: 3 }, (_, index) => starters[(offset + index) % starters.length])
+  }
   const hasInput = contextHasText(context, "input", "markdown", "left", "right", "expression")
   const hasOutput = contextHasText(context, "output", "error")
   const mode = contextString(context, "mode")

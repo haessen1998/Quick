@@ -100,3 +100,14 @@ func TestConfigServiceStoresSidebarOrder(t *testing.T) {
 		t.Fatalf("Load(sidebar-order) = %q, %v", loaded, err)
 	}
 }
+
+func TestConfigServiceStoresAppLanguage(t *testing.T) {
+	service := &ConfigService{path: filepath.Join(t.TempDir(), "settings.json")}
+	if err := service.Save("app-language", `"en-US"`); err != nil {
+		t.Fatalf("Save(app-language) error = %v", err)
+	}
+	loaded, err := service.Load("app-language")
+	if err != nil || loaded != `"en-US"` {
+		t.Fatalf("Load(app-language) = %q, %v", loaded, err)
+	}
+}

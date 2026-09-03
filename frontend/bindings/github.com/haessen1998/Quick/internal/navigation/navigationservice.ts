@@ -43,3 +43,12 @@ export function GetCachedSiteIcon(reference: string): $CancellablePromise<string
 export function GetNavigationGroups(): $CancellablePromise<$models.NavigationGroup[] | null> {
     return $Call.ByID(935799654);
 }
+
+/**
+ * ImportLocalIcon opens a native file picker, validates the selected file by
+ * content instead of extension/MIME metadata, and stores it beside downloaded
+ * navigation icons. An empty result means the user cancelled the picker.
+ */
+export function ImportLocalIcon(): $CancellablePromise<string> {
+    return $Call.ByID(1609593025);
+}

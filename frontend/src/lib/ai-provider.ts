@@ -89,11 +89,12 @@ export function validateChatSettings(settings: ChatSettings) {
   return ""
 }
 
-export function createLanguageModel(settings: ChatSettings): LanguageModel {
+export function createLanguageModel(settings: ChatSettings, fetch?: typeof globalThis.fetch): LanguageModel {
   const model = settings.model.trim()
   const commonOptions = {
     apiKey: settings.apiKey.trim() || undefined,
     baseURL: settings.baseURL.trim() || undefined,
+    fetch,
   }
   switch (settings.provider) {
     case "openai":
@@ -105,6 +106,7 @@ export function createLanguageModel(settings: ChatSettings): LanguageModel {
         baseURL: settings.baseURL.trim() || undefined,
         apiVersion: settings.apiVersion.trim() || undefined,
         useDeploymentBasedUrls: settings.useDeploymentBasedUrls,
+        fetch,
       })(model)
     case "anthropic":
       return createAnthropic(commonOptions)(model)
@@ -115,12 +117,14 @@ export function createLanguageModel(settings: ChatSettings): LanguageModel {
         name: "quick-open-responses",
         url: settings.baseURL.trim(),
         apiKey: settings.apiKey.trim() || undefined,
+        fetch,
       })(model)
     case "compatible":
       return createOpenAICompatible({
         name: "quick-openai-compatible",
         baseURL: settings.baseURL.trim(),
         apiKey: settings.apiKey.trim() || undefined,
+        fetch,
       })(model)
   }
 }

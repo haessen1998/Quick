@@ -24,6 +24,7 @@ import type { CallToolResult, Tool, Transport } from "@modelcontextprotocol/clie
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
+import { writeClipboard } from "@/lib/clipboard"
 import { useAssistantCapability } from "@/lib/assistant-capabilities"
 import type { ProxySettings } from "@/lib/proxy"
 import { QUICK_APP_MCP_URL, createMCPServerProfile, type MCPConnectionMode, type MCPServerProfile, type MCPTransportType } from "@/lib/saved-connections"
@@ -721,7 +722,7 @@ export default function MCPInspectorPage({ proxy, profiles, onSaveProfile }: { p
                   </section>
 
                   <section className="min-w-0 p-4">
-                    <div className="mb-3 flex h-7 items-center justify-between gap-2"><h3 className="text-xs font-medium text-muted-foreground">调用结果</h3>{result && <Button type="button" variant="ghost" size="xs" onClick={async () => { await navigator.clipboard.writeText(JSON.stringify(result, null, 2)); toast.success("结果 JSON 已复制") }}><Copy className="size-3" />复制</Button>}</div>
+                    <div className="mb-3 flex h-7 items-center justify-between gap-2"><h3 className="text-xs font-medium text-muted-foreground">调用结果</h3>{result && <Button type="button" variant="ghost" size="xs" onClick={async () => { await writeClipboard(JSON.stringify(result, null, 2)); toast.success("结果 JSON 已复制") }}><Copy className="size-3" />复制</Button>}</div>
                     {result ? <ToolResultView result={result} /> : <div className="grid min-h-52 place-items-center rounded-lg bg-muted/25 p-5 text-center text-xs text-muted-foreground">调用完成后在这里显示结果</div>}
                   </section>
                 </div>

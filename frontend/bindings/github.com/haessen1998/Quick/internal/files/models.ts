@@ -67,3 +67,8 @@ export interface RenameRequest {
     "includeExtension": boolean;
     "sortBy": string;
 }
+
+export interface TextFileResult {
+    "path": string;
+    "content": string;
+}

@@ -196,10 +196,18 @@ jobs:
           if gh release view "$release_tag" >/dev/null 2>&1; then
             gh release upload "$release_tag" "${files[@]}" --clobber
           else
-            gh release create "$release_tag" "${files[@]}" \
-              --verify-tag \
-              --generate-notes \
+            release_args=(
+              "$release_tag"
+              "${files[@]}"
+              --verify-tag
+              --generate-notes
               --title "Quick $release_tag"
+            )
+            notes_file=".github/release-notes/$release_tag.md"
+            if [[ -f "$notes_file" ]]; then
+              release_args+=(--notes "$(cat "$notes_file")")
+            fi
+            gh release create "${release_args[@]}"
           fi
 
       - name: Remove temporary signing keychain

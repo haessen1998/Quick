@@ -4,6 +4,7 @@ import { getToolName, isToolUIPart, type UIMessage } from "ai"
 
 import { MarkdownRenderer } from "@/components/MarkdownRenderer"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
+import { writeClipboard } from "@/lib/clipboard"
 import { cn } from "@/lib/utils"
 
 const TOOL_LABELS: Record<string, string> = {
@@ -39,7 +40,7 @@ function CopyValueButton({ value }: { value: string }) {
       type="button"
       className="app-interactive flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
       onClick={async () => {
-        await navigator.clipboard.writeText(value)
+        await writeClipboard(value)
         setCopied(true)
         window.setTimeout(() => setCopied(false), 1200)
       }}

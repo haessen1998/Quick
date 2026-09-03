@@ -7,18 +7,19 @@ Quick 是一个基于 Wails 3、Go、React 和 shadcn/ui 构建的跨平台开�
 ## 功能
 
 - 字符串格式化：JSON、YAML、XML、HTML、CSS、JavaScript 的格式化与压缩。
-- 智能粘贴：应用重新获得焦点时识别新的剪贴板内容，经 Toast 确认后分流到对应工具；忽略时不读取到页面或保存。
-- 数据转换：文本与行清理、命名风格、JSON/YAML/XML/CSV/TOML、字符串编码、字节、代码模型和进制转换。
-- 时间与标识符：Unix 时间戳、多时区对照、日期差值、时间段双向转换、Cron、UUID、ULID、雪花 ID 和随机内容生成。
+- 智能粘贴：应用重新获得焦点时识别新的剪贴板内容，经 Toast 确认后分流到对应工具；复制输出优先使用桌面原生剪贴板。
+- 数据转换：文本与行清理、命名风格、JSON/YAML/XML/CSV/TOML、字符串编码、字节、代码模型和进制转换；CSV 导入导出使用原生文件对话框。
+- 时间与标识符：Unix 时间戳、多时区对照、日期差值、时间段双向转换、Cron，以及由 Go 安全随机源生成的 UUID、ULID、雪花 ID 和随机内容。
 - 校验工具：JSONPath、JSON Schema、XPath、CSS Selector、Glob，以及带匹配高亮、替换预览、批量测试和 AI 多语言代码生成的正则表达式。
-- 加密与验证：MD5、SHA、HMAC、AES-GCM、RSA 和 JWT。
-- 网络工具：Ping、DNS、TCP 端口、CIDR、URL/Query 编辑、HTTP/cURL 双向转换及本地进程查询。
+- 加密与验证：由本地 Go Service 执行 MD5、SHA、HMAC、AES-GCM、RSA 和 JWT 操作。
+- 网络工具：Ping、DNS、TCP 端口、CIDR、URL/Query 编辑、HTTP/cURL 双向转换及本地进程查询；关闭进程使用应用内确认对话框。
 - 文本工作台：Markdown 与 Mermaid 图表预览，以及行级、单词级和字符级文本差异比较。
 - 文件工具：文件摘要与元信息检查，以及带安全预览和撤销的批量重命名。
 - 颜色与前端：HEX/RGB/HSL/OKLCH、对比度、渐变、阴影、CSS 单位和 SVG Data URL。
-- 站点导航：按分组保存常用站点，支持 `1x1`、`2x2`、`4x2` 卡片和拖拽排序。
-- AI 对话与小Q：通过 AI SDK 接入 OpenAI、Azure OpenAI、Anthropic、Gemini、Open Responses 和 OpenAI Compatible Provider，支持 Markdown、思考过程与工具步骤渲染。
+- 站点导航：按分组保存常用站点，支持 `1x1`、`2x2`、`4x2` 卡片和拖拽排序；远程图标验证后缓存到配置目录，本地图标通过原生对话框导入。
+- AI 对话与小Q：通过 AI SDK 接入 OpenAI、Azure OpenAI、Anthropic、Gemini、Open Responses 和 OpenAI Compatible Provider；外部请求由受限的本机 Go 代理转发，并支持 Markdown、思考过程与工具步骤渲染。
 - 浅色与深色主题、HTTP 代理策略。
+- 简体中文与英文界面，可在设置中即时切换并长期保存。
 
 ## 技术栈
 
@@ -27,6 +28,12 @@ Quick 是一个基于 Wails 3、Go、React 和 shadcn/ui 构建的跨平台开�
 - AI SDK + Comark
 - Tailwind CSS 4 + shadcn/ui
 - Wails 自动生成的 TypeScript 前后端绑定
+
+## 本地能力边界
+
+React 负责界面、文本格式化和可安全运行在 WebView 内的确定性转换；Go 负责设备与系统相关能力，包括原生剪贴板、安全随机数和密码学操作、文件对话框与受限文件读写、站点图标校验缓存、网络诊断、进程操作及 AI Provider 请求转发。这样可以统一桌面端行为，并避免把 CORS、浏览器权限或随机源差异暴露给功能按钮。
+
+AI 网络代理只在应用内部创建带会话凭据的回环地址，校验目标 Provider 与请求路径，并遵循设置页的代理策略；它不是对外提供的通用 HTTP 代理。CSV 和本地图标等文件操作始终由用户通过原生对话框明确选择目标。
 
 ## 环境要求
 
@@ -90,7 +97,7 @@ Quick/
 ├─ frontend/                 React 前端、组件和生成绑定
 ├─ build/                    跨平台构建、打包和签名配置
 ├─ main.go                   Wails 应用入口
-├─ internal/                 配置、网络、MCP、导航和文件后台模块
+├─ internal/                 AI、加密、配置、网络、MCP、导航和文件后台模块
 └─ Taskfile.yml              开发、构建和打包任务入口
 ```
 

@@ -6,6 +6,7 @@ import type { MermaidProps } from "@comark/react/components/Mermaid"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
+import { writeClipboard } from "@/lib/clipboard"
 import { cn } from "@/lib/utils"
 
 const markdownPlugins = [mermaid({ theme: "github-light", themeDark: "github-dark" })]
@@ -29,7 +30,7 @@ function MermaidPreview({ content, ...props }: MermaidProps) {
   const copySVG = async () => {
     const svg = containerRef.current?.querySelector("svg")
     try {
-      await navigator.clipboard.writeText(svg?.outerHTML ?? content)
+      await writeClipboard(svg?.outerHTML ?? content)
       setCopied(true)
       toast.success(svg ? "Mermaid SVG 已复制" : "Mermaid 源码已复制")
       window.setTimeout(() => setCopied(false), 1500)

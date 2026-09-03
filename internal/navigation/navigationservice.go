@@ -9,6 +9,10 @@ import (
 	"encoding/xml"
 	"fmt"
 	"hash/crc32"
+	"image"
+	_ "image/gif"
+	_ "image/jpeg"
+	_ "image/png"
 	"io"
 	"net/http"
 	"net/url"
@@ -25,6 +29,8 @@ import (
 
 const maxNavigationPageSize = 1 << 20
 const maxNavigationIconSize = 2 << 20
+const maxLocalNavigationIconSize = 5 << 20
+const maxLocalNavigationIconDimension = 8192
 const NavigationGroupsChangedEvent = "navigation-groups-changed"
 const navigationIconCachePrefix = "quick-icon:"
 
@@ -498,6 +504,63 @@ func (s *NavigationService) cacheDirectory() (string, error) {
 		return "", fmt.Errorf("navigation icon cache is unavailable")
 	}
 	return s.iconDirectory, nil
+}
+
+// ImportLocalIcon opens a native file picker, validates the selected file by
+// content instead of extension/MIME metadata, and stores it beside downloaded
+// navigation icons. An empty result means the user cancelled the picker.
+func (s *NavigationService) ImportLocalIcon() (string, error) {
+	if s.app == nil {
+		return "", fmt.Errorf("应用尚未初始化")
+	}
+	path, err := s.app.Dialog.OpenFile().
+		SetTitle("选择导航图标").
+		CanChooseDirectories(false).
+		CanChooseFiles(true).
+		AllowsOtherFileTypes(false).
+		AddFilter("图片文件", "*.png;*.jpg;*.jpeg;*.gif;*.webp;*.ico;*.svg").
+		PromptForSingleSelection()
+	if err != nil || path == "" {
+		return "", err
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return "", fmt.Errorf("打开图片失败：%w", err)
+	}
+	defer file.Close()
+	data, err := io.ReadAll(io.LimitReader(file, maxLocalNavigationIconSize+1))
+	if err != nil {
+		return "", fmt.Errorf("读取图片失败：%w", err)
+	}
+	if len(data) > maxLocalNavigationIconSize {
+		return "", fmt.Errorf("图片不能超过 5 MB")
+	}
+	extension, mediaType, err := detectNavigationIcon(data)
+	if err != nil {
+		return "", fmt.Errorf("不是有效的导航图片：%w", err)
+	}
+	if mediaType == "image/png" || mediaType == "image/jpeg" || mediaType == "image/gif" {
+		config, _, configErr := image.DecodeConfig(bytes.NewReader(data))
+		if configErr != nil || config.Width < 1 || config.Height < 1 {
+			return "", fmt.Errorf("无法解析图片尺寸")
+		}
+		if config.Width > maxLocalNavigationIconDimension || config.Height > maxLocalNavigationIconDimension {
+			return "", fmt.Errorf("图片尺寸不能超过 %d × %d", maxLocalNavigationIconDimension, maxLocalNavigationIconDimension)
+		}
+	}
+	directory, err := s.cacheDirectory()
+	if err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(directory, 0o700); err != nil {
+		return "", fmt.Errorf("创建导航图标目录失败：%w", err)
+	}
+	contentHash := sha256.Sum256(data)
+	fileName := fmt.Sprintf("local-%x.%s", contentHash[:16], extension)
+	if err := os.WriteFile(filepath.Join(directory, fileName), data, 0o600); err != nil {
+		return "", fmt.Errorf("保存导航图标失败：%w", err)
+	}
+	return navigationIconCachePrefix + fileName, nil
 }
 
 func quickNavigationIconDirectory() (string, error) {

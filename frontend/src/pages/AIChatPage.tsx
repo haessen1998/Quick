@@ -29,8 +29,12 @@ import { Switch } from "@/components/ui/switch"
 import { AssistantMessageFlow } from "@/components/AssistantMessageFlow"
 import { MarkdownRenderer } from "@/components/MarkdownRenderer"
 import { AI_PROVIDER_OPTIONS, createLanguageModel, getAIProviderOption, settingsFromProfile, validateChatSettings, type AIProviderOption, type ChatSettings } from "@/lib/ai-provider"
+import { createNativeAIFetch } from "@/lib/ai-native-proxy"
+import { writeClipboard } from "@/lib/clipboard"
 import { cn } from "@/lib/utils"
 import { createAIProfile, type AIProfile } from "@/lib/saved-connections"
+import { useLanguage } from "@/lib/i18n"
+import type { ProxySettings } from "@/lib/proxy"
 import { useStickToBottom } from "@/lib/use-stick-to-bottom"
 
 const QUICK_PROMPTS = [
@@ -61,7 +65,7 @@ function MessageActions({ text, onRegenerate }: { text: string; onRegenerate?: (
   const [copied, setCopied] = useState(false)
 
   const copy = async () => {
-    await navigator.clipboard.writeText(text)
+    await writeClipboard(text)
     setCopied(true)
     window.setTimeout(() => setCopied(false), 1200)
   }
@@ -107,9 +111,9 @@ function ChatMessage({
         </div>
         {!isUser && <AssistantMessageFlow message={message} streaming={isStreaming} />}
         {isUser ? (
-          <div className="whitespace-pre-wrap rounded-2xl rounded-tr-sm bg-primary px-4 py-3 text-sm leading-6 text-primary-foreground shadow-sm">{text}</div>
+          <div data-i18n-skip className="whitespace-pre-wrap rounded-2xl rounded-tr-sm bg-primary px-4 py-3 text-sm leading-6 text-primary-foreground shadow-sm">{text}</div>
         ) : text ? (
-          <MarkdownRenderer value={text} streaming={isStreaming} />
+          <div data-i18n-skip><MarkdownRenderer value={text} streaming={isStreaming} /></div>
         ) : !hasFlow ? (
           <div className="flex h-7 items-center gap-1.5 text-muted-foreground" aria-label="正在生成回答">
             <span className="size-1.5 animate-bounce rounded-full bg-current [animation-delay:-0.3s]" />
@@ -128,16 +132,19 @@ function ChatMessage({
   )
 }
 
-function ChatSession({ settings }: { settings: ChatSettings }) {
+function ChatSession({ settings, proxy }: { settings: ChatSettings; proxy: ProxySettings }) {
+  const { language, t } = useLanguage()
   const [input, setInput] = useState("")
+  const network = useMemo(() => createNativeAIFetch(proxy), [proxy.mode, proxy.url])
+  useEffect(() => () => { void network.close() }, [network])
   const transport = useMemo(() => {
     const agent = new ToolLoopAgent({
-      model: createLanguageModel(settings),
-      instructions: settings.systemPrompt.trim() || undefined,
+      model: createLanguageModel(settings, network.fetch),
+      instructions: [settings.systemPrompt.trim(), language === "en-US" ? "Respond in English unless the user explicitly requests another language." : "除非用户明确指定其他语言，否则使用简体中文回答。"].filter(Boolean).join("\n\n"),
       maxOutputTokens: 4096,
     })
     return new DirectChatTransport({ agent })
-  }, [settings])
+  }, [settings, language, network])
   const { messages, sendMessage, status, stop, regenerate, setMessages, error, clearError } = useChat({
     transport,
     throttle: 40,
@@ -209,9 +216,9 @@ function ChatSession({ settings }: { settings: ChatSettings }) {
             <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">当前会话由 AI SDK 驱动，回复会通过 Comark 实时渲染 Markdown。</p>
             <div className="mt-6 grid w-full max-w-xl gap-2 sm:grid-cols-3">
               {QUICK_PROMPTS.map((prompt) => (
-                <button key={prompt} type="button" className="app-interactive rounded-xl border bg-background p-3 text-left text-xs leading-5 transition-colors hover:bg-muted" onClick={() => void send(prompt)}>
+                <button key={prompt} type="button" className="app-interactive rounded-xl border bg-background p-3 text-left text-xs leading-5 transition-colors hover:bg-muted" onClick={() => void send(t(prompt))}>
                   <Sparkles className="mb-2 size-3.5 text-muted-foreground" />
-                  {prompt}
+                  {t(prompt)}
                 </button>
               ))}
             </div>
@@ -255,7 +262,7 @@ function ChatSession({ settings }: { settings: ChatSettings }) {
   )
 }
 
-export default function AIChatPage({ profiles, onSaveProfile }: { profiles: AIProfile[]; onSaveProfile: (profile: AIProfile) => void }) {
+export default function AIChatPage({ profiles, onSaveProfile, proxy }: { profiles: AIProfile[]; onSaveProfile: (profile: AIProfile) => void; proxy: ProxySettings }) {
   const [selectedProfileID, setSelectedProfileID] = useState(profiles[0]?.id ?? "")
   const [draft, setDraft] = useState<ChatSettings>(() => settingsFromProfile(profiles[0], INITIAL_SETTINGS))
   const [activeSettings, setActiveSettings] = useState<ChatSettings | null>(null)
@@ -457,12 +464,12 @@ export default function AIChatPage({ profiles, onSaveProfile }: { profiles: AIPr
 
             <div className="rounded-xl border bg-muted/35 p-3 text-[11px] leading-5 text-muted-foreground">
               <p className="font-medium text-foreground">连接提示</p>
-              <p className="mt-1">请求直接从桌面 WebView 发往所选 Provider。Azure 的模型字段填写部署名称；Open Responses 地址必须包含完整的 `/responses` POST 端点。</p>
+              <p className="mt-1">请求由 Quick 的本机 Go 网络代理转发到所选 Provider，并遵循设置页代理策略。Azure 的模型字段填写部署名称；Open Responses 地址必须包含完整的 `/responses` POST 端点。</p>
             </div>
           </aside>
 
           {activeSettings ? (
-            <ChatSession key={sessionVersion} settings={activeSettings} />
+            <ChatSession key={sessionVersion} settings={activeSettings} proxy={proxy} />
           ) : (
             <section className="flex min-h-[30rem] flex-col items-center justify-center rounded-xl border bg-card px-6 text-center text-card-foreground shadow-sm lg:h-[calc(100svh-13.5rem)]">
               <div className="mb-5 flex size-16 items-center justify-center rounded-2xl border bg-muted/55">

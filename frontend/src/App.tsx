@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react"
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react"
 import { DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core"
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
@@ -19,6 +19,7 @@ import {
   GripVertical,
   Home,
   KeyRound,
+  Languages,
   Moon,
   CaseSensitive,
   Network,
@@ -40,6 +41,7 @@ import {
 import { Clipboard, WML } from "@wailsio/runtime"
 import { toast } from "sonner"
 
+import { FileDialogService } from "@/../bindings/github.com/haessen1998/Quick/internal/files"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
 import { GlobalAssistant } from "@/components/GlobalAssistant"
@@ -65,11 +67,13 @@ import {
 import { cn } from "@/lib/utils"
 import { AssistantCapabilityProvider } from "@/lib/assistant-capabilities"
 import { getInitialAssistantSettings, saveAssistantSettings, type AssistantSettings } from "@/lib/assistant-settings"
+import { useLanguage } from "@/lib/i18n"
 import { AI_PROVIDER_OPTIONS, getAIProviderOption, isAIProfileReady } from "@/lib/ai-provider"
 import type { PageId } from "@/lib/pages"
 import { getInitialTheme, type AppTheme } from "@/lib/theme"
 import { getInitialProxySettings, saveProxySettings, type ProxySettings } from "@/lib/proxy"
 import { sendSmartInput } from "@/lib/smart-input"
+import quickAppIcon from "../../build/appicon.icon/Assets/quick_icon_vector.svg"
 import { NAVIGATION_GROUPS_CHANGED_EVENT, loadNavigationGroups, mergeNavigationGroups, navigationCSVTemplate, navigationGroupsToCSV, parseNavigationCSV, persistNavigationGroups, saveNavigationGroups } from "@/lib/navigation-sites"
 import { hydrateSidebarOrder, loadSidebarOrder, normalizeSidebarOrder, persistSidebarOrder, saveSidebarOrder } from "@/lib/sidebar-order"
 import {
@@ -129,7 +133,7 @@ const pages: PageDefinition[] = [
   { id: "settings", label: "设置", description: "应用偏好选项", icon: Settings },
 ]
 
-const appVersion = import.meta.env.VITE_APP_VERSION || "v0.3.1"
+const appVersion = import.meta.env.VITE_APP_VERSION || "v0.3.3"
 
 function SidebarPageLink({ page, activePage, onNavigate }: { page: PageDefinition; activePage: PageId; onNavigate: (page: PageId) => void }) {
   const { open } = useSidebar()
@@ -160,7 +164,7 @@ function SortableSidebarPage({ page, activePage, onNavigate }: { page: PageDefin
   )
 }
 
-function AppSidebar({ activePage, order, onNavigate, onOrderChange }: { activePage: PageId; order: PageId[]; onNavigate: (page: PageId) => void; onOrderChange: (order: PageId[]) => void }) {
+function AppSidebar({ pages, activePage, order, onNavigate, onOrderChange }: { pages: PageDefinition[]; activePage: PageId; order: PageId[]; onNavigate: (page: PageId) => void; onOrderChange: (order: PageId[]) => void }) {
   const { open } = useSidebar()
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }))
   const orderedPages = normalizeSidebarOrder(order).map((id) => pages.find((page) => page.id === id)).filter((page): page is PageDefinition => Boolean(page))
@@ -177,8 +181,8 @@ function AppSidebar({ activePage, order, onNavigate, onOrderChange }: { activePa
     <Sidebar>
       <SidebarHeader className="h-14 border-b border-sidebar-border px-2 py-0">
         <div className={cn("app-sidebar-brand flex h-full items-center gap-3 overflow-hidden px-1", !open && "md:justify-center")}>
-          <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-sm font-bold text-primary-foreground">
-            Q
+          <div className="flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-sidebar-border bg-white shadow-sm">
+            <img src={quickAppIcon} alt="" aria-hidden="true" className="size-6 object-contain" />
           </div>
           <div className={cn("min-w-0 leading-tight", !open && "md:hidden")}>
             <div className="truncate text-sm font-semibold">Quick</div>
@@ -302,15 +306,6 @@ function PageShell({ page, children }: { page: PageDefinition; children: React.R
 const SETTINGS_INPUT_CLASS = "h-9 w-full rounded-lg border border-input bg-transparent px-3 text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/30"
 const SETTINGS_TEXTAREA_CLASS = "h-24 w-full resize-none rounded-lg border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/30"
 
-function downloadCSV(filename: string, content: string) {
-  const url = URL.createObjectURL(new Blob([content], { type: "text/csv;charset=utf-8" }))
-  const anchor = document.createElement("a")
-  anchor.href = url
-  anchor.download = filename
-  anchor.click()
-  URL.revokeObjectURL(url)
-}
-
 function AIProfileEditor({ profile, isNew, onChange, onSave, onClose }: { profile: AIProfile; isNew: boolean; onChange: (profile: AIProfile) => void; onSave: () => void; onClose: () => void }) {
   const [showKey, setShowKey] = useState(false)
   const patch = (changes: Partial<AIProfile>) => onChange({ ...profile, ...changes })
@@ -409,10 +404,10 @@ function SettingsPage({
   assistantSettings: AssistantSettings
   onAssistantSettingsChange: (settings: AssistantSettings) => void
 }) {
+  const { language, setLanguage, t } = useLanguage()
   const [aiEditor, setAIEditor] = useState<{ value: AIProfile; isNew: boolean } | null>(null)
   const [mcpEditor, setMCPEditor] = useState<{ value: MCPServerProfile; isNew: boolean } | null>(null)
   const [pendingDelete, setPendingDelete] = useState<{ kind: "AI" | "MCP"; id: string; name: string } | null>(null)
-  const navigationImportRef = useRef<HTMLInputElement>(null)
   const saveAIEditor = () => {
     if (!aiEditor) return
     onAIProfilesChange(aiEditor.isNew ? [...aiProfiles, aiEditor.value] : aiProfiles.map((profile) => profile.id === aiEditor.value.id ? aiEditor.value : profile))
@@ -432,10 +427,19 @@ function SettingsPage({
     toast.success(`${pendingDelete.kind} 配置已删除`)
     setPendingDelete(null)
   }
-  const importNavigationCSV = async (file: File | undefined) => {
-    if (!file) return
+  const exportNavigationCSV = async (filename: string, content: string) => {
     try {
-      const incoming = parseNavigationCSV(await file.text())
+      const path = await FileDialogService.SaveCSV(filename, content)
+      if (path) toast.success("CSV 已保存", { description: path })
+    } catch (error) {
+      toast.error("保存 CSV 失败", { description: error instanceof Error ? error.message : String(error) })
+    }
+  }
+  const importNavigationCSV = async () => {
+    try {
+      const file = await FileDialogService.OpenCSV()
+      if (!file.path) return
+      const incoming = parseNavigationCSV(file.content)
       const merged = mergeNavigationGroups(loadNavigationGroups(), incoming)
       saveNavigationGroups(merged)
       window.dispatchEvent(new CustomEvent(NAVIGATION_GROUPS_CHANGED_EVENT, { detail: merged }))
@@ -443,8 +447,6 @@ function SettingsPage({
       toast.success(`已导入 ${incoming.reduce((count, group) => count + group.items.length, 0)} 个站点`, { description: "同名分组已合并，相同网址的站点已更新。" })
     } catch (error) {
       toast.error("导入 CSV 失败", { description: error instanceof Error ? error.message : String(error) })
-    } finally {
-      if (navigationImportRef.current) navigationImportRef.current.value = ""
     }
   }
 
@@ -478,11 +480,10 @@ function SettingsPage({
         </div>
         <div className="p-6">
           <div className="grid gap-3 sm:grid-cols-3">
-            <button type="button" className="app-interactive rounded-xl border bg-background p-4 text-left transition-colors hover:bg-muted/35" onClick={() => downloadCSV("quick-navigation-template.csv", navigationCSVTemplate())}><FileSpreadsheet className="size-5 text-muted-foreground" /><span className="mt-3 block text-sm font-medium">下载导入模板</span><span className="mt-1 block text-xs leading-5 text-muted-foreground">包含 group、list、title、url、icon、description、size 列。</span></button>
-            <button type="button" className="app-interactive rounded-xl border bg-background p-4 text-left transition-colors hover:bg-muted/35" onClick={() => downloadCSV("quick-navigation.csv", navigationGroupsToCSV(loadNavigationGroups()))}><Download className="size-5 text-muted-foreground" /><span className="mt-3 block text-sm font-medium">导出 CSV</span><span className="mt-1 block text-xs leading-5 text-muted-foreground">导出全部站点，保留 Tab、list 小组、图标和尺寸。</span></button>
-            <button type="button" className="app-interactive rounded-xl border bg-background p-4 text-left transition-colors hover:bg-muted/35" onClick={() => navigationImportRef.current?.click()}><Upload className="size-5 text-muted-foreground" /><span className="mt-3 block text-sm font-medium">导入 CSV</span><span className="mt-1 block text-xs leading-5 text-muted-foreground">合并同名分组，以网址匹配并更新已有站点。</span></button>
+            <button type="button" className="app-interactive rounded-xl border bg-background p-4 text-left transition-colors hover:bg-muted/35" onClick={() => void exportNavigationCSV("quick-navigation-template.csv", navigationCSVTemplate())}><FileSpreadsheet className="size-5 text-muted-foreground" /><span className="mt-3 block text-sm font-medium">下载导入模板</span><span className="mt-1 block text-xs leading-5 text-muted-foreground">包含 group、list、title、url、icon、description、size 列。</span></button>
+            <button type="button" className="app-interactive rounded-xl border bg-background p-4 text-left transition-colors hover:bg-muted/35" onClick={() => void exportNavigationCSV("quick-navigation.csv", navigationGroupsToCSV(loadNavigationGroups()))}><Download className="size-5 text-muted-foreground" /><span className="mt-3 block text-sm font-medium">导出 CSV</span><span className="mt-1 block text-xs leading-5 text-muted-foreground">导出全部站点，保留 Tab、list 小组、图标和尺寸。</span></button>
+            <button type="button" className="app-interactive rounded-xl border bg-background p-4 text-left transition-colors hover:bg-muted/35" onClick={() => void importNavigationCSV()}><Upload className="size-5 text-muted-foreground" /><span className="mt-3 block text-sm font-medium">导入 CSV</span><span className="mt-1 block text-xs leading-5 text-muted-foreground">合并同名分组，以网址匹配并更新已有站点。</span></button>
           </div>
-          <input ref={navigationImportRef} type="file" accept=".csv,text/csv" className="hidden" onChange={(event) => void importNavigationCSV(event.target.files?.[0])} />
           <p className="mt-3 rounded-lg bg-muted/35 px-3 py-2 text-[11px] leading-5 text-muted-foreground">导入采用安全合并，不会删除 CSV 中未包含的现有站点。group 对应一级 Tab，list 对应 Tab 内可选小组；size 支持 1x1、2x2、4x2。</p>
         </div>
       </article>
@@ -506,6 +507,41 @@ function SettingsPage({
             }} />
           </div>
           {assistantSettings.autoApproveOperations && <div className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/8 p-3 text-xs leading-5 text-amber-800 dark:text-amber-200">风险提示：HTTP 请求、关闭进程和第三方 MCP Tool 可能造成外部副作用。自动审核只建议用于可信环境和可信 Server。</div>}
+        </div>
+      </article>
+
+      <article className="rounded-xl border bg-card text-card-foreground shadow-sm">
+        <div className="border-b p-6">
+          <h2 className="flex items-center gap-2 font-medium"><Languages className="size-4" />{t("语言")}</h2>
+          <p className="mt-1 text-sm text-muted-foreground">{t("选择应用界面的显示语言。切换后立即生效，并保存在 Quick 配置文件中。")}</p>
+        </div>
+        <div className="grid gap-3 p-6 sm:grid-cols-2">
+          <button
+            type="button"
+            aria-pressed={language === "zh-CN"}
+            className={cn("app-interactive rounded-xl border p-4 text-left transition-colors hover:bg-muted", language === "zh-CN" && "border-primary bg-muted ring-1 ring-primary")}
+            onClick={() => {
+              if (language === "zh-CN") return
+              setLanguage("zh-CN")
+              toast.success("已切换到中文")
+            }}
+          >
+            <span className="block text-sm font-medium">{t("简体中文")}</span>
+            <span className="mt-1 block text-xs text-muted-foreground">{t("中文界面")}</span>
+          </button>
+          <button
+            type="button"
+            aria-pressed={language === "en-US"}
+            className={cn("app-interactive rounded-xl border p-4 text-left transition-colors hover:bg-muted", language === "en-US" && "border-primary bg-muted ring-1 ring-primary")}
+            onClick={() => {
+              if (language === "en-US") return
+              setLanguage("en-US")
+              toast.success("Switched to English")
+            }}
+          >
+            <span className="block text-sm font-medium">English</span>
+            <span className="mt-1 block text-xs text-muted-foreground">English interface</span>
+          </button>
         </div>
       </article>
 
@@ -553,7 +589,7 @@ function SettingsPage({
       <article className="rounded-xl border bg-card text-card-foreground shadow-sm">
         <div className="border-b p-6">
           <h2 className="font-medium">网络代理</h2>
-          <p className="mt-1 text-sm text-muted-foreground">应用于网络工具中的 HTTP 请求；Ping、DNS 与 TCP 检测不经过 HTTP 代理。</p>
+          <p className="mt-1 text-sm text-muted-foreground">应用于网络工具、AI Provider 与 MCP 本地代理的 HTTP 请求；Ping、DNS 与 TCP 检测不经过 HTTP 代理。</p>
         </div>
         <div className="space-y-4 p-6">
           <div className="grid gap-3 sm:grid-cols-3">
@@ -625,6 +661,7 @@ function SettingsPage({
 }
 
 function App() {
+  const { language, t } = useLanguage()
   const [activePage, setActivePage] = useState<PageId>("home")
   const [visitedPages, setVisitedPages] = useState<Set<PageId>>(() => new Set(["home"]))
   const [time, setTime] = useState("")
@@ -642,16 +679,17 @@ function App() {
   const [sidebarOrderReady, setSidebarOrderReady] = useState(false)
   const [persistentConfigReady, setPersistentConfigReady] = useState(false)
   const enabledMCPServers = mcpServers.filter((profile) => profile.enabled)
-  const currentPage = pages.find((page) => page.id === activePage) ?? pages[0]
+  const localizedPages = useMemo(() => pages.map((page) => ({ ...page, label: t(page.label), description: t(page.description) })), [t])
+  const currentPage = localizedPages.find((page) => page.id === activePage) ?? localizedPages[0]
 
   useEffect(() => {
-    const update = () => setTime(new Intl.DateTimeFormat("zh-CN", window.matchMedia("(max-width: 640px)").matches
+    const update = () => setTime(new Intl.DateTimeFormat(language, window.matchMedia("(max-width: 640px)").matches
       ? { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }
       : { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }).format(new Date()))
     update()
     const timer = window.setInterval(update, 1000)
     return () => window.clearInterval(timer)
-  }, [])
+  }, [language])
 
   useEffect(() => {
     const timer = window.setTimeout(() => WML.Reload(), 0)
@@ -716,7 +754,7 @@ function App() {
 
   const changeTheme = (nextTheme: AppTheme) => {
     setTheme(nextTheme)
-    toast.success(nextTheme === "dark" ? "已切换到深色主题" : "已切换到浅色主题")
+    toast.success(t(nextTheme === "dark" ? "已切换到深色主题" : "已切换到浅色主题"))
   }
 
   const navigateTo = useCallback((page: PageId) => {
@@ -743,12 +781,12 @@ function App() {
         lastClipboard = value
         const action = detectSmartInput(value)[0]
         if (!action) return
-        toast("检测到可智能处理的剪贴板内容", {
+        toast(t("检测到可智能处理的剪贴板内容"), {
           id: "quick-smart-clipboard",
-          description: `${action.label} · ${action.description}`,
+          description: `${t(action.label)} · ${t(action.description)}`,
           duration: 10000,
-          action: { label: "智能处理", onClick: () => { navigateTo(action.page); window.setTimeout(() => sendSmartInput(action.page, action.payload), 0) } },
-          cancel: { label: "忽略", onClick: () => undefined },
+          action: { label: t("智能处理"), onClick: () => { navigateTo(action.page); window.setTimeout(() => sendSmartInput(action.page, action.payload), 0) } },
+          cancel: { label: t("忽略"), onClick: () => undefined },
         })
       } catch { /* Clipboard access is unavailable in browser-only preview. */ }
       finally { reading = false }
@@ -759,7 +797,7 @@ function App() {
     document.addEventListener("visibilitychange", readClipboard)
     document.addEventListener("copy", rememberLocalCopy)
     return () => { window.removeEventListener("focus", readClipboard); document.removeEventListener("visibilitychange", readClipboard); document.removeEventListener("copy", rememberLocalCopy) }
-  }, [navigateTo])
+  }, [navigateTo, t])
 
   const saveAIProfileFromTest = (profile: AIProfile) => {
     setAIProfiles((profiles) => profiles.some((item) => item.id === profile.id)
@@ -777,7 +815,7 @@ function App() {
     <AssistantCapabilityProvider>
       <SidebarProvider className="bg-transparent">
         <div className="bg" aria-hidden="true" />
-        <AppSidebar activePage={activePage} order={sidebarOrder} onNavigate={navigateTo} onOrderChange={changeSidebarOrder} />
+        <AppSidebar pages={localizedPages} activePage={activePage} order={sidebarOrder} onNavigate={navigateTo} onOrderChange={changeSidebarOrder} />
         <SidebarInset className={activePage === "home" ? "bg-transparent" : "bg-background"}>
         <header className="app-topbar">
           <SidebarTrigger className="app-interactive" />
@@ -792,7 +830,7 @@ function App() {
 
         <Suspense fallback={<div className="page-shell text-sm text-muted-foreground">正在加载工具…</div>}>
           {visitedPages.has("home") && <PageSlot active={activePage === "home"}><HomePage time={time} onNavigate={navigateTo} /></PageSlot>}
-          {visitedPages.has("ai-chat") && <PageSlot active={activePage === "ai-chat"}><AIChatPage profiles={aiProfiles} onSaveProfile={saveAIProfileFromTest} /></PageSlot>}
+          {visitedPages.has("ai-chat") && <PageSlot active={activePage === "ai-chat"}><AIChatPage profiles={aiProfiles} onSaveProfile={saveAIProfileFromTest} proxy={proxy} /></PageSlot>}
           {visitedPages.has("mcp-inspector") && <PageSlot active={activePage === "mcp-inspector"}><MCPInspectorPage proxy={proxy} profiles={enabledMCPServers} onSaveProfile={saveMCPProfileFromTest} /></PageSlot>}
           {visitedPages.has("formatter") && <PageSlot active={activePage === "formatter"}><StringToolsPage /></PageSlot>}
           {visitedPages.has("converter") && <PageSlot active={activePage === "converter"}><DataConversionPage /></PageSlot>}
