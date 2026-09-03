@@ -1,8 +1,20 @@
 package files
 
 import (
+	"bufio"
+	"crypto/md5"
+	"crypto/sha256"
+	"crypto/sha512"
 	"errors"
 	"fmt"
+	"hash"
+	"image"
+	_ "image/gif"
+	_ "image/jpeg"
+	_ "image/png"
+	"io"
+	"mime"
+	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -11,6 +23,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
@@ -41,6 +54,20 @@ type RenameRequest struct {
 	Width            int      `json:"width"`
 	IncludeExtension bool     `json:"includeExtension"`
 	SortBy           string   `json:"sortBy"`
+}
+
+type FileInspection struct {
+	Path       string `json:"path"`
+	Name       string `json:"name"`
+	Size       int64  `json:"size"`
+	Modified   string `json:"modified"`
+	MIME       string `json:"mime"`
+	Algorithm  string `json:"algorithm"`
+	Digest     string `json:"digest"`
+	Width      int    `json:"width,omitempty"`
+	Height     int    `json:"height,omitempty"`
+	UTF8       bool   `json:"utf8"`
+	LineEnding string `json:"lineEnding,omitempty"`
 }
 
 type RenamePlanItem struct {
@@ -96,6 +123,75 @@ func (s *FileRenameService) ChooseFolder() (string, error) {
 
 func (s *FileRenameService) ListFiles(paths []string, recursive bool) ([]RenameFileInfo, error) {
 	return collectRenameFiles(paths, recursive)
+}
+
+func (s *FileRenameService) InspectFiles(paths []string, recursive bool, algorithm string) ([]FileInspection, error) {
+	files, err := collectRenameFiles(paths, recursive)
+	if err != nil {
+		return nil, err
+	}
+	if len(files) > 1000 {
+		return nil, errors.New("一次最多检查 1000 个文件")
+	}
+	result := make([]FileInspection, 0, len(files))
+	for _, file := range files {
+		item, inspectErr := inspectFile(file, algorithm)
+		if inspectErr != nil {
+			return nil, fmt.Errorf("检查 %s 失败：%w", file.Name, inspectErr)
+		}
+		result = append(result, item)
+	}
+	return result, nil
+}
+
+func inspectFile(info RenameFileInfo, algorithm string) (FileInspection, error) {
+	file, err := os.Open(info.Path)
+	if err != nil {
+		return FileInspection{}, err
+	}
+	defer file.Close()
+	var digester hash.Hash
+	switch strings.ToUpper(strings.TrimSpace(algorithm)) {
+	case "MD5":
+		digester, algorithm = md5.New(), "MD5"
+	case "SHA-512":
+		digester, algorithm = sha512.New(), "SHA-512"
+	default:
+		digester, algorithm = sha256.New(), "SHA-256"
+	}
+	reader := bufio.NewReader(file)
+	header, _ := reader.Peek(512)
+	mimeType := mime.TypeByExtension(strings.ToLower(info.Extension))
+	if mimeType == "" {
+		mimeType = http.DetectContentType(header)
+	}
+	if _, err := io.Copy(digester, reader); err != nil {
+		return FileInspection{}, err
+	}
+	item := FileInspection{Path: info.Path, Name: info.Name, Size: info.Size, Modified: info.Modified, MIME: mimeType, Algorithm: algorithm, Digest: fmt.Sprintf("%x", digester.Sum(nil)), UTF8: utf8.Valid(header)}
+	if info.Size <= 2*1024*1024 {
+		bytesRead, readErr := os.ReadFile(info.Path)
+		if readErr != nil {
+			return FileInspection{}, readErr
+		}
+		item.UTF8 = utf8.Valid(bytesRead)
+		if item.UTF8 {
+			hasCRLF, hasLF := strings.Contains(string(bytesRead), "\r\n"), strings.Contains(strings.ReplaceAll(string(bytesRead), "\r\n", ""), "\n")
+			if hasCRLF && hasLF {
+				item.LineEnding = "Mixed"
+			} else if hasCRLF {
+				item.LineEnding = "CRLF"
+			} else if hasLF {
+				item.LineEnding = "LF"
+			}
+		}
+	}
+	if _, seekErr := file.Seek(0, io.SeekStart); seekErr == nil {
+		if config, _, imageErr := image.DecodeConfig(file); imageErr == nil {
+			item.Width, item.Height = config.Width, config.Height
+		}
+	}
+	return item, nil
 }
 
 func (s *FileRenameService) PreviewRename(request RenameRequest) (RenamePreview, error) {

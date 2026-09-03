@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { Events } from "@wailsio/runtime"
-import { AlertTriangle, CheckCircle2, FilePenLine, FolderOpen, RotateCcw, Sparkles, UploadCloud } from "lucide-react"
+import { AlertTriangle, CheckCircle2, Copy, FilePenLine, FileSearch, FolderOpen, RotateCcw, Sparkles, UploadCloud } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { useAssistantCapability } from "@/lib/assistant-capabilities"
-import { ChooseFolder, ExecuteRename, ListFiles, PreviewRename, UndoLastRename } from "../../bindings/github.com/haessen1998/Quick/internal/files/filerenameservice"
-import type { RenameFileInfo, RenamePlanItem, RenamePreview, RenameRequest } from "../../bindings/github.com/haessen1998/Quick/internal/files/models"
+import { ChooseFolder, ExecuteRename, InspectFiles, ListFiles, PreviewRename, UndoLastRename } from "../../bindings/github.com/haessen1998/Quick/internal/files/filerenameservice"
+import type { FileInspection, RenameFileInfo, RenamePlanItem, RenamePreview, RenameRequest } from "../../bindings/github.com/haessen1998/Quick/internal/files/models"
 
 type RenameRules = Omit<RenameRequest, "paths">
 
@@ -53,6 +53,8 @@ export default function FileToolsPage() {
   const [busy, setBusy] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [canUndo, setCanUndo] = useState(false)
+  const [digestAlgorithm, setDigestAlgorithm] = useState("SHA-256")
+  const [inspections, setInspections] = useState<FileInspection[]>([])
 
   const loadSources = useCallback(async (paths: string[], recursive = rules.recursive) => {
     if (!paths.length) return
@@ -62,6 +64,7 @@ export default function FileToolsPage() {
       setSourcePaths(paths)
       setFiles(listed ?? [])
       setPreview(null)
+      setInspections([])
       toast.success(`已读取 ${listed?.length ?? 0} 个文件`)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error))
@@ -135,6 +138,17 @@ export default function FileToolsPage() {
     }
   }
 
+  const inspectFiles = useCallback(async (algorithm = digestAlgorithm) => {
+    if (!sourcePaths.length) throw new Error("请先选择文件夹或拖入文件")
+    setBusy(true)
+    try {
+      const result = await InspectFiles(sourcePaths, rules.recursive, algorithm)
+      setDigestAlgorithm(algorithm); setInspections(result ?? [])
+      toast.success(`已检查 ${result?.length ?? 0} 个文件`)
+      return result ?? []
+    } finally { setBusy(false) }
+  }, [digestAlgorithm, rules.recursive, sourcePaths])
+
   useAssistantCapability({
     page: "file-tools",
     getContext: () => ({
@@ -143,6 +157,7 @@ export default function FileToolsPage() {
       rules,
       preview: preview ? { total: preview.total, matched: preview.matched, ready: preview.ready, conflicts: preview.conflicts } : null,
       canUndo,
+      inspection: { algorithm: digestAlgorithm, count: inspections.length },
     }),
     actions: {
       prepare: async (values) => {
@@ -166,6 +181,12 @@ export default function FileToolsPage() {
         setCanUndo(result.canUndo)
         if (sourcePaths.length) await loadSources(remapSourcePaths(sourcePaths, result.items))
         return { success: result.success, executed: true, renamed: result.renamed }
+      },
+      inspect: async (values) => {
+        if (!sourcePaths.length) return { success: true, executed: false, message: "请由用户选择文件或文件夹；助手不能填写本机路径" }
+        const algorithm = ["MD5", "SHA-256", "SHA-512"].includes(String(values.algorithm)) ? String(values.algorithm) : "SHA-256"
+        const result = await inspectFiles(algorithm)
+        return { success: true, executed: true, algorithm, files: result.slice(0, 100).map((item) => ({ name: item.name, size: item.size, mime: item.mime, digest: item.digest, width: item.width, height: item.height, utf8: item.utf8, lineEnding: item.lineEnding })), truncated: result.length > 100 }
       },
     },
   })
@@ -228,6 +249,10 @@ export default function FileToolsPage() {
             </div>
           </article>
         </div>
+        <article className="mt-5 overflow-hidden rounded-xl border bg-card shadow-sm">
+          <div className="flex flex-wrap items-center gap-2 border-b px-4 py-3"><div className="mr-auto"><div className="flex items-center gap-2 font-medium"><FileSearch className="size-4" />文件摘要与元信息</div><div className="mt-0.5 text-xs text-muted-foreground">只读检查，支持流式摘要；文本编码分析限制在 2 MiB 内。</div></div><select className="app-interactive rounded-lg border bg-background px-3 py-2 text-sm" value={digestAlgorithm} onChange={(event) => setDigestAlgorithm(event.target.value)}><option>SHA-256</option><option>SHA-512</option><option>MD5</option></select><Button size="sm" variant="outline" disabled={busy || !sourcePaths.length} onClick={() => void inspectFiles().catch((error) => toast.error("文件检查失败", { description: error instanceof Error ? error.message : String(error) }))}><FileSearch />开始检查</Button></div>
+          <div className="max-h-96 overflow-auto"><table className="w-full min-w-[62rem] text-left text-xs"><thead className="sticky top-0 bg-card shadow-[0_1px_0_var(--border)]"><tr><th className="px-4 py-3">文件</th><th className="px-3 py-3">大小</th><th className="px-3 py-3">类型 / 文本</th><th className="px-3 py-3">尺寸</th><th className="px-3 py-3">{digestAlgorithm}</th><th className="w-12"></th></tr></thead><tbody>{inspections.length ? inspections.map((item) => <tr key={item.path} className="border-t"><td className="max-w-56 truncate px-4 py-3" title={item.path}>{item.name}</td><td className="px-3 py-3">{new Intl.NumberFormat("zh-CN", { style: "unit", unit: "byte", unitDisplay: "narrow" }).format(item.size)}</td><td className="px-3 py-3">{item.mime || "未知"}{item.utf8 ? ` · UTF-8${item.lineEnding ? `/${item.lineEnding}` : ""}` : ""}</td><td className="px-3 py-3">{item.width && item.height ? `${item.width} × ${item.height}` : "—"}</td><td className="max-w-80 truncate px-3 py-3 font-mono" title={item.digest}>{item.digest}</td><td><Button variant="ghost" size="icon-xs" onClick={async () => { await navigator.clipboard.writeText(item.digest); toast.success("摘要已复制") }}><Copy /></Button></td></tr>) : <tr><td colSpan={6} className="p-10 text-center text-muted-foreground">选择文件后开始检查。</td></tr>}</tbody></table></div>
+        </article>
       </div>
 
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}><DialogContent><DialogHeader><DialogTitle>确认批量重命名</DialogTitle><DialogDescription>将修改 {preview?.ready ?? 0} 个文件。Quick 会在内存中保留本次路径映射，以便在应用关闭前撤销。</DialogDescription></DialogHeader><div className="rounded-lg border border-amber-500/30 bg-amber-500/8 p-3 text-sm text-amber-800 dark:text-amber-200">执行前会重新计算并检查冲突；如果文件状态已经变化，本次操作会停止。</div><DialogFooter><DialogClose asChild><Button variant="outline">取消</Button></DialogClose><Button onClick={execute}>确认执行</Button></DialogFooter></DialogContent></Dialog>

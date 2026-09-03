@@ -21,12 +21,14 @@ import { cn } from "@/lib/utils"
 
 const FORMATTER_OPERATIONS = ["json-format", "json-minify", "yaml-format", "xml-format", "xml-minify", "html-format", "html-minify", "css-format", "css-minify", "javascript-format", "javascript-minify"] as const
 const HTTP_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"] as const
-const CONVERSION_MODULES = ["naming", "standard", "encoding", "bytes", "code", "radix"] as const
-const TIME_OPERATIONS = ["timestamp-to-date", "date-to-timestamp", "timezone", "difference", "generate", "cron"] as const
-const VALIDATION_MODES = ["jsonpath", "xpath", "regex"] as const
+const CONVERSION_MODULES = ["text", "naming", "standard", "encoding", "bytes", "code", "radix"] as const
+const TIME_OPERATIONS = ["timestamp-to-date", "date-to-timestamp", "timezone", "difference", "duration", "parse-duration", "generate", "cron"] as const
+const VALIDATION_MODES = ["jsonpath", "json-schema", "xpath", "selector", "glob", "regex"] as const
+const VALIDATION_ACTIONS = ["run", "test-cases", "show-code"] as const
 const CRYPTO_OPERATIONS = ["hash", "hmac", "aes-encrypt", "aes-decrypt", "rsa-generate-encryption", "rsa-generate-signing", "rsa-encrypt", "rsa-decrypt", "rsa-sign", "rsa-verify", "jwt-parse", "jwt-sign", "jwt-verify"] as const
-const NETWORK_OPERATIONS = ["ping", "dns", "port", "cidr", "http-prepare", "http-execute", "curl-to-http", "http-to-curl", "process-search", "process-terminate"] as const
-const FILE_RENAME_ACTIONS = ["prepare", "execute", "undo"] as const
+const NETWORK_OPERATIONS = ["ping", "dns", "port", "cidr", "url-inspect", "http-prepare", "http-execute", "curl-to-http", "http-to-curl", "process-search", "process-terminate"] as const
+const FILE_RENAME_ACTIONS = ["prepare", "execute", "undo", "inspect"] as const
+const FRONTEND_OPERATIONS = ["color", "contrast", "gradient", "units", "svg-data-url"] as const
 const FILE_RENAME_OPERATIONS = ["reset", "replace", "prefix", "suffix"] as const
 const NAVIGATION_ACTIONS = ["list", "open", "prepare", "add", "update", "move", "batch-update", "delete"] as const
 const SIDEBAR_ACTIONS = ["list", "move"] as const
@@ -125,7 +127,7 @@ function AssistantSession({ profile, activePage, onNavigate, sidebarOrder, onSid
       } else if (typeof input.position === "number" && Number.isInteger(input.position)) {
         targetIndex = input.position - 2
       }
-      if (targetIndex < 0 || targetIndex > remaining.length) return { success: false, executed: false, message: "目标页面或位置无效；position 使用包含固定首页在内的 2 到 12" }
+      if (targetIndex < 0 || targetIndex > remaining.length) return { success: false, executed: false, message: `目标页面或位置无效；position 使用包含固定首页在内的 2 到 ${DEFAULT_SIDEBAR_ORDER.length + 1}` }
       const next = moveSidebarPage(current, input.page, targetIndex)
       onSidebarOrderChange(next)
       return { success: true, executed: true, moved: input.page, order: describe(next) }
@@ -215,7 +217,7 @@ function AssistantSession({ profile, activePage, onNavigate, sidebarOrder, onSid
         execute: async (input) => usePage("formatter", "run", input),
       }),
       convert_data: tool({
-        description: "执行 Quick 数据转换：命名风格、标准数据格式、字符串编码、文本与字节、JSON 代码模型或整数进制转换。",
+        description: "执行 Quick 数据转换：文本与行清理、命名风格、标准数据格式、字符串编码、文本与字节、JSON 代码模型或整数进制转换。文本模块 target 支持 trim-lines/remove-empty/dedupe/sort-asc/sort-desc/reverse/number-lines/lf/crlf/tabs-to-spaces/nfc/nfd/visible/stats。",
         inputSchema: jsonSchema<{ module: typeof CONVERSION_MODULES[number]; source: string; target: string; input: string }>({
           type: "object",
           properties: {
@@ -230,11 +232,11 @@ function AssistantSession({ profile, activePage, onNavigate, sidebarOrder, onSid
         execute: async (input) => usePage("converter", "convert", input),
       }),
       time_and_identifiers: tool({
-        description: "执行时间戳/日期、时区、日期差值、Cron 解析，或生成 UUID/GUID/ULID/雪花 ID/随机内容。密码只显示在 Quick 页面。",
-        inputSchema: jsonSchema<{ operation: typeof TIME_OPERATIONS[number]; value?: string; unit?: string; sourceZone?: string; targetZone?: string; start?: string; end?: string; generator?: string; length?: number; cron?: string; zone?: string }>({
+        description: "执行时间戳/日期、时区、日期差值、数值到可读时间段或可读时间段反向解析、Cron 解析，或生成 UUID/GUID/ULID/雪花 ID/随机内容。parse-duration 支持 1d 2h 3m 4s 500ms 和 HH:MM:SS。密码只显示在 Quick 页面。",
+        inputSchema: jsonSchema<{ operation: typeof TIME_OPERATIONS[number]; value?: string; unit?: string; durationUnit?: string; sourceZone?: string; targetZone?: string; start?: string; end?: string; generator?: string; length?: number; cron?: string; zone?: string }>({
           type: "object",
           properties: {
-            operation: { type: "string", enum: [...TIME_OPERATIONS] }, value: { type: "string", description: "时间戳或 ISO 日期时间" }, unit: { type: "string", enum: ["seconds", "milliseconds"] },
+            operation: { type: "string", enum: [...TIME_OPERATIONS] }, value: { type: "string", description: "时间戳、ISO 日期时间或时长数值" }, unit: { type: "string", enum: ["seconds", "milliseconds"] }, durationUnit: { type: "string", enum: ["milliseconds", "seconds", "minutes"], description: "duration 操作的输入单位" },
             sourceZone: { type: "string" }, targetZone: { type: "string" }, start: { type: "string" }, end: { type: "string" },
             generator: { type: "string", enum: ["uuid", "guid", "ulid", "snowflake", "string", "number", "password"] }, length: { type: "number", minimum: 1, maximum: 4096 }, cron: { type: "string" }, zone: { type: "string" },
           },
@@ -243,12 +245,17 @@ function AssistantSession({ profile, activePage, onNavigate, sidebarOrder, onSid
         execute: async (input) => usePage("time-ids", "run", input),
       }),
       validate_content: tool({
-        description: "使用 JSONPath、XPath 或带 Flags 的 JavaScript 正则表达式执行校验，并同步匹配结果。",
-        inputSchema: jsonSchema<{ mode: typeof VALIDATION_MODES[number]; expression: string; input: string; flags?: string }>({
-          type: "object", properties: { mode: { type: "string", enum: [...VALIDATION_MODES] }, expression: { type: "string" }, input: { type: "string" }, flags: { type: "string", description: "正则 Flags，仅 gimsuy" } },
-          required: ["mode", "expression", "input"], additionalProperties: false,
+        description: "校验工作台。run 可实际执行 JSONPath、JSON Schema、XPath、CSS Selector、Glob 或 JavaScript 正则；生成规则时应先根据用户约束自行生成 expression/flags，再调用 run。JSON Schema 的 expression 是完整 Schema JSON。test-cases 用正例、反例、边界、空值、Unicode 和近似错误输入验证正则逻辑。show-code 把你根据当前表达式生成的 JavaScript/TypeScript/Python/C#/Java/Go/Rust/PHP 使用代码同步到页面；注意目标语言正则方言差异并在 explanation 说明。",
+        inputSchema: jsonSchema<{ action?: typeof VALIDATION_ACTIONS[number]; mode: typeof VALIDATION_MODES[number]; expression?: string; input?: string; flags?: string; replacement?: string; testCases?: Array<{ label?: string; input: string; expected: boolean }>; language?: string; code?: string; explanation?: string }>({
+          type: "object", properties: { action: { type: "string", enum: [...VALIDATION_ACTIONS] }, mode: { type: "string", enum: [...VALIDATION_MODES] }, expression: { type: "string", description: "表达式；show-code 也应传入当前表达式" }, input: { type: "string", description: "run 时的完整输入" }, flags: { type: "string", description: "JavaScript 正则 Flags，仅 dgimsuvy" }, replacement: { type: "string" }, testCases: { type: "array", maxItems: 100, items: { type: "object", properties: { label: { type: "string" }, input: { type: "string" }, expected: { type: "boolean" } }, required: ["input", "expected"], additionalProperties: false } }, language: { type: "string", enum: ["javascript", "typescript", "python", "csharp", "java", "go", "rust", "php"] }, code: { type: "string" }, explanation: { type: "string" } },
+          required: ["mode"], additionalProperties: false,
         }),
         execute: async (input) => usePage("validation", "run", input),
+      }),
+      frontend_utilities: tool({
+        description: "使用颜色与前端工具转换颜色、检查 WCAG 对比度、生成渐变、换算 px/rem/vw，或编码 SVG Data URL。",
+        inputSchema: jsonSchema<{ operation: typeof FRONTEND_OPERATIONS[number]; foreground?: string; background?: string; angle?: number; pixels?: number; baseSize?: number; viewportWidth?: number; svg?: string }>({ type: "object", properties: { operation: { type: "string", enum: [...FRONTEND_OPERATIONS] }, foreground: { type: "string", description: "HEX 颜色" }, background: { type: "string", description: "HEX 颜色" }, angle: { type: "number" }, pixels: { type: "number" }, baseSize: { type: "number" }, viewportWidth: { type: "number" }, svg: { type: "string" } }, required: ["operation"], additionalProperties: false }),
+        execute: async (input) => usePage("frontend", "run", input),
       }),
       crypto_operation: tool({
         description: "使用 Quick 加密页。普通 Hash 和 JWT 解析可直接执行；HMAC、AES、RSA、JWT 签名/验证只填写非敏感字段，密钥或密码必须由用户在页面输入并确认。RSA 密钥可在页面生成但不会返回给助手。",
@@ -259,7 +266,7 @@ function AssistantSession({ profile, activePage, onNavigate, sidebarOrder, onSid
         execute: async (input) => usePage("crypto", "run", input),
       }),
       network_operation: tool({
-        description: `使用网络工具。Ping、DNS、TCP 端口、CIDR、cURL/HTTP 互转和带条件进程搜索均可自动执行。${autoApproveOperations ? "操作自动审核已开启：用户明确要求时可发送 HTTP 请求；关闭进程前必须先按端口、PID 或程序名搜索，并且只能关闭该搜索结果中的 PID。" : "操作自动审核未开启：HTTP 只准备不发送，进程不能关闭。"}`,
+        description: `使用网络工具。Ping、DNS、TCP 端口、CIDR、URL 拆解、cURL/HTTP 互转和带条件进程搜索均可自动执行；url-inspect 只解析 URL，不发请求。${autoApproveOperations ? "操作自动审核已开启：用户明确要求时可发送 HTTP 请求；关闭进程前必须先按端口、PID 或程序名搜索，并且只能关闭该搜索结果中的 PID。" : "操作自动审核未开启：HTTP 只准备不发送，进程不能关闭。"}`,
         inputSchema: jsonSchema<{ operation: typeof NETWORK_OPERATIONS[number]; host?: string; count?: number; timeoutMS?: number; packetSize?: number; port?: number; recordType?: string; cidr?: string; method?: typeof HTTP_METHODS[number]; url?: string; headers?: string; body?: string; curl?: string; searchType?: string; query?: string; pid?: number }>({
           type: "object", properties: {
             operation: { type: "string", enum: [...NETWORK_OPERATIONS] }, host: { type: "string" }, count: { type: "number", minimum: 1, maximum: 20, description: "Ping 次数" }, timeoutMS: { type: "number", minimum: 100, maximum: 60000, description: "Ping 总超时毫秒数" }, packetSize: { type: "number", minimum: 1, maximum: 65500, description: "Ping 数据包字节数" }, port: { type: "number", minimum: 1, maximum: 65535 }, recordType: { type: "string", enum: ["A", "AAAA", "CNAME", "MX", "NS", "TXT"] }, cidr: { type: "string" },
@@ -277,10 +284,10 @@ function AssistantSession({ profile, activePage, onNavigate, sidebarOrder, onSid
         execute: useTextWorkbench,
       }),
       file_rename: tool({
-        description: `使用文件工具准备和预览批量重命名规则。文件范围必须由用户在页面选择或拖入，助手不能填写绝对路径。${autoApproveOperations ? "操作自动审核已开启：用户明确要求且当前预览无冲突时，可以执行重命名或撤销。" : "操作自动审核未开启：只能准备规则和生成预览，执行或撤销需要用户在页面确认。"}`,
-        inputSchema: jsonSchema<{ action: typeof FILE_RENAME_ACTIONS[number]; matchMode?: "all" | "wildcard" | "regex"; matchPattern?: string; matchFullName?: boolean; operation?: typeof FILE_RENAME_OPERATIONS[number]; find?: string; replacement?: string; useRegex?: boolean; prefix?: string; suffix?: string; start?: number; step?: number; width?: number; includeExtension?: boolean; sortBy?: "name" | "modified" | "size" }>({
+        description: `使用文件工具准备和预览批量重命名规则，或对用户已经选择的文件执行只读摘要/元信息检查。文件范围必须由用户在页面选择或拖入，助手不能填写绝对路径。${autoApproveOperations ? "操作自动审核已开启：用户明确要求且当前预览无冲突时，可以执行重命名或撤销。" : "操作自动审核未开启：只能准备规则和生成预览，执行或撤销需要用户在页面确认。"}`,
+        inputSchema: jsonSchema<{ action: typeof FILE_RENAME_ACTIONS[number]; algorithm?: string; matchMode?: "all" | "wildcard" | "regex"; matchPattern?: string; matchFullName?: boolean; operation?: typeof FILE_RENAME_OPERATIONS[number]; find?: string; replacement?: string; useRegex?: boolean; prefix?: string; suffix?: string; start?: number; step?: number; width?: number; includeExtension?: boolean; sortBy?: "name" | "modified" | "size" }>({
           type: "object", properties: {
-            action: { type: "string", enum: [...FILE_RENAME_ACTIONS] }, matchMode: { type: "string", enum: ["all", "wildcard", "regex"] }, matchPattern: { type: "string" }, matchFullName: { type: "boolean" }, operation: { type: "string", enum: [...FILE_RENAME_OPERATIONS] }, find: { type: "string" }, replacement: { type: "string" }, useRegex: { type: "boolean" }, prefix: { type: "string" }, suffix: { type: "string" }, start: { type: "number" }, step: { type: "number" }, width: { type: "number", minimum: 1, maximum: 12 }, includeExtension: { type: "boolean" }, sortBy: { type: "string", enum: ["name", "modified", "size"] },
+            action: { type: "string", enum: [...FILE_RENAME_ACTIONS] }, algorithm: { type: "string", enum: ["MD5", "SHA-256", "SHA-512"] }, matchMode: { type: "string", enum: ["all", "wildcard", "regex"] }, matchPattern: { type: "string" }, matchFullName: { type: "boolean" }, operation: { type: "string", enum: [...FILE_RENAME_OPERATIONS] }, find: { type: "string" }, replacement: { type: "string" }, useRegex: { type: "boolean" }, prefix: { type: "string" }, suffix: { type: "string" }, start: { type: "number" }, step: { type: "number" }, width: { type: "number", minimum: 1, maximum: 12 }, includeExtension: { type: "boolean" }, sortBy: { type: "string", enum: ["name", "modified", "size"] },
           }, required: ["action"], additionalProperties: false,
         }),
         execute: async ({ action, ...input }) => usePage("file-tools", action, { ...input, operationAutoApproved: autoApproveOperations }),
@@ -368,7 +375,7 @@ function AssistantSession({ profile, activePage, onNavigate, sidebarOrder, onSid
       model: createLanguageModel(settings),
       instructions: buildQuickAssistantInstructions(settings.systemPrompt, mcpServers, autoApproveOperations),
       tools,
-      stopWhen: stepCountIs(8),
+      stopWhen: stepCountIs(12),
       maxOutputTokens: 2048,
     })
     return new DirectChatTransport({ agent })

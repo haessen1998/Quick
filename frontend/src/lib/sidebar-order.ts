@@ -11,6 +11,7 @@ export const DEFAULT_SIDEBAR_ORDER: PageId[] = [
   "formatter",
   "converter",
   "validation",
+  "frontend",
   "time-ids",
   "crypto",
   "network",

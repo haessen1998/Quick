@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react"
-import { CalendarClock, Clock3, Copy, Fingerprint, Play, RefreshCw, Sparkles, TimerReset } from "lucide-react"
+import { useCallback, useMemo, useState } from "react"
+import { CalendarClock, Clock3, Copy, Fingerprint, Hourglass, Play, RefreshCw, Sparkles, TimerReset } from "lucide-react"
 import { CronExpressionParser } from "cron-parser"
 import { DateTime } from "luxon"
 import { ulid } from "ulid"
@@ -7,10 +7,49 @@ import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import { useAssistantCapability } from "@/lib/assistant-capabilities"
+import { useSmartInput } from "@/lib/smart-input"
 
 const inputClass = "app-interactive h-10 w-full rounded-lg border border-input bg-background px-3 text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/40"
 const outputClass = "min-h-10 rounded-lg border bg-muted/40 px-3 py-2 font-mono text-sm break-all"
 const timeZones = ["UTC", "Asia/Shanghai", "Asia/Tokyo", "Europe/London", "Europe/Paris", "America/New_York", "America/Los_Angeles", "Australia/Sydney"]
+type DurationUnit = "milliseconds" | "seconds" | "minutes"
+
+function convertDuration(value: string, unit: DurationUnit) {
+  if (!value.trim()) throw new Error("请输入时长")
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric)) throw new Error("请输入有效时长")
+  const multiplier = unit === "minutes" ? 60_000 : unit === "seconds" ? 1_000 : 1
+  const converted = numeric * multiplier
+  if (!Number.isFinite(converted) || Math.abs(converted) > Number.MAX_SAFE_INTEGER) throw new Error("时长超出安全计算范围")
+  const totalMilliseconds = Math.round(converted)
+  let remainder = Math.abs(totalMilliseconds)
+  const hours = Math.floor(remainder / 3_600_000); remainder %= 3_600_000
+  const minutes = Math.floor(remainder / 60_000); remainder %= 60_000
+  const seconds = Math.floor(remainder / 1_000)
+  const milliseconds = remainder % 1_000
+  const sign = totalMilliseconds < 0 ? "-" : ""
+  const formatted = `${sign}${hours} 小时 ${minutes} 分钟 ${seconds} 秒${milliseconds ? ` ${milliseconds} 毫秒` : ""}`
+  return { formatted, totalMilliseconds, hours, minutes, seconds, milliseconds }
+}
+
+function parseDuration(value: string) {
+  const trimmed = value.trim()
+  if (!trimmed) throw new Error("请输入时间段，例如 1h 2m 3.5s")
+  let milliseconds = 0
+  const colon = trimmed.match(/^([+-])?(\d+):([0-5]?\d)(?::([0-5]?\d(?:\.\d+)?))?$/)
+  if (colon) milliseconds = (Number(colon[2]) * 3600 + Number(colon[3]) * 60 + Number(colon[4] ?? 0)) * 1000 * (colon[1] === "-" ? -1 : 1)
+  else {
+    const normalized = trimmed.toLowerCase().replace(/毫秒/g, "ms").replace(/小时|时/g, "h").replace(/分钟|分/g, "m").replace(/秒/g, "s").replace(/天/g, "d")
+    const matches = [...normalized.matchAll(/([+-]?\d+(?:\.\d+)?)\s*(ms|d|h|m|s)/g)]
+    if (!matches.length || normalized.replace(/([+-]?\d+(?:\.\d+)?)\s*(ms|d|h|m|s)/g, "").trim()) throw new Error("无法识别时间段；支持 1d 2h 3m 4s 500ms 或 HH:MM:SS")
+    const factors = { ms: 1, s: 1000, m: 60000, h: 3600000, d: 86400000 }
+    milliseconds = matches.reduce((total, match) => total + Number(match[1]) * factors[match[2] as keyof typeof factors], 0)
+  }
+  if (!Number.isFinite(milliseconds) || Math.abs(milliseconds) > Number.MAX_SAFE_INTEGER) throw new Error("时间段超出安全计算范围")
+  const rounded = Math.round(milliseconds)
+  const readable = convertDuration(String(rounded), "milliseconds")
+  return { ...readable, seconds: rounded / 1000, minutesTotal: rounded / 60000, hoursTotal: rounded / 3600000 }
+}
 
 function secureRandom(length: number, alphabet: string) {
   if (length < 1 || length > 4096) throw new Error("长度需要在 1–4096 之间")
@@ -50,6 +89,10 @@ export default function TimeIdentifiersPage() {
   const [targetZone, setTargetZone] = useState("UTC")
   const [diffStart, setDiffStart] = useState(() => DateTime.local().startOf("day").toFormat("yyyy-LL-dd'T'HH:mm"))
   const [diffEnd, setDiffEnd] = useState(() => DateTime.local().plus({ days: 1, hours: 2 }).startOf("hour").toFormat("yyyy-LL-dd'T'HH:mm"))
+  const [durationValue, setDurationValue] = useState("3661")
+  const [durationUnit, setDurationUnit] = useState<DurationUnit>("seconds")
+  const [durationText, setDurationText] = useState("1h 1m 1s")
+  const [comparisonZones, setComparisonZones] = useState(["Asia/Shanghai", "UTC", "America/New_York", "Europe/London"])
   const [generator, setGenerator] = useState("uuid")
   const [length, setLength] = useState(24)
   const [generated, setGenerated] = useState("")
@@ -92,6 +135,32 @@ export default function TimeIdentifiersPage() {
     return `${sign}${days} 天 ${hours} 小时 ${minutes} 分钟 ${seconds} 秒\n总计：${milliseconds} ms`
   }, [diffStart, diffEnd])
 
+  const durationResult = useMemo(() => {
+    try {
+      const result = convertDuration(durationValue, durationUnit)
+      return `${result.formatted}\n总计：${result.totalMilliseconds} 毫秒`
+    } catch (error) {
+      return error instanceof Error ? error.message : String(error)
+    }
+  }, [durationValue, durationUnit])
+  const parsedDurationResult = useMemo(() => {
+    try {
+      const result = parseDuration(durationText)
+      return `${result.formatted}\n毫秒：${result.totalMilliseconds}\n秒：${result.seconds}\n分钟：${result.minutesTotal}`
+    } catch (error) { return error instanceof Error ? error.message : String(error) }
+  }, [durationText])
+  const timezoneComparisons = useMemo(() => {
+    const value = DateTime.fromISO(dateInput, { zone: sourceZone })
+    return comparisonZones.map((zone) => ({ zone, value: value.isValid ? value.setZone(zone).toFormat("yyyy-LL-dd HH:mm:ss ZZZZ") : "无效时间" }))
+  }, [comparisonZones, dateInput, sourceZone])
+
+  useSmartInput("time-ids", useCallback((values) => {
+    const operation = String(values.operation ?? "")
+    if (operation === "timestamp-to-date") { setTimestamp(String(values.value ?? "")); setTimestampUnit(values.unit === "milliseconds" ? "milliseconds" : "seconds") }
+    if (operation === "cron") { setCron(String(values.cron ?? "")); setCronZone(String(values.zone ?? "Asia/Shanghai")) }
+    if (operation === "show-identifier") { setGenerator("uuid"); setGenerated(String(values.value ?? "")) }
+  }, []))
+
   const runGenerator = () => {
     try {
       setGenerated(generateIdentifier(generator, length))
@@ -117,7 +186,7 @@ export default function TimeIdentifiersPage() {
 
   useAssistantCapability({
     page: "time-ids",
-    getContext: () => ({ timestamp, timestampUnit, dateInput, sourceZone, targetZone, diffStart, diffEnd, generator, length, generated: generated ? "已生成（值不暴露给助手）" : "", cron, cronZone, cronResults, cronError }),
+    getContext: () => ({ timestamp, timestampUnit, dateInput, sourceZone, targetZone, comparisonZones, diffStart, diffEnd, durationValue, durationUnit, durationResult, durationText, parsedDurationResult, generator, length, generated: generated ? "已生成（值不暴露给助手）" : "", cron, cronZone, cronResults, cronError }),
     actions: {
       run: (values) => {
         const operation = String(values.operation ?? "")
@@ -160,6 +229,20 @@ export default function TimeIdentifiersPage() {
             setDiffStart(start); setDiffEnd(end)
             return { success: true, result: { milliseconds, seconds: milliseconds / 1000, minutes: milliseconds / 60000, hours: milliseconds / 3600000, days: milliseconds / 86400000 }, executed: true }
           }
+          if (operation === "duration") {
+            const value = String(values.value ?? "")
+            const unit = String(values.durationUnit ?? values.unit ?? "seconds") as DurationUnit
+            if (!(["milliseconds", "seconds", "minutes"] as string[]).includes(unit)) throw new Error("时长单位必须是毫秒、秒或分钟")
+            const result = convertDuration(value, unit)
+            setDurationValue(value); setDurationUnit(unit)
+            return { success: true, result, executed: true }
+          }
+          if (operation === "parse-duration") {
+            const value = String(values.value ?? "")
+            const result = parseDuration(value)
+            setDurationText(value)
+            return { success: true, result, executed: true }
+          }
           if (operation === "generate") {
             const kind = String(values.generator ?? "uuid")
             const nextLength = Number(values.length ?? 24)
@@ -191,7 +274,7 @@ export default function TimeIdentifiersPage() {
         <div className="mb-6">
           <div className="mb-2 flex items-center gap-2 text-sm text-muted-foreground"><Sparkles className="size-4" />开发工具</div>
           <h1 className="text-3xl font-semibold tracking-tight">时间与标识符</h1>
-          <p className="mt-2 text-sm text-muted-foreground">处理时间戳、时区、日期差值、Cron，并生成常用唯一标识符与安全随机内容。</p>
+          <p className="mt-2 text-sm text-muted-foreground">处理时间戳、时区、日期差值、时间段、Cron，并生成常用唯一标识符与安全随机内容。</p>
         </div>
 
         <div className="grid gap-4 xl:grid-cols-2">
@@ -216,11 +299,24 @@ export default function TimeIdentifiersPage() {
               <select className={inputClass} value={targetZone} onChange={(event) => setTargetZone(event.target.value)}>{timeZones.map((zone) => <option key={zone}>{zone}</option>)}</select>
             </div>
             <div className={`${outputClass} mt-3`}>{timezoneResult}</div>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">{timezoneComparisons.map((item, index) => <label key={index} className="rounded-lg border bg-muted/20 p-2"><select className="app-interactive w-full bg-transparent text-xs font-medium outline-none" value={item.zone} onChange={(event) => setComparisonZones((zones) => zones.map((zone, itemIndex) => itemIndex === index ? event.target.value : zone))}>{timeZones.map((zone) => <option key={zone}>{zone}</option>)}</select><div className="mt-1 text-xs text-muted-foreground">{item.value}</div></label>)}</div>
             <div className="mt-5 grid gap-3 sm:grid-cols-2">
               <label className="space-y-1 text-xs text-muted-foreground">开始<input className={inputClass} type="datetime-local" value={diffStart} onChange={(event) => setDiffStart(event.target.value)} /></label>
               <label className="space-y-1 text-xs text-muted-foreground">结束<input className={inputClass} type="datetime-local" value={diffEnd} onChange={(event) => setDiffEnd(event.target.value)} /></label>
             </div>
             <pre className={`${outputClass} mt-3 whitespace-pre-wrap`}>{difference}</pre>
+          </article>
+
+          <article className="rounded-xl border bg-card p-5 shadow-sm xl:col-span-2">
+            <div className="flex items-center gap-2 font-medium"><Hourglass className="size-4" />时间段转换</div>
+            <p className="mt-1 text-xs text-muted-foreground">将秒、毫秒或分钟转换为小时、分钟、秒，结果精确到毫秒。</p>
+            <div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_10rem_minmax(0,1.4fr)_auto]">
+              <input className={inputClass} type="number" step="any" value={durationValue} onChange={(event) => setDurationValue(event.target.value)} aria-label="时长数值" placeholder="例如 3661" />
+              <select className={inputClass} value={durationUnit} onChange={(event) => setDurationUnit(event.target.value as DurationUnit)} aria-label="时长单位"><option value="seconds">秒</option><option value="milliseconds">毫秒</option><option value="minutes">分钟</option></select>
+              <pre className={`${outputClass} whitespace-pre-wrap`}>{durationResult}</pre>
+              <Button variant="outline" size="icon" onClick={() => copy(durationResult)} aria-label="复制时间段结果"><Copy /></Button>
+            </div>
+            <div className="mt-4 border-t pt-4"><div className="mb-2 text-xs font-medium text-muted-foreground">可读时间段 → 数值</div><div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)_auto]"><input className={inputClass} value={durationText} onChange={(event) => setDurationText(event.target.value)} placeholder="1d 2h 3m 4.5s 500ms 或 01:02:03" /><pre className={`${outputClass} whitespace-pre-wrap`}>{parsedDurationResult}</pre><Button variant="outline" size="icon" onClick={() => copy(parsedDurationResult)}><Copy /></Button></div></div>
           </article>
 
           <article className="rounded-xl border bg-card p-5 shadow-sm">

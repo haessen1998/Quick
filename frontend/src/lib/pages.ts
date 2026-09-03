@@ -1,4 +1,4 @@
-export type PageId = "home" | "ai-chat" | "mcp-inspector" | "formatter" | "converter" | "time-ids" | "validation" | "crypto" | "network" | "text-workbench" | "file-tools" | "navigation" | "settings"
+export type PageId = "home" | "ai-chat" | "mcp-inspector" | "formatter" | "converter" | "time-ids" | "validation" | "frontend" | "crypto" | "network" | "text-workbench" | "file-tools" | "navigation" | "settings"
 
 export const PAGE_LABELS: Record<PageId, string> = {
   home: "首页",
@@ -8,6 +8,7 @@ export const PAGE_LABELS: Record<PageId, string> = {
   converter: "数据转换",
   "time-ids": "时间与标识符",
   validation: "校验工具",
+  frontend: "颜色与前端",
   crypto: "加密与验证",
   network: "网络工具",
   "text-workbench": "文本工作台",

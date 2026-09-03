@@ -23,6 +23,7 @@ import {
   CaseSensitive,
   Network,
   Pencil,
+  Palette,
   Plus,
   PanelRightClose,
   PanelRightOpen,
@@ -36,7 +37,7 @@ import {
   EyeOff,
   type LucideIcon,
 } from "lucide-react"
-import { WML } from "@wailsio/runtime"
+import { Clipboard, WML } from "@wailsio/runtime"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
@@ -68,6 +69,7 @@ import { AI_PROVIDER_OPTIONS, getAIProviderOption, isAIProfileReady } from "@/li
 import type { PageId } from "@/lib/pages"
 import { getInitialTheme, type AppTheme } from "@/lib/theme"
 import { getInitialProxySettings, saveProxySettings, type ProxySettings } from "@/lib/proxy"
+import { sendSmartInput } from "@/lib/smart-input"
 import { NAVIGATION_GROUPS_CHANGED_EVENT, loadNavigationGroups, mergeNavigationGroups, navigationCSVTemplate, navigationGroupsToCSV, parseNavigationCSV, persistNavigationGroups, saveNavigationGroups } from "@/lib/navigation-sites"
 import { hydrateSidebarOrder, loadSidebarOrder, normalizeSidebarOrder, persistSidebarOrder, saveSidebarOrder } from "@/lib/sidebar-order"
 import {
@@ -97,6 +99,7 @@ const FileToolsPage = lazy(() => import("@/pages/FileToolsPage"))
 const NavigationPage = lazy(() => import("@/pages/NavigationPage"))
 const TimeIdentifiersPage = lazy(() => import("@/pages/TimeIdentifiersPage"))
 const ValidationPage = lazy(() => import("@/pages/ValidationPage"))
+const FrontendToolsPage = lazy(() => import("@/pages/FrontendToolsPage"))
 
 type PageDefinition = {
   id: PageId
@@ -116,7 +119,8 @@ const pages: PageDefinition[] = [
   { id: "formatter", label: "字符串格式化", description: "JSON、YAML、XML、HTML、CSS 与 JavaScript", icon: CaseSensitive },
   { id: "converter", label: "数据转换", description: "格式、编码、代码模型与进制互转", icon: ArrowLeftRight },
   { id: "time-ids", label: "时间与标识符", description: "时间戳、时区、Cron 与 ID 生成", icon: Clock3 },
-  { id: "validation", label: "校验工具", description: "JSONPath、XPath 与正则表达式", icon: FileCheck2 },
+  { id: "validation", label: "校验工具", description: "JSONPath、XPath、Selector 与正则测试", icon: FileCheck2 },
+  { id: "frontend", label: "颜色与前端", description: "颜色、对比度、CSS 与 SVG 工具", icon: Palette },
   { id: "crypto", label: "加密与验证", description: "哈希、AES、RSA 与 JWT", icon: ShieldCheck },
   { id: "network", label: "网络工具", description: "网络诊断、HTTP/cURL 与本地进程", icon: Network },
   { id: "text-workbench", label: "文本工作台", description: "Markdown、Mermaid 预览与智能文本差异", icon: Files },
@@ -224,12 +228,34 @@ function AppSidebar({ activePage, order, onNavigate, onOrderChange }: { activePa
   )
 }
 
+type SmartInputAction = { label: string; description: string; page: PageId; payload: Record<string, unknown> }
+
+function detectSmartInput(input: string): SmartInputAction[] {
+  const value = input.trim()
+  if (!value) return []
+  const actions: SmartInputAction[] = []
+  try {
+    JSON.parse(value)
+    actions.push({ label: "格式化 JSON", description: "校验并整理缩进", page: "formatter", payload: { operation: "json-format", input: value } })
+  } catch { /* Not JSON. */ }
+  if (/^<([A-Za-z][\w:.-]*)(?:\s[^>]*)?>[\s\S]*<\/\1>\s*$/.test(value)) actions.push({ label: "格式化 XML", description: "校验并整理节点缩进", page: "formatter", payload: { operation: "xml-format", input: value } })
+  if (!actions.length && /^(?:---\s*\n)?[\w.-]+:\s*[^\n]*(?:\n|$)/.test(value)) actions.push({ label: "格式化 YAML", description: "校验并规范缩进", page: "formatter", payload: { operation: "yaml-format", input: value } })
+  if (/^https?:\/\//i.test(value)) actions.push({ label: "解析 URL", description: "拆解路径与查询参数", page: "network", payload: { operation: "url-inspect", url: value } })
+  if (/^[+-]?\d{10}(?:\d{3})?$/.test(value)) actions.push({ label: "转换时间戳", description: value.replace(/^[+-]/, "").length === 13 ? "按毫秒解析" : "按秒解析", page: "time-ids", payload: { operation: "timestamp-to-date", value, unit: value.replace(/^[+-]/, "").length === 13 ? "milliseconds" : "seconds" } })
+  if (/^[\w-]+\.[\w-]+\.[\w-]+$/.test(value)) actions.push({ label: "解析 JWT", description: "查看 Header、Payload 与有效期", page: "crypto", payload: { operation: "jwt-parse", input: value } })
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)) actions.push({ label: "识别 UUID", description: "带入标识符工具继续处理", page: "time-ids", payload: { operation: "show-identifier", value } })
+  if (/^(?:[^\s]+\s+){4,6}[^\s]+$/.test(value)) actions.push({ label: "解析 Cron", description: "预览未来执行时间", page: "time-ids", payload: { operation: "cron", cron: value, zone: "Asia/Shanghai" } })
+  if (/^[A-Za-z0-9+/\r\n]+={0,2}$/.test(value) && value.replace(/\s/g, "").length >= 8 && value.replace(/\s/g, "").length % 4 === 0) actions.push({ label: "解码 Base64", description: "转换为 UTF-8 文本", page: "converter", payload: { module: "encoding", source: "base64", target: "text", input: value } })
+  if (!actions.length) actions.push({ label: "处理文本", description: "打开文本与行处理", page: "converter", payload: { module: "text", source: "text", target: "trim-lines", input } })
+  return actions.slice(0, 4)
+}
+
 function HomePage({ time, onNavigate }: { time: string; onNavigate: (page: PageId) => void }) {
   return (
     <section className="home-page">
       <main className="home-container quick-hero">
         <div className="quick-hero-kicker"><Sparkles aria-hidden="true" />LOCAL-FIRST DEVELOPER TOOLKIT</div>
-        <h1 className="quick-hero-heading"><GlitchText speed={0.8} enableShadows className="quick-hero-title">QUICK</GlitchText></h1>
+        <h1 className="quick-hero-heading"><GlitchText speed={0.8} enableShadows forceMotion className="quick-hero-title">QUICK</GlitchText></h1>
         <p className="quick-hero-subtitle">一个持续生长的跨平台开发者工具箱。把格式化、转换、校验、网络与加密操作集中在一个轻量桌面应用中。</p>
         <div className="quick-hero-tags" aria-label="主要功能"><span>FORMAT</span><span>CONVERT</span><span>VALIDATE</span><span>NETWORK</span><span>CRYPTO</span></div>
         <div className="quick-hero-actions">
@@ -693,7 +719,7 @@ function App() {
     toast.success(nextTheme === "dark" ? "已切换到深色主题" : "已切换到浅色主题")
   }
 
-  const navigateTo = (page: PageId) => {
+  const navigateTo = useCallback((page: PageId) => {
     setVisitedPages((visited) => {
       if (visited.has(page)) return visited
       const next = new Set(visited)
@@ -701,7 +727,39 @@ function App() {
       return next
     })
     setActivePage(page)
-  }
+  }, [])
+
+  useEffect(() => {
+    let initialized = false
+    let reading = false
+    let lastClipboard = ""
+    const readClipboard = async () => {
+      if (reading || document.visibilityState !== "visible") return
+      reading = true
+      try {
+        const value = (await Clipboard.Text()).trim()
+        if (!initialized) { initialized = true; lastClipboard = value; return }
+        if (!value || value === lastClipboard) return
+        lastClipboard = value
+        const action = detectSmartInput(value)[0]
+        if (!action) return
+        toast("检测到可智能处理的剪贴板内容", {
+          id: "quick-smart-clipboard",
+          description: `${action.label} · ${action.description}`,
+          duration: 10000,
+          action: { label: "智能处理", onClick: () => { navigateTo(action.page); window.setTimeout(() => sendSmartInput(action.page, action.payload), 0) } },
+          cancel: { label: "忽略", onClick: () => undefined },
+        })
+      } catch { /* Clipboard access is unavailable in browser-only preview. */ }
+      finally { reading = false }
+    }
+    const rememberLocalCopy = () => window.setTimeout(() => { void Clipboard.Text().then((value) => { lastClipboard = value.trim(); initialized = true }).catch(() => undefined) }, 0)
+    void readClipboard()
+    window.addEventListener("focus", readClipboard)
+    document.addEventListener("visibilitychange", readClipboard)
+    document.addEventListener("copy", rememberLocalCopy)
+    return () => { window.removeEventListener("focus", readClipboard); document.removeEventListener("visibilitychange", readClipboard); document.removeEventListener("copy", rememberLocalCopy) }
+  }, [navigateTo])
 
   const saveAIProfileFromTest = (profile: AIProfile) => {
     setAIProfiles((profiles) => profiles.some((item) => item.id === profile.id)
@@ -740,6 +798,7 @@ function App() {
           {visitedPages.has("converter") && <PageSlot active={activePage === "converter"}><DataConversionPage /></PageSlot>}
           {visitedPages.has("time-ids") && <PageSlot active={activePage === "time-ids"}><TimeIdentifiersPage /></PageSlot>}
           {visitedPages.has("validation") && <PageSlot active={activePage === "validation"}><ValidationPage /></PageSlot>}
+          {visitedPages.has("frontend") && <PageSlot active={activePage === "frontend"}><FrontendToolsPage /></PageSlot>}
           {visitedPages.has("crypto") && <PageSlot active={activePage === "crypto"}><CryptoPage /></PageSlot>}
           {visitedPages.has("network") && <PageSlot active={activePage === "network"}><NetworkPage proxy={proxy} /></PageSlot>}
           {visitedPages.has("text-workbench") && <PageSlot active={activePage === "text-workbench"}><TextWorkbenchPage /></PageSlot>}

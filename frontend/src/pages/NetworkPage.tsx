@@ -1,13 +1,14 @@
-import { useMemo, useRef, useState } from "react"
-import { Activity, Braces, Copy, Globe2, Network, Play, Power, Router, Search, Sparkles, TerminalSquare } from "lucide-react"
+import { useCallback, useMemo, useRef, useState } from "react"
+import { Activity, Braces, Copy, Globe2, Link2, Network, Play, Plus, Power, Router, Search, Sparkles, TerminalSquare, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 
 import { NetworkService } from "../../bindings/github.com/haessen1998/Quick/internal/network"
 import { Button } from "@/components/ui/button"
 import { useAssistantCapability } from "@/lib/assistant-capabilities"
 import type { ProxySettings } from "@/lib/proxy"
+import { useSmartInput } from "@/lib/smart-input"
 
-type Mode = "ping" | "dns" | "port" | "cidr" | "http" | "process"
+type Mode = "ping" | "dns" | "port" | "cidr" | "url" | "http" | "process"
 type NetworkResult = { success: boolean; output: string; durationMs: number }
 type HTTPResult = { success: boolean; status: string; statusCode: number; headers: Record<string, string[]>; body: string; durationMs: number }
 type ProcessInfo = { pid: number; name: string; ports: number[] }
@@ -99,6 +100,15 @@ function curlToHTTP(command: string): HTTPRequest {
   return { method, url, headers: headers.join("\n"), body: bodies.join("&") }
 }
 
+function parseURL(value: string) {
+  const parsed = new URL(value)
+  return {
+    href: parsed.href, protocol: parsed.protocol, username: parsed.username, password: parsed.password ? "••••••" : "",
+    hostname: parsed.hostname, port: parsed.port || "默认", origin: parsed.origin, pathname: parsed.pathname,
+    search: parsed.search, hash: parsed.hash, parameters: Array.from(parsed.searchParams.entries()).map(([key, item]) => ({ key, value: item })),
+  }
+}
+
 export default function NetworkPage({ proxy }: { proxy: ProxySettings }) {
   const [mode, setMode] = useState<Mode>("ping")
   const [host, setHost] = useState("github.com")
@@ -121,10 +131,26 @@ export default function NetworkPage({ proxy }: { proxy: ProxySettings }) {
   const [output, setOutput] = useState("")
   const [running, setRunning] = useState(false)
   const curlPreview = useMemo(() => httpToCurl({ method, url, headers, body }), [method, url, headers, body])
+  const urlInspection = useMemo(() => { try { return { value: parseURL(url), error: "" } } catch (caught) { return { value: null, error: caught instanceof Error ? caught.message : String(caught) } } }, [url])
+
+  useSmartInput("network", useCallback((values) => {
+    if (values.operation !== "url-inspect") return
+    setMode("url"); setURL(String(values.url ?? "")); setOutput("")
+  }, []))
+
+  const changeURLParameters = (transform: (entries: [string, string][]) => [string, string][]) => {
+    try {
+      const parsed = new URL(url)
+      parsed.search = new URLSearchParams(transform(Array.from(parsed.searchParams.entries()))).toString()
+      setURL(parsed.href)
+    } catch (caught) { toast.error("URL 无效", { description: caught instanceof Error ? caught.message : String(caught) }) }
+  }
 
   useAssistantCapability({
     page: "network",
-    getContext: () => mode === "http"
+    getContext: () => mode === "url"
+      ? { mode, url, inspection: urlInspection.value, error: urlInspection.error }
+      : mode === "http"
       ? { mode, method, url, hasHeaders: Boolean(headers.trim()), bodyLength: body.length, hasCurl: Boolean(curl.trim()), requestSentByAssistant: false, output: output.slice(0, 4000) }
       : mode === "process"
         ? { mode, searchType: processSearchType, query: processQuery, resultCount: processes.length, canTerminate: processCanTerminate, output: output.slice(0, 2000) }
@@ -184,6 +210,12 @@ export default function NetworkPage({ proxy }: { proxy: ProxySettings }) {
             if (!/^https?:\/\//i.test(request.url)) throw new Error("HTTP URL 必须以 http:// 或 https:// 开头")
             const result = httpToCurl(request)
             setMode("http"); setMethod(request.method); setURL(request.url); setHeaders(request.headers); setBody(request.body); setCurl(result)
+            return { success: true, operation, result, executed: true, requestSent: false }
+          }
+          if (operation === "url-inspect") {
+            const nextURL = String(values.url ?? "").trim()
+            const result = parseURL(nextURL)
+            setMode("url"); setURL(nextURL); setOutput(JSON.stringify(result, null, 2))
             return { success: true, operation, result, executed: true, requestSent: false }
           }
           if (operation === "cidr") {
@@ -313,6 +345,7 @@ export default function NetworkPage({ proxy }: { proxy: ProxySettings }) {
   const modes = [
     { id: "ping" as const, label: "Ping", icon: Activity }, { id: "dns" as const, label: "DNS 查询", icon: Globe2 },
     { id: "port" as const, label: "端口检测", icon: Router }, { id: "cidr" as const, label: "CIDR/IP", icon: Braces },
+    { id: "url" as const, label: "URL 工具", icon: Link2 },
     { id: "http" as const, label: "cURL / HTTP", icon: TerminalSquare }, { id: "process" as const, label: "本地进程", icon: Network },
   ]
 
@@ -327,10 +360,17 @@ export default function NetworkPage({ proxy }: { proxy: ProxySettings }) {
             {mode === "dns" && <div className="grid gap-3 sm:grid-cols-[1fr_8rem_auto]"><input className={inputClass} value={host} onChange={(event) => setHost(event.target.value)} placeholder="域名" /><select className={inputClass} value={recordType} onChange={(event) => setRecordType(event.target.value)}>{["A", "AAAA", "CNAME", "MX", "NS", "TXT"].map((value) => <option key={value}>{value}</option>)}</select><Button onClick={run} disabled={running}><Search />查询</Button></div>}
             {mode === "port" && <div className="grid gap-3 sm:grid-cols-[1fr_8rem_auto]"><input className={inputClass} value={host} onChange={(event) => setHost(event.target.value)} /><input className={inputClass} type="number" min={1} max={65535} value={port} onChange={(event) => setPort(Number(event.target.value))} /><Button onClick={run} disabled={running}><Router />连接</Button></div>}
             {mode === "cidr" && <div className="grid gap-3 sm:grid-cols-[1fr_auto]"><input className={inputClass} value={cidr} onChange={(event) => setCIDR(event.target.value)} placeholder="192.168.1.10/24" /><Button onClick={run}><Play />计算</Button></div>}
+            {mode === "url" && <div className="space-y-4">
+              <input className={inputClass} value={url} onChange={(event) => setURL(event.target.value)} placeholder="https://user@example.com:8443/path?name=Quick#section" spellCheck={false} />
+              {urlInspection.error ? <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">{urlInspection.error}</div> : urlInspection.value && <>
+                <div className="grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-4">{[["协议", urlInspection.value.protocol], ["主机", urlInspection.value.hostname], ["端口", urlInspection.value.port], ["路径", urlInspection.value.pathname], ["Origin", urlInspection.value.origin], ["Fragment", urlInspection.value.hash || "—"]].map(([label, value]) => <div key={label} className="min-w-0 rounded-lg border bg-muted/20 p-3"><div className="text-muted-foreground">{label}</div><div className="mt-1 truncate font-mono" title={value}>{value}</div></div>)}</div>
+                <div className="overflow-hidden rounded-lg border"><div className="flex items-center justify-between border-b bg-muted/30 px-3 py-2 text-xs font-medium"><span>Query 参数 · {urlInspection.value.parameters.length}</span><Button variant="ghost" size="xs" onClick={() => changeURLParameters((entries) => [...entries, ["key", "value"]])}><Plus />添加</Button></div>{urlInspection.value.parameters.length ? urlInspection.value.parameters.map((parameter, index) => <div key={`${index}-${parameter.key}`} className="grid grid-cols-[1fr_1fr_auto] gap-2 border-b p-2 last:border-0"><input className={inputClass} value={parameter.key} onChange={(event) => changeURLParameters((entries) => entries.map((entry, itemIndex) => itemIndex === index ? [event.target.value, entry[1]] : entry))} aria-label={`参数 ${index + 1} 名称`} /><input className={inputClass} value={parameter.value} onChange={(event) => changeURLParameters((entries) => entries.map((entry, itemIndex) => itemIndex === index ? [entry[0], event.target.value] : entry))} aria-label={`参数 ${index + 1} 值`} /><Button variant="ghost" size="icon" onClick={() => changeURLParameters((entries) => entries.filter((_, itemIndex) => itemIndex !== index))}><Trash2 /></Button></div>) : <div className="p-4 text-center text-xs text-muted-foreground">没有查询参数</div>}</div>
+              </>}
+            </div>}
             {mode === "process" && <div className="space-y-4"><div className="grid gap-3 sm:grid-cols-[9rem_1fr_auto]"><select className={inputClass} value={processSearchType} onChange={(event) => { setProcessSearchType(event.target.value as typeof processSearchType); setProcessQuery(""); setProcessCanTerminate(false) }}><option value="port">按端口</option><option value="pid">按 PID</option><option value="name">按程序名</option></select><input className={inputClass} value={processQuery} onChange={(event) => { setProcessQuery(event.target.value); setProcessCanTerminate(false) }} placeholder={processSearchType === "name" ? "程序名；留空显示全部" : `${processSearchType.toUpperCase()}；留空显示全部`} /><Button onClick={findProcesses} disabled={running}><Search />{processQuery.trim() ? "搜索" : "显示全部"}</Button></div><div className="max-h-[32rem] overflow-auto rounded-lg border"><div className="sticky top-0 z-10 grid min-w-[36rem] grid-cols-[6rem_1fr_1fr_5rem] bg-muted px-3 py-2 text-xs font-medium text-muted-foreground shadow-[0_1px_0_var(--border)]"><span>PID</span><span>程序</span><span>本地 TCP 端口</span><span></span></div>{processes.length ? processes.map((process) => <div key={process.pid} className="grid min-w-[36rem] grid-cols-[6rem_1fr_1fr_5rem] items-center border-t px-3 py-2 text-sm"><code>{process.pid}</code><span className="truncate" title={process.name}>{process.name}</span><span className="truncate text-muted-foreground">{process.ports.join(", ") || "—"}</span><Button variant="destructive" size="sm" disabled={!processCanTerminate} title={processCanTerminate ? "关闭此进程" : "输入条件并搜索后才可关闭"} onClick={() => terminateProcess(process)}><Power />关闭</Button></div>) : <div className="border-t p-6 text-center text-sm text-muted-foreground">留空可显示全部进程；只有带条件的搜索结果允许关闭。</div>}</div></div>}
             {mode === "http" && <div className="space-y-4"><div className="grid gap-3 sm:grid-cols-[8rem_1fr_auto]"><select className={inputClass} value={method} onChange={(event) => setMethod(event.target.value)}>{["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"].map((value) => <option key={value}>{value}</option>)}</select><input className={inputClass} value={url} onChange={(event) => setURL(event.target.value)} placeholder="https://example.com" /><Button onClick={run} disabled={running}><Play />发送 HTTP</Button></div><div className="grid gap-3 md:grid-cols-2"><textarea className={`${inputClass} h-28 resize-none font-mono`} value={headers} onChange={(event) => setHeaders(event.target.value)} placeholder="Header: value" /><textarea className={`${inputClass} h-28 resize-none font-mono`} value={body} onChange={(event) => setBody(event.target.value)} placeholder="请求体（可选）" /></div><div className="grid gap-3 lg:grid-cols-2"><div className="space-y-2"><div className="flex items-center justify-between text-xs text-muted-foreground"><span>HTTP → cURL</span><Button variant="outline" size="sm" onClick={() => setCurl(curlPreview)}>写入编辑器</Button></div><pre className="h-32 overflow-auto whitespace-pre-wrap break-all rounded-lg border bg-muted/30 p-3 text-xs">{curlPreview}</pre></div><div className="space-y-2"><div className="flex items-center justify-between text-xs text-muted-foreground"><span>cURL → HTTP</span><div className="flex gap-2"><Button variant="outline" size="sm" onClick={() => importCurl(false)}>转换</Button><Button size="sm" onClick={() => importCurl(true)} disabled={running}>转换并执行</Button></div></div><textarea className={`${inputClass} h-32 resize-none font-mono text-xs`} value={curl} onChange={(event) => setCurl(event.target.value)} placeholder="粘贴 curl 命令…" /></div></div><div className="flex items-center gap-2 rounded-lg border bg-muted/30 p-3 text-xs"><span className="min-w-0 flex-1">代理：{proxy.mode === "system" ? "系统/环境" : proxy.mode === "custom" ? proxy.url || "自定义（未填写）" : "不使用"}</span><Button variant="ghost" size="icon-xs" onClick={async () => { await navigator.clipboard.writeText(curlPreview); toast.success("cURL 命令已复制") }}><Copy /></Button></div></div>}
           </div>
-          {mode !== "process" && <pre className="min-h-52 max-h-[32rem] overflow-auto whitespace-pre-wrap break-words bg-muted/20 p-4 font-mono text-sm leading-6">{running ? "执行中…" : output || "执行后显示结果"}</pre>}
+          {mode !== "process" && mode !== "url" && <pre className="min-h-52 max-h-[32rem] overflow-auto whitespace-pre-wrap break-words bg-muted/20 p-4 font-mono text-sm leading-6">{running ? "执行中…" : output || "执行后显示结果"}</pre>}
           {mode === "process" && output && <div className="border-t bg-muted/20 px-4 py-3 text-xs text-muted-foreground">{output}</div>}
         </div>
       </div>

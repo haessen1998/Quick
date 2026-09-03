@@ -1,10 +1,11 @@
-import { useMemo, useState, type ReactNode } from "react"
+import { useCallback, useMemo, useState, type ReactNode } from "react"
 import { ArrowRightLeft, Check, Clipboard, Eraser, Play, Sparkles, TriangleAlert, type LucideIcon } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import { useAssistantCapability } from "@/lib/assistant-capabilities"
 import type { PageId } from "@/lib/pages"
+import { useSmartInput } from "@/lib/smart-input"
 import { cn } from "@/lib/utils"
 
 export type TextTool = {
@@ -39,6 +40,16 @@ export function ToolWorkspace({ title, description, tools, assistantPage, active
   const [processing, setProcessing] = useState(false)
   const [copied, setCopied] = useState(false)
   const groups = useMemo(() => Array.from(new Set(tools.map((tool) => tool.group))), [tools])
+
+  useSmartInput(assistantPage, useCallback((values) => {
+    const operation = String(values.operation ?? "")
+    const nextTool = tools.find((tool) => tool.id === operation) ?? tools[0]
+    if (!nextTool) return
+    setActiveToolId(nextTool.id)
+    setInput(String(values.input ?? ""))
+    setOutput("")
+    setError("")
+  }, [tools]))
 
   const executeTool = async (tool: TextTool, value: string, fromAssistant = false) => {
     setActiveToolId(tool.id)

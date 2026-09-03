@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useCallback, useState } from "react"
 import { Braces, CheckCircle2, Copy, Eye, EyeOff, FileKey2, KeyRound, LockKeyhole, Play, RefreshCw, ShieldCheck, Sparkles } from "lucide-react"
 import { md5 } from "hash-wasm"
 import { decodeJwt, decodeProtectedHeader, jwtVerify, SignJWT } from "jose"
@@ -6,6 +6,7 @@ import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import { useAssistantCapability } from "@/lib/assistant-capabilities"
+import { useSmartInput } from "@/lib/smart-input"
 
 const inputClass = "app-interactive w-full rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/40"
 const textAreaClass = `${inputClass} resize-none font-mono leading-6`
@@ -128,6 +129,11 @@ export default function CryptoPage() {
   const [jwtSecret, setJwtSecret] = useState("replace-with-a-long-random-secret")
   const [jwtOutput, setJwtOutput] = useState("")
   const [error, setError] = useState("")
+
+  useSmartInput("crypto", useCallback((values) => {
+    if (values.operation !== "jwt-parse") return
+    setJwtMode("parse"); setJwtInput(String(values.input ?? "")); setJwtOutput(""); setError("")
+  }, []))
 
   const runSafely = async (action: () => Promise<void>) => {
     try { setError(""); await action() } catch (caught) { const message = caught instanceof Error ? caught.message : String(caught); setError(message); toast.error("操作失败", { description: message }) }

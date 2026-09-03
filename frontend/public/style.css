@@ -240,7 +240,8 @@ body {
 }
 .quick-hero-actions [data-slot="button"] { height: 2.5rem; padding-inline: 1rem; }
 @media (prefers-reduced-motion: reduce) {
-    .glitch-text::before, .glitch-text::after { animation: none !important; opacity: 0 !important; }
+    .glitch-text:not(.glitch-text--force-motion)::before,
+    .glitch-text:not(.glitch-text--force-motion)::after { animation: none !important; opacity: 0 !important; }
 }
 
 /* ----- Application shell -------------------------------------------------- */

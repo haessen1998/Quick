@@ -17,6 +17,10 @@ export function ExecuteRename(request: $models.RenameRequest): $CancellablePromi
     return $Call.ByID(2885873260, request);
 }
 
+export function InspectFiles(paths: string[] | null, recursive: boolean, algorithm: string): $CancellablePromise<$models.FileInspection[] | null> {
+    return $Call.ByID(429153588, paths, recursive, algorithm);
+}
+
 export function ListFiles(paths: string[] | null, recursive: boolean): $CancellablePromise<$models.RenameFileInfo[] | null> {
     return $Call.ByID(1945688238, paths, recursive);
 }

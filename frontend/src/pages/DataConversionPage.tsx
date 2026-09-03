@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react"
-import { ArrowLeftRight, Binary, Braces, CaseSensitive, CodeXml, Copy, Hash, Play, Sparkles, TextQuote } from "lucide-react"
+import { useCallback, useMemo, useState } from "react"
+import { AlignLeft, ArrowLeftRight, Binary, Braces, CaseSensitive, CodeXml, Copy, Hash, Play, Sparkles, TextQuote } from "lucide-react"
 import { camelCase, constantCase, dotCase, kebabCase, pascalCase, snakeCase } from "change-case"
 import { XMLBuilder, XMLParser, XMLValidator } from "fast-xml-parser"
 import Papa from "papaparse"
@@ -9,10 +9,11 @@ import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import { useAssistantCapability } from "@/lib/assistant-capabilities"
+import { useSmartInput } from "@/lib/smart-input"
 import { cn } from "@/lib/utils"
 
 type Option = { id: string; label: string }
-type ModuleId = "naming" | "standard" | "encoding" | "bytes" | "code" | "radix"
+type ModuleId = "naming" | "standard" | "encoding" | "bytes" | "code" | "radix" | "text"
 type ConversionModule = {
   id: ModuleId
   label: string
@@ -151,6 +152,28 @@ function radixConvert(input: string, source: string, target: string) {
   return `${negative ? "-" : ""}${value.toString(to).toUpperCase()}`
 }
 
+function transformText(input: string, _source: string, target: string) {
+  const lines = input.replace(/\r\n?/g, "\n").split("\n")
+  if (target === "trim-lines") return lines.map((line) => line.trim()).join("\n")
+  if (target === "remove-empty") return lines.filter((line) => line.trim()).join("\n")
+  if (target === "dedupe") return [...new Set(lines)].join("\n")
+  if (target === "sort-asc") return [...lines].sort((a, b) => a.localeCompare(b, undefined, { numeric: true })).join("\n")
+  if (target === "sort-desc") return [...lines].sort((a, b) => b.localeCompare(a, undefined, { numeric: true })).join("\n")
+  if (target === "reverse") return [...lines].reverse().join("\n")
+  if (target === "number-lines") return lines.map((line, index) => `${index + 1}. ${line}`).join("\n")
+  if (target === "lf") return lines.join("\n")
+  if (target === "crlf") return lines.join("\r\n")
+  if (target === "tabs-to-spaces") return input.replace(/\t/g, "  ")
+  if (target === "nfc" || target === "nfd") return input.normalize(target.toUpperCase() as "NFC" | "NFD")
+  if (target === "visible") return Array.from(input, (character) => ({ " ": "·", "\t": "→\t", "\n": "↵\n", "\r": "␍", "\u200b": "⟦ZWSP⟧", "\u00a0": "⟦NBSP⟧" }[character] ?? character)).join("")
+  if (target === "stats") {
+    const bytes = new TextEncoder().encode(input).length
+    const words = input.trim() ? input.trim().split(/\s+/u).length : 0
+    return `字符：${Array.from(input).length}\n代码单元：${input.length}\nUTF-8 字节：${bytes}\n单词：${words}\n行：${lines.length}`
+  }
+  throw new Error(`不支持的文本操作：${target}`)
+}
+
 const namingTargets = [
   { id: "upper", label: "UPPER CASE" }, { id: "lower", label: "lower case" }, { id: "camel", label: "camelCase" },
   { id: "pascal", label: "PascalCase" }, { id: "snake", label: "snake_case" }, { id: "kebab", label: "kebab-case" },
@@ -160,8 +183,20 @@ const dataFormats = [{ id: "json", label: "JSON" }, { id: "yaml", label: "YAML" 
 const encodingFormats = [{ id: "text", label: "普通文本" }, { id: "escaped", label: "转义文本" }, { id: "url", label: "URL 编码" }, { id: "base64", label: "Base64" }, { id: "unicode", label: "Unicode" }]
 const byteFormats = [{ id: "text", label: "UTF-8 文本" }, { id: "hex", label: "Hex 字节" }, { id: "ascii", label: "ASCII 码" }, { id: "utf8", label: "UTF-8 字节" }]
 const radixFormats = [{ id: "2", label: "二进制" }, { id: "8", label: "八进制" }, { id: "10", label: "十进制" }, { id: "16", label: "十六进制" }]
+const textOperations = [
+  { id: "trim-lines", label: "逐行去空格" }, { id: "remove-empty", label: "删除空行" }, { id: "dedupe", label: "行去重" },
+  { id: "sort-asc", label: "升序排列" }, { id: "sort-desc", label: "降序排列" }, { id: "reverse", label: "反转行" },
+  { id: "number-lines", label: "添加行号" }, { id: "lf", label: "转 LF" }, { id: "crlf", label: "转 CRLF" },
+  { id: "tabs-to-spaces", label: "Tab 转空格" }, { id: "nfc", label: "Unicode NFC" }, { id: "nfd", label: "Unicode NFD" },
+  { id: "visible", label: "显示不可见字符" }, { id: "stats", label: "文本统计" },
+]
 
 const modules: ConversionModule[] = [
+  {
+    id: "text", label: "文本与行", description: "清理、排序、换行与 Unicode 检查", icon: AlignLeft,
+    sources: [{ id: "text", label: "普通文本" }], targets: textOperations, defaultSource: "text", defaultTarget: "trim-lines",
+    samples: { text: "  apple  \r\nbanana\r\napple\r\n\r\nQuick\tTools" }, convert: transformText,
+  },
   {
     id: "naming", label: "大小写与命名", description: "将普通文本转换为常见命名风格", icon: CaseSensitive,
     sources: [{ id: "text", label: "自动识别文本" }], targets: namingTargets, defaultSource: "text", defaultTarget: "camel", samples: { text: "Quick developer tools" },
@@ -219,6 +254,14 @@ export default function DataConversionPage() {
   const [output, setOutput] = useState("")
   const [error, setError] = useState("")
 
+  useSmartInput("converter", useCallback((values) => {
+    const nextModule = modules.find((item) => item.id === String(values.module ?? ""))
+    if (!nextModule) return
+    const nextSource = String(values.source ?? nextModule.defaultSource)
+    const nextTarget = String(values.target ?? nextModule.defaultTarget)
+    setModuleId(nextModule.id); setSource(nextSource); setTarget(nextTarget); setInput(String(values.input ?? "")); setOutput(""); setError("")
+  }, []))
+
   const chooseModule = (next: ConversionModule) => { setModuleId(next.id); setSource(next.defaultSource); setTarget(next.defaultTarget); setInput(next.samples[next.defaultSource] ?? ""); setOutput(""); setError("") }
   const chooseSource = (next: string) => {
     setSource(next); setInput(module.samples[next] ?? ""); setOutput(""); setError("")
@@ -260,7 +303,7 @@ export default function DataConversionPage() {
     <section className="page-shell">
       <div className="mx-auto w-full max-w-7xl">
         <div className="mb-6"><div className="mb-2 flex items-center gap-2 text-sm text-muted-foreground"><Sparkles className="size-4" />开发工具</div><h1 className="text-3xl font-semibold tracking-tight">数据转换</h1><p className="mt-2 text-sm text-muted-foreground">选择模块，再指定来源与目标；输入输出区域保持一致。</p></div>
-        <div className="mb-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">{modules.map((item) => { const Icon = item.icon; return <button key={item.id} type="button" onClick={() => chooseModule(item)} className={cn("app-interactive flex items-center gap-3 rounded-xl border bg-card p-3 text-left transition-colors hover:bg-muted", moduleId === item.id && "border-primary bg-primary/8 ring-1 ring-primary")}><Icon className="size-4 shrink-0" /><span className="min-w-0"><span className="block truncate text-sm font-medium">{item.label}</span><span className="mt-0.5 block truncate text-[11px] text-muted-foreground">{item.description}</span></span></button> })}</div>
+        <div className="mb-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">{modules.map((item) => { const Icon = item.icon; return <button key={item.id} type="button" onClick={() => chooseModule(item)} className={cn("app-interactive flex items-center gap-3 rounded-xl border bg-card p-3 text-left transition-colors hover:bg-muted", moduleId === item.id && "border-primary bg-primary/8 ring-1 ring-primary")}><Icon className="size-4 shrink-0" /><span className="min-w-0"><span className="block truncate text-sm font-medium">{item.label}</span><span className="mt-0.5 block truncate text-[11px] text-muted-foreground">{item.description}</span></span></button> })}</div>
         <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
           <div className="grid gap-5 border-b p-4 lg:grid-cols-2"><RadioGroup legend="来源" name={`${module.id}-source`} options={module.sources} value={source} disabledValue={module.sources.length > 1 ? target : undefined} onChange={chooseSource} /><RadioGroup legend="目标" name={`${module.id}-target`} options={module.targets} value={target} disabledValue={module.targets.some((option) => option.id === source) ? source : undefined} onChange={(next) => { setTarget(next); setOutput(""); setError("") }} /></div>
           <div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3"><div><div className="text-sm font-medium">{module.label}</div><div className="text-xs text-muted-foreground">{module.description}</div></div><div className="flex gap-2"><Button variant="outline" disabled={!swappable} onClick={swap}><ArrowLeftRight />交换</Button><Button onClick={run} disabled={!input}><Play />执行转换</Button></div></div>

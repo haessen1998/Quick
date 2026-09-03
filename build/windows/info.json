@@ -1,11 +1,11 @@
 {
 	"fixed": {
-		"file_version": "0.3.1"
+		"file_version": "0.3.2"
 	},
 	"info": {
 		"0409": {
-			"FileVersion": "0.3.1",
-			"ProductVersion": "0.3.1",
+			"FileVersion": "0.3.2",
+			"ProductVersion": "0.3.2",
 			"CompanyName": "haessen",
 			"FileDescription": "A local-first developer toolbox",
 			"LegalCopyright": "© 2026, haessen",

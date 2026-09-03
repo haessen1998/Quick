@@ -10,17 +10,18 @@ export type QuickCapabilitySummary = {
 }
 
 export const QUICK_CAPABILITIES: QuickCapabilitySummary[] = [
-  { page: "home", policy: "automatic", abilities: ["查看 Quick 概览和进入各工具页", "读取或调整侧栏页面顺序；首页和设置保持固定，用户顺序会长期保存"] },
+  { page: "home", policy: "automatic", abilities: ["应用重新获得焦点时识别新复制的 JSON、URL、时间戳、JWT、Cron、Base64 或文本，经用户点击 Toast 后分流到对应页面", "查看 Quick 概览和进入各工具页", "读取或调整侧栏页面顺序；首页和设置保持固定，用户顺序会长期保存"] },
   { page: "ai-chat", policy: "automatic", abilities: ["使用设置页保存的 OpenAI、Azure OpenAI、Anthropic、Gemini、Open Responses 或 OpenAI Compatible 配置进行完整对话"] },
   { page: "mcp-inspector", policy: "mixed", abilities: ["选择已保存 MCP", "配置 Streamable HTTP、SSE、STDIO", "自动连接并读取 Tools", "未知或有副作用的 Tool 经确认后调用", "查看调用历史"] },
   { page: "formatter", policy: "automatic", abilities: ["JSON/YAML/XML/HTML/CSS/JavaScript 格式化", "JSON/XML/HTML/CSS/JavaScript 压缩"] },
-  { page: "converter", policy: "automatic", abilities: ["大小写与 camelCase、PascalCase、snake_case 等命名转换", "JSON/YAML/XML/CSV/TOML 双向转换", "文本/转义/URL/Base64/Unicode 转换", "UTF-8 文本与 Hex/ASCII/字节转换", "JSON 生成 C# Class、Java Class、Go Struct", "二/八/十/十六进制互转"] },
-  { page: "time-ids", policy: "automatic", abilities: ["Unix 时间戳与日期时间互转", "时区转换", "日期差值", "UUID/GUID/ULID/雪花 ID/随机字符串/数字/密码生成", "Cron 解析和未来 6 次执行时间"] },
-  { page: "validation", policy: "automatic", abilities: ["JSONPath", "XPath", "正则表达式及 g/i/m/s/u/y Flags"] },
+  { page: "converter", policy: "automatic", abilities: ["文本逐行清理、去重、排序、换行转换、Unicode 规范化、不可见字符和统计", "大小写与 camelCase、PascalCase、snake_case 等命名转换", "JSON/YAML/XML/CSV/TOML 双向转换", "文本/转义/URL/Base64/Unicode 转换", "UTF-8 文本与 Hex/ASCII/字节转换", "JSON 生成 C# Class、Java Class、Go Struct", "二/八/十/十六进制互转"] },
+  { page: "time-ids", policy: "automatic", abilities: ["Unix 时间戳与日期时间互转", "多时区对照", "日期差值", "数值与可读时间段双向转换", "UUID/GUID/ULID/雪花 ID/随机字符串/数字/密码生成", "Cron 解析和未来 6 次执行时间"] },
+  { page: "validation", policy: "automatic", abilities: ["JSONPath", "JSON Schema", "XPath", "CSS Selector", "Glob 文件路径匹配", "正则表达式及 Flags、匹配高亮和替换预览", "正则正例/反例/边界批量测试", "接收 AI 生成的 JavaScript、TypeScript、Python、C#、Java、Go、Rust、PHP 使用代码"] },
+  { page: "frontend", policy: "automatic", abilities: ["HEX/RGB/HSL/OKLCH 颜色转换", "WCAG 对比度", "CSS 渐变与阴影", "px/rem/vw 换算", "SVG Data URL"] },
   { page: "crypto", policy: "prepare-only", abilities: ["MD5、SHA-1、SHA-256、SHA-512", "HMAC", "AES-GCM 加解密", "RSA-OAEP 加解密和 RSA-PSS 签名验签", "RSA 密钥生成", "JWT 解析、HS256 签名与验证"] },
-  { page: "network", policy: "mixed", abilities: ["自动执行 Ping、DNS A/AAAA/CNAME/MX/NS/TXT 查询、TCP 端口检测和 IPv4 CIDR 计算", "HTTP 与 cURL 自动双向转换；操作自动审核开启后可按明确请求发送 HTTP", "自动按端口/PID/程序名搜索本地进程；操作自动审核开启后只能关闭刚搜索到的进程"] },
+  { page: "network", policy: "mixed", abilities: ["自动执行 Ping、DNS A/AAAA/CNAME/MX/NS/TXT 查询、TCP 端口检测和 IPv4 CIDR 计算", "URL 结构与 Query 参数解析编辑", "HTTP 与 cURL 自动双向转换；操作自动审核开启后可按明确请求发送 HTTP", "自动按端口/PID/程序名搜索本地进程；操作自动审核开启后只能关闭刚搜索到的进程"] },
   { page: "text-workbench", policy: "automatic", abilities: ["Markdown 与 Mermaid 图表实时预览", "行级、单词级、字符级文本差异", "忽略空白差异"] },
-  { page: "file-tools", policy: "mixed", abilities: ["准备通配符或正则文件匹配规则", "预览重置编号、替换、前缀和后缀重命名", "操作自动审核开启后执行或撤销批量重命名"] },
+  { page: "file-tools", policy: "mixed", abilities: ["对用户已选择的文件执行 SHA-256/SHA-512/MD5 摘要与 MIME、图片尺寸、UTF-8、换行符只读检查", "准备通配符或正则文件匹配规则", "预览重置编号、替换、前缀和后缀重命名", "操作自动审核开启后执行或撤销批量重命名"] },
   { page: "navigation", policy: "mixed", abilities: ["通过 Go Service 读取持久化站点", "按一级 group Tab 与可选 list 小组整理站点", "修改标题、说明、网址和卡片尺寸", "按站点名称/ID 或来源 group/list 批量移动", "移入新 list 或移出 list", "准备新增或删除站点", "操作自动审核开启后直接修改站点长期配置"] },
   { page: "settings", policy: "prepare-only", abilities: ["深浅主题", "系统/指定/不使用代理", "AI Provider 列表", "MCP Server 列表", "长期配置存储"] },
 ]
@@ -77,12 +78,15 @@ export function buildQuickAssistantStarters(page: PageId, context: Record<string
         : ["准备一段 JSON，并转换为 YAML", "演示文本与 Unicode 转义混合内容的互转", "生成一份 JSON 转 Go Struct 的示例"]
       break
     case "time-ids":
-      suggestions = ["把当前时间转换为 Unix 时间戳", "生成一个 UUID 和一个 ULID", "解析一个每 5 分钟执行的 Cron 并预览下次时间"]
+      suggestions = ["把 3661 秒转换为可读时间段", "生成一个 UUID 和一个 ULID", "解析一个每 5 分钟执行的 Cron 并预览下次时间"]
       break
     case "validation":
       suggestions = hasInput
-        ? ["检查当前表达式是否正确，并显示匹配结果", "解释当前表达式每一部分的含义", "为当前输入补充更稳健的边界条件"]
-        : ["准备一个邮箱正则并测试几个边界样例", "演示用 JSONPath 提取嵌套数组", "演示用 XPath 选择带属性的节点"]
+        ? ["检查当前表达式并生成正例、反例和边界测试", "解释当前表达式每一部分的含义", "把当前正则转换为 Python 和 C# 使用代码并说明方言差异"]
+        : ["根据一组有效和无效邮箱生成正则并实际测试", "演示用 CSS Selector 选择带属性的元素", "生成一个正则，再反向生成边界输入验证它的逻辑"]
+      break
+    case "frontend":
+      suggestions = ["检查当前前景色与背景色是否满足 AA 对比度", "把当前颜色转换为 HSL 和 OKLCH", "生成一个适合按钮背景的 CSS 渐变"]
       break
     case "crypto":
       suggestions = ["计算一段示例文本的 SHA-256", "准备一个 JWT 并解析 Header 与 Payload", "说明 AES、RSA 和 HMAC 应该如何选择"]

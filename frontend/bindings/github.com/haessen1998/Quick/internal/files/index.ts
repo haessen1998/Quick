@@ -7,6 +7,7 @@ export {
 };
 
 export type {
+    FileInspection,
     RenameExecutionResult,
     RenameFileInfo,
     RenamePlanItem,

@@ -1,10 +1,32 @@
 package files
 
 import (
+	"crypto/sha256"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
 )
+
+func TestInspectFilesReportsDigestAndTextMetadata(t *testing.T) {
+	directory := t.TempDir()
+	path := filepath.Join(directory, "sample.txt")
+	content := []byte("Quick\r\nTools\r\n")
+	if err := os.WriteFile(path, content, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	result, err := NewFileRenameService(nil).InspectFiles([]string{path}, false, "SHA-256")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("expected one result, got %d", len(result))
+	}
+	want := fmt.Sprintf("%x", sha256.Sum256(content))
+	if result[0].Digest != want || !result[0].UTF8 || result[0].LineEnding != "CRLF" {
+		t.Fatalf("unexpected inspection: %+v", result[0])
+	}
+}
 
 func TestRenamePreviewAndUndo(t *testing.T) {
 	directory := t.TempDir()

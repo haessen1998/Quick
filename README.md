@@ -7,13 +7,15 @@ Quick 是一个基于 Wails 3、Go、React 和 shadcn/ui 构建的跨平台开�
 ## 功能
 
 - 字符串格式化：JSON、YAML、XML、HTML、CSS、JavaScript 的格式化与压缩。
-- 数据转换：命名风格、JSON/YAML/XML/CSV/TOML、字符串编码、字节、代码模型和进制转换。
-- 时间与标识符：Unix 时间戳、时区、日期差值、Cron、UUID、ULID、雪花 ID 和随机内容生成。
-- 校验工具：JSONPath、XPath 和支持常用 flags 的正则表达式匹配。
+- 智能粘贴：应用重新获得焦点时识别新的剪贴板内容，经 Toast 确认后分流到对应工具；忽略时不读取到页面或保存。
+- 数据转换：文本与行清理、命名风格、JSON/YAML/XML/CSV/TOML、字符串编码、字节、代码模型和进制转换。
+- 时间与标识符：Unix 时间戳、多时区对照、日期差值、时间段双向转换、Cron、UUID、ULID、雪花 ID 和随机内容生成。
+- 校验工具：JSONPath、JSON Schema、XPath、CSS Selector、Glob，以及带匹配高亮、替换预览、批量测试和 AI 多语言代码生成的正则表达式。
 - 加密与验证：MD5、SHA、HMAC、AES-GCM、RSA 和 JWT。
-- 网络工具：Ping、DNS、TCP 端口、CIDR、HTTP/cURL 双向转换及本地进程查询。
+- 网络工具：Ping、DNS、TCP 端口、CIDR、URL/Query 编辑、HTTP/cURL 双向转换及本地进程查询。
 - 文本工作台：Markdown 与 Mermaid 图表预览，以及行级、单词级和字符级文本差异比较。
-- 文件工具：选择文件夹或拖入文件，预览并执行批量编号、替换、前缀和后缀重命名，支持撤销最近一次操作。
+- 文件工具：文件摘要与元信息检查，以及带安全预览和撤销的批量重命名。
+- 颜色与前端：HEX/RGB/HSL/OKLCH、对比度、渐变、阴影、CSS 单位和 SVG Data URL。
 - 站点导航：按分组保存常用站点，支持 `1x1`、`2x2`、`4x2` 卡片和拖拽排序。
 - AI 对话与小Q：通过 AI SDK 接入 OpenAI、Azure OpenAI、Anthropic、Gemini、Open Responses 和 OpenAI Compatible Provider，支持 Markdown、思考过程与工具步骤渲染。
 - 浅色与深色主题、HTTP 代理策略。
@@ -68,54 +70,6 @@ wails3 task package
 
 产物默认写入 `bin/`。平台相关任务和签名配置位于 `build/` 目录。
 
-## Windows Microsoft Store 包
-
-Windows 商店版本使用 MSIX。推送形如 `v0.3.1` 的版本 Tag，或手动运行 `Windows Store MSIX` GitHub Actions 工作流时，会完成测试、构建，并生成带版本号的 Windows `.exe` 与供 Partner Center 上传的未签名 `.msix`，二者都附带 SHA-256 校验文件。Tag 构建会把这些文件加入对应的 GitHub Release；Microsoft Store 会在认证通过后使用 Microsoft 证书重新签名商店包。
-
-商店产品为 [QuickDev](https://apps.microsoft.com/detail/9P084NQXKDMQ)，Store ID 是 `9P084NQXKDMQ`。Partner Center 分配的包标识已固化在构建配置中，不需要配置 GitHub Secret、仓库变量或签名证书。Actions 产物保留 30 天；其中的 `.msix` 可以直接上传到 Partner Center。GitHub Release 中的 Store MSIX 是未签名提交包，主要用于留档和商店上传，最终用户应从 Microsoft Store 安装已经过商店签名的版本。
-
-发布新版本前先更新 `build/config.yml` 中的版本，然后创建并推送 Tag：
-
-```powershell
-git tag v0.3.1
-git push origin v0.3.1
-```
-
-GitHub Release 中的独立 `.exe` 当前也没有 Authenticode 签名，Windows 可能显示 SmartScreen 提示。若以后把它作为商店外的正式分发渠道，需要再接入受信任的 Windows 代码签名服务。
-
-## macOS 发布包
-
-macOS 版本使用 Apple Developer ID 在 Mac App Store 之外分发。发布任务会构建同时支持 Apple Silicon 和 Intel Mac 的 Universal App，开启 Hardened Runtime 并使用 `Developer ID Application` 证书签名，对 App 和最终 DMG 分别提交 Apple 公证并 staple 票据，最后生成带版本号的 DMG 和 SHA-256 校验文件。
-
-首次在发布 Mac 上配置公证凭据：
-
-```bash
-xcrun notarytool store-credentials quick-notary \
-  --apple-id "<APPLE_ID>" \
-  --team-id "FRR4S244RD"
-```
-
-`notarytool` 会通过终端安全提示输入 Apple 专用密码，不要把密码写入命令、代码或仓库。
-
-然后执行：
-
-```bash
-wails3 task darwin:release:universal
-```
-
-产物为 `bin/Quick-<version>-macos-universal.dmg` 及同名 `.sha256` 文件。发布前需先更新 `build/config.yml` 中的版本，并确保 `build/darwin/Info.plist` 的版本已同步。
-
-GitHub Actions 可以在推送版本 Tag 时自动执行相同流程，并将公证后的 Universal DMG 发布到 GitHub Release。先在仓库的 `Settings > Secrets and variables > Actions` 中配置：
-
-- `APPLE_CERTIFICATE_P12_BASE64`：包含私钥的 Developer ID Application `.p12` 文件的 Base64 内容。
-- `APPLE_CERTIFICATE_PASSWORD`：导出 `.p12` 时设置的密码。
-- `APPLE_NOTARY_APPLE_ID`：用于 Apple 公证的 Apple ID。
-- `APPLE_NOTARY_PASSWORD`：该 Apple ID 的应用专用密码。
-
-在 macOS 上可用 `base64 < DeveloperIDApplication.p12 | pbcopy` 将证书编码并复制到剪贴板。证书、私钥和密码只能保存为 GitHub Actions Secret，不应提交到仓库。
-
-以上 Secrets 配置完成后，先手动运行一次 `macOS Release` 工作流验证签名和公证。验证成功后再推送 `v0.3.1` Tag；同一个 Tag 会串行汇总 Windows EXE、Store MSIX、macOS DMG 及各自校验文件到同一个 GitHub Release，避免不同平台同时创建 Release 时发生竞争。
-
 ## 常用检查
 
 ```powershell
@@ -136,7 +90,7 @@ Quick/
 ├─ frontend/                 React 前端、组件和生成绑定
 ├─ build/                    跨平台构建、打包和签名配置
 ├─ main.go                   Wails 应用入口
-├─ services/                 网络、MCP、进程和文件重命名后台服务
+├─ internal/                 配置、网络、MCP、导航和文件后台模块
 └─ Taskfile.yml              开发、构建和打包任务入口
 ```
 
