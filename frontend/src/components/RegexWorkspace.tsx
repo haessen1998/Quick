@@ -5,7 +5,7 @@ import { writeClipboard } from "@/lib/clipboard"
 import { uiText } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 import { inputClass, regexFlags, type useValidationPageViewModel } from "@/models/ValidationPageModel"
-import { Copy, Play, TriangleAlert } from "lucide-react"
+import { Copy, Play, Square, TriangleAlert } from "lucide-react"
 import { toast } from "sonner"
 
 export function RegexWorkspace({ model }: { model: ReturnType<typeof useValidationPageViewModel> }) {
@@ -22,13 +22,14 @@ export function RegexWorkspace({ model }: { model: ReturnType<typeof useValidati
     matchResult,
     replaceResult,
     running,
+    activeAction,
+    runNotice,
     run,
     loadSample,
     error,
     highlighted,
     previewRunning,
     previewError,
-    cancelPreview,
   } = model
   const cellHeader = "flex h-11 shrink-0 items-center justify-between gap-2 border-b px-4 text-xs font-medium"
   return (
@@ -70,16 +71,18 @@ export function RegexWorkspace({ model }: { model: ReturnType<typeof useValidati
           <Button variant="outline" onClick={loadSample}>
             {uiText("载入示例")}
           </Button>
-          <Button disabled={running} onClick={() => void run()}>
-            <Play />
-            {uiText("查找匹配")}
-          </Button>
-          <Button variant="outline" disabled={!previewRunning} onClick={cancelPreview}>
-            {uiText("取消预览")}
+          <Button disabled={running && activeAction !== "run"} onClick={() => void run()}>
+            {activeAction === "run" ? <Square /> : <Play />}
+            {uiText(activeAction === "run" ? "停止查找" : "查找匹配")}
           </Button>
         </div>
       </div>
       <InputPreflight identity="regex" format="regex" expression={expression} input={input} flags={flags} />
+      {runNotice && (
+        <p role="status" className="border-b px-4 py-2 text-xs text-muted-foreground">
+          {uiText(runNotice)}
+        </p>
+      )}
       {error && (
         <div role="alert" className="m-4 flex gap-2 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
           <TriangleAlert className="size-4 shrink-0" />
@@ -142,9 +145,9 @@ export function RegexWorkspace({ model }: { model: ReturnType<typeof useValidati
               {uiText("支持 $1、$<name>，留空删除匹配内容；勾选 g 替换全部。")}
             </p>
             <div>
-              <Button disabled={running} onClick={() => void run("replace")}>
-                <Play />
-                {uiText("执行替换")}
+              <Button disabled={running && activeAction !== "replace"} onClick={() => void run("replace")}>
+                {activeAction === "replace" ? <Square /> : <Play />}
+                {uiText(activeAction === "replace" ? "停止替换" : "执行替换")}
               </Button>
             </div>
           </div>

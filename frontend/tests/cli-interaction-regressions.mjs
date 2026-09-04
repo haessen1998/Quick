@@ -49,25 +49,37 @@ try {
     return await page.locator("body").ariaSnapshot()
   })
   code(async (page) => {
-    for (const name of ["载入示例", "取消预览", "查找匹配", "执行替换"]) {
+    for (const name of ["载入示例", "查找匹配", "执行替换"]) {
       const bounds = await page.getByRole("button", { name, exact: true }).boundingBox()
       if (!bounds || bounds.width > 160 || bounds.height > 40) throw Error("Validation toolbar button stretched")
     }
     await page.getByRole("textbox", { name: "表达式", exact: true }).fill("[")
     await page.locator('[data-slot="input-preflight"]').filter({ hasText: "regex:" }).waitFor()
-    if (!(await page.getByRole("button", { name: "取消预览", exact: true }).isDisabled())) throw Error("Invalid regex started a preview")
-    await page.getByRole("textbox", { name: "待校验数据", exact: true }).fill("a".repeat(30000) + "!")
-    await page.getByRole("textbox", { name: "表达式", exact: true }).fill("(a+)+$")
-    await page.getByRole("button", { name: "取消预览", exact: true }).click()
-    if (!(await page.getByRole("button", { name: "取消预览", exact: true }).isDisabled())) throw Error("Preview was not cancelled")
+    if (await page.getByRole("button", { name: "取消预览", exact: true }).count()) throw Error("Separate preview cancel remains")
     await page.getByRole("button", { name: "执行记录", exact: true }).click()
     if ((await page.getByRole("dialog").locator("article").count()) !== 1) throw Error("Live previews polluted history")
     await page.keyboard.press("Escape")
+    await page.getByRole("textbox", { name: "待校验数据", exact: true }).fill("a".repeat(30000) + "!")
+    await page.getByRole("textbox", { name: "表达式", exact: true }).fill("(a+)+$")
+    for (const [start, stop, other, notice] of [["查找匹配", "停止查找", "执行替换", "已停止查找"], ["执行替换", "停止替换", "查找匹配", "已停止替换"]]) {
+      const oldMatches = await page.locator('pre[aria-label="匹配结果"]').textContent()
+      const oldReplacement = await page.locator('pre[aria-label="替换结果"]').textContent()
+      await page.getByRole("button", { name: start, exact: true }).click()
+      if (!(await page.getByRole("button", { name: other, exact: true }).isDisabled())) throw Error("Conflicting action enabled")
+      await page.getByRole("button", { name: stop, exact: true }).click()
+      await page.getByRole("status").filter({ hasText: notice }).waitFor()
+      await page.getByRole("button", { name: start, exact: true }).waitFor()
+      if (await page.locator('pre[aria-label="匹配结果"]').textContent() !== oldMatches || await page.locator('pre[aria-label="替换结果"]').textContent() !== oldReplacement) throw Error("Cancellation overwrote results")
+    }
     await page.getByRole("button", { name: "载入示例", exact: true }).click()
+    await page.getByRole("button", { name: "查找匹配", exact: true }).click()
+    await page.waitForFunction(() => document.querySelector('pre[aria-label="匹配结果"]')?.textContent.includes('https://github.com'))
+    await page.getByRole("button", { name: "执行替换", exact: true }).click()
+    await page.waitForFunction(() => document.querySelector('pre[aria-label="替换结果"]')?.textContent.includes('访问 github.com'))
   })
   run("resize", "640", "520")
   code(async (page) => {
-    for (const name of ["载入示例", "取消预览", "查找匹配", "执行替换"]) {
+    for (const name of ["载入示例", "查找匹配", "执行替换"]) {
       const bounds = await page.getByRole("button", { name, exact: true }).boundingBox()
       if (!bounds || bounds.width > 160 || bounds.x + bounds.width > 640) throw Error("Narrow toolbar overflow")
     }
@@ -102,7 +114,7 @@ try {
     await page.getByRole("button", { name: "Check local clipboard", exact: true }).click()
     await page.getByRole("status").filter({ hasText: "local clipboard suppression passed" }).waitFor()
   })
-  console.log("PASS: manual validation history, preview cancellation/toolbar, preflight across three tools, unique document names.")
+  console.log("PASS: manual validation history, find/replace stop buttons and restart, preflight across three tools, unique document names.")
 } finally {
   run("close")
 }

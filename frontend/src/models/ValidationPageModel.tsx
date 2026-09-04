@@ -125,6 +125,10 @@ function useValidationPageModel() {
   const [matchResult, setMatchResult] = useDraftState<string | null>("validation", "matchResult", null)
   const [replaceResult, setReplaceResult] = useDraftState<string | null>("validation", "replaceResult", null)
   const [running, setRunning] = useState(false)
+  const [activeAction, setActiveAction] = useState<string | null>(null)
+  const [runNotice, setRunNotice] = useState("")
+  const activeRun = useRef<{ action: string; controller: AbortController } | null>(null)
+  useEffect(() => () => activeRun.current?.controller.abort(), [])
   const [error, setError] = useDraftState("validation", "error", "")
   const [testCases, setTestCases] = useDraftState<RegexTestCase[]>("validation", "testCases", [
     { label: "有效 HTTPS", input: "https://go.dev", expected: true },
@@ -179,20 +183,29 @@ function useValidationPageModel() {
   }
 
   const run = async (action = "run") => {
+    if (activeRun.current) {
+      if (activeRun.current.action === action) {
+        activeRun.current.controller.abort()
+        setRunNotice(action === "replace" ? "已停止替换" : "已停止查找")
+      }
+      return
+    }
+    const controller = new AbortController()
+    activeRun.current = { action, controller }
+    setActiveAction(action)
     setRunning(true)
+    setRunNotice("")
+    setError("")
     try {
-      await registry.execute("validation", "run", {
-        action,
-        mode,
-        expression,
-        input,
-        flags,
-        replacement,
-      })
+      await registry.execute("validation", "run", { action, mode, expression, input, flags, replacement }, { signal: controller.signal })
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : String(caught))
+      if (!controller.signal.aborted) setError(caught instanceof Error ? caught.message : String(caught))
     } finally {
-      setRunning(false)
+      if (activeRun.current?.controller === controller) {
+        activeRun.current = null
+        setActiveAction(null)
+        setRunning(false)
+      }
     }
   }
   const runTests = async () => {
@@ -209,26 +222,14 @@ function useValidationPageModel() {
       setError(caught instanceof Error ? caught.message : String(caught))
     }
   }
-  const [replacementPreview, setReplacementPreview] = useDraftState("validation", "replacementPreview", "")
   const [highlighted, setHighlighted] = useState<{ value: string; match: boolean }[]>([])
-  const previewAbort = useRef<AbortController | null>(null)
   const [previewRunning, setPreviewRunning] = useState(false)
-  const [previewReady, setPreviewReady] = useState(false)
   const [previewError, setPreviewError] = useState("")
-  const cancelPreview = () => {
-    previewAbort.current?.abort()
-    setPreviewRunning(false)
-    setPreviewReady(false)
-    setPreviewError("预览已取消")
-  }
   useEffect(() => {
     const controller = new AbortController()
-    previewAbort.current = controller
     setPreviewRunning(false)
     setHighlighted([])
-    setPreviewReady(false)
     setPreviewError("")
-    setReplacementPreview("")
     if (mode !== "regex") return () => controller.abort()
     const issue = checkInput({ format: "regex", input, expression, flags })
     if (issue) {
@@ -240,13 +241,10 @@ function useValidationPageModel() {
       if (controller.signal.aborted) return
       void evaluateRegex<{
         segments: { value: string; match: boolean }[]
-        replacement: string
-      }>({ kind: "preview", expression, input, flags, replacement }, controller.signal)
+      }>({ kind: "highlight", expression, input, flags }, controller.signal)
         .then((result) => {
           if (controller.signal.aborted) return
           setHighlighted(result.segments)
-          setReplacementPreview(result.replacement)
-          setPreviewReady(true)
         })
         .catch((error) => {
           if (!controller.signal.aborted && error.name !== "AbortError") {
@@ -262,7 +260,7 @@ function useValidationPageModel() {
       clearTimeout(timer)
       controller.abort()
     }
-  }, [expression, input, flags, replacement, mode])
+  }, [expression, input, flags, mode])
 
   useAssistantCapability({
     page: "validation",
@@ -358,6 +356,7 @@ function useValidationPageModel() {
                   options?.signal,
                 )
               : await evaluate(nextMode, nextExpression, nextInput, nextFlags, options?.signal)
+          if (options?.signal?.aborted) return { success: false, cancelled: true, action, executed: true }
           if (nextMode === "regex") {
             if (action === "replace") setReplaceResult(result)
             else setMatchResult(result)
@@ -376,6 +375,7 @@ function useValidationPageModel() {
             executed: true,
           }
         } catch (caught) {
+          if (options?.signal?.aborted) return { success: false, cancelled: true, action, executed: true }
           const message = caught instanceof Error ? caught.message : String(caught)
           setOutput("")
           setHasOutput(false)
@@ -418,6 +418,8 @@ function useValidationPageModel() {
     replaceResult,
     hasOutput,
     running,
+    activeAction,
+    runNotice,
     error,
     testCases,
     setTestCases,
@@ -429,12 +431,9 @@ function useValidationPageModel() {
     loadSample,
     run,
     runTests,
-    replacementPreview,
     highlighted,
     previewRunning,
-    previewReady,
     previewError,
-    cancelPreview,
     modes,
   }
 }

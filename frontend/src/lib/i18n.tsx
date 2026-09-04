@@ -8,6 +8,10 @@ export type AppLanguage = "zh-CN" | "en-US"
 const STORAGE_KEY = "quick-language"
 
 const ENGLISH: Record<string, string> = {
+  "停止查找": "Stop matching",
+  "停止替换": "Stop replacement",
+  "已停止查找": "Matching stopped",
+  "已停止替换": "Replacement stopped",
   "匹配高亮与替换": "Match highlights and replacement",
   "支持 $1、$<name>，留空删除匹配内容；勾选 g 替换全部。": "Supports $1 and $<name>. Leave empty to delete matches; enable g to replace all.",
   "输入与查找匹配": "Input and matching",

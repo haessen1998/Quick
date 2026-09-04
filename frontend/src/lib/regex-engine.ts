@@ -1,5 +1,5 @@
 export type RegexCase = { input: string; expected: boolean; label?: string }
-export type RegexJob = { kind: "matches" | "preview" | "tests" | "replace"; expression: string; flags: string; input: string; replacement?: string; cases?: RegexCase[] }
+export type RegexJob = { kind: "matches" | "preview" | "tests" | "replace" | "highlight"; expression: string; flags: string; input: string; replacement?: string; cases?: RegexCase[] }
 export function runRegexJob(job: RegexJob): unknown {
   if (job.input.length > 1_000_000 || job.expression.length > 10_000 || (job.cases?.length ?? 0) > 100) throw new Error("正则输入超过限制")
   const flags = [...new Set(job.flags.replace(/[^dgimsuvy]/g, ""))].join("")
@@ -33,5 +33,6 @@ export function runRegexJob(job: RegexJob): unknown {
     index = start + match[0].length
   }
   if (index < job.input.length) segments.push({ value: job.input.slice(index), match: false })
+  if (job.kind === "highlight") return { segments }
   return { segments, replacement: job.input.replace(new RegExp(job.expression, flags), job.replacement ?? "") }
 }
