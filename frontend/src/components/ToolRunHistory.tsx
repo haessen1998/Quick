@@ -27,12 +27,13 @@ export function ToolRunHistory({ onNavigate }: { onNavigate: (page: PageId) => v
           <Button
             type="button"
             variant="outline"
-            size="icon"
+            size="default"
             data-wails-no-drag
             aria-haspopup="dialog"
             aria-label={t("执行记录")}
           >
             <History className="size-4" />
+            {runs.length > 0 && <span className="text-xs tabular-nums">{runs.length}</span>}
           </Button>
         </DialogTrigger>
         <DialogContent className="flex max-w-3xl flex-col overflow-hidden">
@@ -58,7 +59,7 @@ export function ToolRunHistory({ onNavigate }: { onNavigate: (page: PageId) => v
                   data-i18n-skip
                   className="my-3 max-h-36 overflow-auto whitespace-pre-wrap break-all rounded-lg bg-muted/40 p-3 text-xs leading-5"
                 >
-                  {run.text.slice(0, 4000)}
+                  {run.transferable === false ? t(run.text) : run.text.slice(0, 4000)}
                 </pre>
                 <div className="flex flex-wrap gap-2 text-xs">
                   <Button
@@ -74,6 +75,7 @@ export function ToolRunHistory({ onNavigate }: { onNavigate: (page: PageId) => v
                   <Button
                     variant="outline"
                     size="sm"
+                    disabled={run.transferable === false}
                     onClick={() => {
                       sendSmartInput("formatter", { operation: "json-format", input: run.text })
                       onNavigate("formatter")
@@ -85,6 +87,7 @@ export function ToolRunHistory({ onNavigate }: { onNavigate: (page: PageId) => v
                   <Button
                     variant="outline"
                     size="sm"
+                    disabled={run.transferable === false}
                     onClick={() => {
                       sendSmartInput("converter", { module: "standard", source: "json", target: "yaml", input: run.text })
                       onNavigate("converter")

@@ -1,3 +1,4 @@
+import { recordManualOperation } from "@/lib/tool-results"
 import { CryptoService } from "@/../bindings/github.com/haessen1998/Quick/internal/crypto"
 import { useAssistantCapability } from "@/lib/assistant-capabilities"
 import { writeClipboard } from "@/lib/clipboard"
@@ -204,16 +205,16 @@ function useTimeIdentifiersPageModel() {
 
   const runGenerator = async () => {
     try {
-      setGenerated(await CryptoService.GenerateIdentifier(generator, length))
+      setGenerated(await recordManualOperation("time-ids", generator, () => CryptoService.GenerateIdentifier(generator, length)))
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       toast.error(t("生成失败"), { description: t(message) })
     }
   }
 
-  const parseCron = () => {
+  const parseCron = async () => {
     try {
-      setCronResults(nextCronRuns(cron, cronZone))
+      setCronResults(await recordManualOperation("time-ids", "cron", () => nextCronRuns(cron, cronZone)))
       setCronError("")
     } catch (error) {
       setCronResults([])

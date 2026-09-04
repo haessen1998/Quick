@@ -64,7 +64,7 @@ try {
     return await page.locator("body").ariaSnapshot()
   })
   code(async (page) => {
-    await page.getByRole("textbox", { name: "regex 表达式", exact: true }).fill("(a+)+$")
+    await page.getByRole("textbox", { name: "表达式", exact: true }).fill("(a+)+$")
     await page.getByRole("textbox", { name: "待校验数据", exact: true }).fill("a".repeat(40) + "!")
     await page.getByRole("button", { name: "执行校验", exact: true }).click()
     await page.getByText("正则执行超时，已终止。请简化表达式或缩小输入。", { exact: true }).first().waitFor({ timeout: 10000 })

@@ -7,6 +7,8 @@ const forbidden = [
   "Run headless workflow",
   "approval cancellation passed",
   "quick-smoke-",
+  "quick-regression-",
+  "Check local clipboard",
   "quick-ui-audit-",
   "Show page error",
   "PWTEST_DAEMON_SESSION_DIR",

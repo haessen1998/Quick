@@ -5,6 +5,7 @@ const values = new Map<string, unknown>()
 const listeners = new Set<() => void>()
 const documents = new Map<string, WorkspaceDocument[]>()
 const selected = new Map<string, string>()
+const documentSequence = new Map<string, number>()
 const closed = new Map<string, { document: WorkspaceDocument; fields: [string, unknown][] }>()
 let revision = 0
 const notify = () => {
@@ -36,7 +37,9 @@ export function selectWorkspaceDocument(scope: string, id: string) {
 export function addWorkspaceDocument(scope: string) {
   const current = getWorkspaceDocuments(scope)
   if (current.length >= 12) throw new Error("每个工具最多保留 12 个文档，请先关闭不需要的文档")
-  const doc = { id: crypto.randomUUID(), title: `文档 ${current.length + 1}` }
+  const number = (documentSequence.get(scope) ?? 1) + 1
+  documentSequence.set(scope, number)
+  const doc = { id: crypto.randomUUID(), title: `文档 ${number}` }
   documents.set(scope, [...current, doc])
   selected.set(scope, doc.id)
   notify()

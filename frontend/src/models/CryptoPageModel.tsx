@@ -1,3 +1,4 @@
+import { recordManualOperation } from "@/lib/tool-results"
 import { CryptoService } from "@/../bindings/github.com/haessen1998/Quick/internal/crypto"
 import { useAssistantCapability } from "@/lib/assistant-capabilities"
 import { writeClipboard } from "@/lib/clipboard"
@@ -97,14 +98,14 @@ function useCryptoPageModel() {
 
   const runHash = () =>
     runSafely(async () => {
-      setHashOutput(await CryptoService.Hash(hashInput, hashAlgorithm, hmacEnabled, hmacSecret))
+      setHashOutput(await recordManualOperation("crypto", hashAlgorithm, () => CryptoService.Hash(hashInput, hashAlgorithm, hmacEnabled, hmacSecret)))
     })
 
-  const runAes = () => runSafely(async () => setAesOutput(await CryptoService.AES(aesMode, aesInput, aesPassword)))
+  const runAes = () => runSafely(async () => setAesOutput(await recordManualOperation("crypto", `AES ${aesMode}`, () => CryptoService.AES(aesMode, aesInput, aesPassword))))
 
   const createKeys = () =>
     runSafely(async () => {
-      const keys = await CryptoService.GenerateRSA(rsaUsage)
+      const keys = await recordManualOperation("crypto", "RSA keygen", () => CryptoService.GenerateRSA(rsaUsage))
       setPublicKey(keys.publicKey)
       setPrivateKey(keys.privateKey)
       setRsaOutput(`${rsaUsage === "encrypt" ? "RSA-OAEP" : "RSA-PSS"} 2048 位密钥已生成`)
@@ -112,14 +113,14 @@ function useCryptoPageModel() {
 
   const runRsa = () =>
     runSafely(async () => {
-      const result = await CryptoService.RSA(rsaAction, rsaInput, rsaSignature, publicKey, privateKey)
+      const result = await recordManualOperation("crypto", `RSA ${rsaAction}`, () => CryptoService.RSA(rsaAction, rsaInput, rsaSignature, publicKey, privateKey))
       if (rsaAction === "sign") setRsaSignature(result.output)
       setRsaOutput(rsaAction === "verify" ? (result.valid ? "签名有效" : "签名无效") : result.output)
     })
 
   const runJwt = () =>
     runSafely(async () => {
-      setJwtOutput(await CryptoService.JWT(jwtMode, jwtInput, jwtSecret))
+      setJwtOutput(await recordManualOperation("crypto", `JWT ${jwtMode}`, () => CryptoService.JWT(jwtMode, jwtInput, jwtSecret)))
     })
 
   useAssistantCapability({

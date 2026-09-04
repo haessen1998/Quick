@@ -1,3 +1,5 @@
+import { writeClipboard } from "../src/lib/clipboard"
+import { clipboardObserver } from "../src/lib/clipboard-observer"
 import { AssistantContextPreview } from "../src/components/AssistantContextPreview"
 import { PageErrorBoundary } from "../src/components/PageErrorBoundary"
 import "../src/styles/globals.css"
@@ -53,6 +55,26 @@ function Harness() {
     <>
       <button onClick={workflow}>Run headless workflow</button>
       <button onClick={permission}>Check permission</button>
+      <button
+        onClick={async () => {
+          try {
+            const previous = await navigator.clipboard.readText()
+            try {
+              await writeClipboard('{"from":"Quick clipboard regression"}')
+              const value = await navigator.clipboard.readText()
+              if (value !== '{"from":"Quick clipboard regression"}' || clipboardObserver.observe(value))
+                throw Error("Local copy triggered detection")
+              setStatus("local clipboard suppression passed")
+            } finally {
+              await navigator.clipboard.writeText(previous)
+            }
+          } catch (error) {
+            setStatus(`FAILED: ${String(error)}`)
+          }
+        }}
+      >
+        Check local clipboard
+      </button>
       <p role="status">{status}</p>
       <div className="mx-auto mt-8 max-w-sm p-4">
         <AssistantContextPreview context={{ input: "long-text/".repeat(100), operation: "json-format" }} />

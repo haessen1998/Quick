@@ -1,3 +1,4 @@
+import { InputPreflight } from "@/components/InputPreflight"
 import { CodeEditor } from "@/components/CodeEditor"
 import { Button } from "@/components/ui/button"
 import { uiText } from "@/lib/i18n"
@@ -69,6 +70,7 @@ return (
 
             {activeToolOptions?.[activeTool.id] && <div className="border-b bg-muted/10 px-4 py-3">{activeToolOptions[activeTool.id]}</div>}
 
+            <InputPreflight identity={activeTool.id} format={activeTool.id.split("-")[0]} input={input} />
             {error && (
               <div className="m-4 flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
                 <TriangleAlert className="mt-0.5 size-4 shrink-0" />

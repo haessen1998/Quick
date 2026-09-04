@@ -1,3 +1,4 @@
+import { recordManualOperation } from "@/lib/tool-results"
 import { useAssistantCapability } from "@/lib/assistant-capabilities"
 import { uiText } from "@/lib/i18n"
 import { acquireMCPConnection } from "@/lib/mcp-connections"
@@ -507,7 +508,7 @@ function useMCPInspectorPageModel({
     try {
       const args = rawMode ? JSON.parse(rawArguments) : argumentsValue
       if (!args || Array.isArray(args) || typeof args !== "object") throw new Error("工具参数必须是 JSON 对象")
-      const response = await leaseRef.current.connection.call(selectedTool.name, args)
+      const response = await recordManualOperation("mcp-inspector", selectedTool.name, () => leaseRef.current!.connection.call(selectedTool.name, args))
       setResult(response)
       addHistory("tools/call", startedAt, !response.isError, selectedTool.name, { arguments: args, result: response })
     } catch (error) {

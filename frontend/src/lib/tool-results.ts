@@ -10,6 +10,31 @@ export type ToolRun = {
   success: boolean
   text: string
   result: unknown
+  transferable?: boolean
+}
+/** Manual native actions are visible in history without exporting credentials or decrypted output. */
+export async function recordManualOperation<T>(page: PageId, action: string, operation: () => T | Promise<T>): Promise<T> {
+  const startedAt = Date.now()
+  const record = (success: boolean) =>
+    recordToolRun({
+      page,
+      action,
+      startedAt,
+      durationMs: Date.now() - startedAt,
+      success,
+      transferable: false,
+      text: success ? "操作已完成，结果保留在工具页面。" : "操作失败，请在工具页面查看错误。",
+      result: { success },
+    })
+  try {
+    const result = await operation()
+    const status = result as { success?: boolean; isError?: boolean } | null
+    record(status?.success !== false && status?.isError !== true)
+    return result
+  } catch (error) {
+    record(false)
+    throw error
+  }
 }
 let runs: ToolRun[] = []
 const subscribers = new Set<() => void>()
@@ -26,6 +51,9 @@ export function recordToolRun(run: Omit<ToolRun, "id">): ToolRun {
 }
 export function findToolRun(id: string) {
   return runs.find((run) => run.id === id)
+}
+export function getToolRuns(): readonly ToolRun[] {
+  return runs
 }
 export function clearToolRuns() {
   runs = []

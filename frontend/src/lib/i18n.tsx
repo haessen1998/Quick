@@ -8,6 +8,12 @@ export type AppLanguage = "zh-CN" | "en-US"
 const STORAGE_KEY = "quick-language"
 
 const ENGLISH: Record<string, string> = {
+  "输入格式提醒": "Input format reminder",
+  "已切换工具，原有输入仍保留。请确认数据和表达式适用于当前工具，或点击载入示例。": "The tool has changed and your input was kept. Check the data and expression, or load this tool's sample.",
+  "内容较大，已跳过自动检查；执行时仍会校验。": "Automatic checking was skipped for this large input. It will still be validated when run.",
+  "操作已完成，结果保留在工具页面。": "Operation completed. Results remain on the tool page.",
+  "操作失败，请在工具页面查看错误。": "Operation failed. See the tool page for details.",
+
   "结果仅保留在当前应用会话，可继续交给其他工具。": "Results stay in this session and can be sent to another tool.",
   "执行工具后显示记录": "Run a tool to see its results here",
   "查看工具": "Open tool",

@@ -76,6 +76,7 @@ export function AssistantCapabilityProvider({
         if (!handler) throw new Error(`未注册工具 ${page}.${action}`)
         const source = typeof input.sourceResultId === "string" ? findToolRun(input.sourceResultId) : undefined
         if (input.sourceResultId && !source) throw new Error("源结果已过期，请重新执行来源工具")
+        if (source?.transferable === false) throw new Error("此记录仅包含执行状态，请从工具页面提供结果。")
         const validated = validateToolInput(page, action, { ...input, ...(source ? { input: source.text } : {}) })
         const effect = toolEffect(page, action, validated)
         if (!(await requestApproval(effect, { page, action, ...validated }, options.signal)))

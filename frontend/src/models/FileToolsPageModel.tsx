@@ -1,3 +1,4 @@
+import { recordManualOperation } from "@/lib/tool-results"
 import { useAssistantCapability } from "@/lib/assistant-capabilities"
 import { useLanguage } from "@/lib/i18n"
 import { useDraftState } from "@/lib/workspace-store"
@@ -123,7 +124,7 @@ function useFileToolsPageModel() {
 
   const previewClick = async () => {
     try {
-      const result = await runPreview()
+      const result = await recordManualOperation("file-tools", "preview", () => runPreview())
       if (result.conflicts) toast.error(`发现 ${result.conflicts} 个冲突`)
       else toast.success(`预览完成，${result.ready} 个文件待重命名`)
     } catch (error) {
@@ -135,7 +136,7 @@ function useFileToolsPageModel() {
     setConfirmOpen(false)
     setBusy(true)
     try {
-      const result = await ExecuteRename(requestFor(sourcePaths, rules))
+      const result = await recordManualOperation("file-tools", "rename", () => ExecuteRename(requestFor(sourcePaths, rules)))
       setCanUndo(result.canUndo)
       toast.success(result.message)
       await loadSources(remapSourcePaths(sourcePaths, result.items))
@@ -149,7 +150,7 @@ function useFileToolsPageModel() {
   const undo = async () => {
     setBusy(true)
     try {
-      const result = await UndoLastRename()
+      const result = await recordManualOperation("file-tools", "undo", () => UndoLastRename())
       result.success ? toast.success(result.message) : toast.info(result.message)
       setCanUndo(result.canUndo)
       if (sourcePaths.length) await loadSources(remapSourcePaths(sourcePaths, result.items))
@@ -279,7 +280,7 @@ function useFileToolsPageModel() {
     previewClick,
     execute,
     undo,
-    inspectFiles,
+    inspectFiles: (...args: Parameters<typeof inspectFiles>) => recordManualOperation("file-tools", "inspect", () => inspectFiles(...args)),
     rootLabel,
   }
 }

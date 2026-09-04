@@ -1,3 +1,5 @@
+import { clipboardObserver } from "@/lib/clipboard-observer"
+import { detectSmartInput } from "@/lib/smart-input-detection"
 import { appStorage } from "@/lib/app-storage"
 import { CommandPalette } from "@/components/CommandPalette"
 import { PageErrorBoundary } from "@/components/PageErrorBoundary"
@@ -236,28 +238,6 @@ function AppSidebar({ pages, activePage, order, onNavigate, onOrderChange }: { p
       </SidebarFooter>
     </Sidebar>
   )
-}
-
-type SmartInputAction = { label: string; description: string; page: PageId; payload: Record<string, unknown> }
-
-function detectSmartInput(input: string): SmartInputAction[] {
-  const value = input.trim()
-  if (!value) return []
-  const actions: SmartInputAction[] = []
-  try {
-    JSON.parse(value)
-    actions.push({ label: "格式化 JSON", description: "校验并整理缩进", page: "formatter", payload: { operation: "json-format", input: value } })
-  } catch { /* Not JSON. */ }
-  if (/^<([A-Za-z][\w:.-]*)(?:\s[^>]*)?>[\s\S]*<\/\1>\s*$/.test(value)) actions.push({ label: "格式化 XML", description: "校验并整理节点缩进", page: "formatter", payload: { operation: "xml-format", input: value } })
-  if (!actions.length && /^(?:---\s*\n)?[\w.-]+:\s*[^\n]*(?:\n|$)/.test(value)) actions.push({ label: "格式化 YAML", description: "校验并规范缩进", page: "formatter", payload: { operation: "yaml-format", input: value } })
-  if (/^https?:\/\//i.test(value)) actions.push({ label: "解析 URL", description: "拆解路径与查询参数", page: "network", payload: { operation: "url-inspect", url: value } })
-  if (/^[+-]?\d{10}(?:\d{3})?$/.test(value)) actions.push({ label: "转换时间戳", description: value.replace(/^[+-]/, "").length === 13 ? "按毫秒解析" : "按秒解析", page: "time-ids", payload: { operation: "timestamp-to-date", value, unit: value.replace(/^[+-]/, "").length === 13 ? "milliseconds" : "seconds" } })
-  if (/^[\w-]+\.[\w-]+\.[\w-]+$/.test(value)) actions.push({ label: "解析 JWT", description: "查看 Header、Payload 与有效期", page: "crypto", payload: { operation: "jwt-parse", input: value } })
-  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)) actions.push({ label: "识别 UUID", description: "带入标识符工具继续处理", page: "time-ids", payload: { operation: "show-identifier", value } })
-  if (/^(?:[^\s]+\s+){4,6}[^\s]+$/.test(value)) actions.push({ label: "解析 Cron", description: "预览未来执行时间", page: "time-ids", payload: { operation: "cron", cron: value, zone: "Asia/Shanghai" } })
-  if (/^[A-Za-z0-9+/\r\n]+={0,2}$/.test(value) && value.replace(/\s/g, "").length >= 8 && value.replace(/\s/g, "").length % 4 === 0) actions.push({ label: "解码 Base64", description: "转换为 UTF-8 文本", page: "converter", payload: { module: "encoding", source: "base64", target: "text", input: value } })
-  if (!actions.length) actions.push({ label: "处理文本", description: "打开文本与行处理", page: "converter", payload: { module: "text", source: "text", target: "trim-lines", input } })
-  return actions.slice(0, 4)
 }
 
 function HomePage({ onNavigate }: { onNavigate: (page: PageId) => void }) {
@@ -763,36 +743,56 @@ function App() {
   }, [])
 
   useEffect(() => {
-    let initialized = false
+    let disposed = false
     let reading = false
-    let lastClipboard = ""
+    let copyTimer: number | undefined
+    toast.dismiss("quick-smart-clipboard")
     const readClipboard = async () => {
       if (reading || document.visibilityState !== "visible") return
       reading = true
+      const revision = clipboardObserver.revision
       try {
-        const value = (await Clipboard.Text()).trim()
-        if (!initialized) { initialized = true; lastClipboard = value; return }
-        if (!value || value === lastClipboard) return
-        lastClipboard = value
+        const value = await Clipboard.Text()
+        if (disposed || !clipboardObserver.observe(value, revision)) return
+        toast.dismiss("quick-smart-clipboard")
         const action = detectSmartInput(value)[0]
         if (!action) return
         toast(t("检测到可智能处理的剪贴板内容"), {
           id: "quick-smart-clipboard",
           description: `${t(action.label)} · ${t(action.description)}`,
           duration: 10000,
-          action: { label: t("智能处理"), onClick: () => { navigateTo(action.page); window.setTimeout(() => sendSmartInput(action.page, action.payload), 0) } },
+          action: { label: t("智能处理"), onClick: () => { sendSmartInput(action.page, action.payload); navigateTo(action.page) } },
           cancel: { label: t("忽略"), onClick: () => undefined },
         })
       } catch { /* Clipboard access is unavailable in browser-only preview. */ }
       finally { reading = false }
     }
-    const rememberLocalCopy = () => window.setTimeout(() => { void Clipboard.Text().then((value) => { lastClipboard = value.trim(); initialized = true }).catch(() => undefined) }, 0)
+    const rememberLocalCopy = () => {
+      clipboardObserver.invalidate()
+      toast.dismiss("quick-smart-clipboard")
+      window.clearTimeout(copyTimer)
+      const revision = clipboardObserver.revision
+      copyTimer = window.setTimeout(() => {
+        if (!document.hasFocus()) return
+        void Clipboard.Text().then(value => {
+          if (!disposed && revision === clipboardObserver.revision) clipboardObserver.rememberLocal(value)
+        }).catch(() => undefined)
+      }, 0)
+    }
+    const unsubscribe = clipboardObserver.onLocalCopy(() => toast.dismiss("quick-smart-clipboard"))
     void readClipboard()
     window.addEventListener("focus", readClipboard)
     document.addEventListener("visibilitychange", readClipboard)
     document.addEventListener("copy", rememberLocalCopy)
-    return () => { window.removeEventListener("focus", readClipboard); document.removeEventListener("visibilitychange", readClipboard); document.removeEventListener("copy", rememberLocalCopy) }
-  }, [navigateTo, t])
+    return () => {
+      disposed = true
+      unsubscribe()
+      window.clearTimeout(copyTimer)
+      window.removeEventListener("focus", readClipboard)
+      document.removeEventListener("visibilitychange", readClipboard)
+      document.removeEventListener("copy", rememberLocalCopy)
+    }
+  }, [navigateTo, t, activePage])
 
   const saveAIProfileFromTest = (profile: AIProfile) => {
     setAIProfiles((profiles) => profiles.some((item) => item.id === profile.id)

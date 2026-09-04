@@ -1,4 +1,5 @@
-import { useAssistantCapability } from "@/lib/assistant-capabilities"
+import { checkInput } from "@/lib/input-preflight"
+import { useAssistantCapability, useAssistantCapabilityRegistry } from "@/lib/assistant-capabilities"
 import { useLanguage } from "@/lib/i18n"
 import { evaluateRegex } from "@/lib/regex-client"
 import { useDraftState } from "@/lib/workspace-store"
@@ -98,6 +99,7 @@ export async function evaluate(mode: Mode, expression: string, input: string, fl
 
 function useValidationPageModel() {
   const { t } = useLanguage()
+  const registry = useAssistantCapabilityRegistry()
   const [mode, setMode] = useDraftState<Mode>("validation", "mode", "jsonpath")
   const [expression, setExpression] = useDraftState("validation", "expression", "$.store.books[?(@.price < 20)].title")
   const [input, setInput] = useDraftState(
@@ -161,44 +163,53 @@ function useValidationPageModel() {
 
   const run = async () => {
     try {
-      const result = await evaluate(mode, expression, input, flags)
-      setOutput(result)
-      setError("")
+      await registry.execute("validation", "run", { mode, expression, input, flags, replacement })
     } catch (caught) {
-      setOutput("")
       setError(caught instanceof Error ? caught.message : String(caught))
     }
   }
   const runTests = async () => {
     try {
-      setTestResults(await evaluateRegex<RegexTestResult[]>({ kind: "tests", expression, flags, input: "", cases: testCases }))
-      setError("")
+      await registry.execute("validation", "run", { action: "test-cases", mode: "regex", expression, input, flags, testCases })
     } catch (caught) {
-      setTestResults([])
       setError(caught instanceof Error ? caught.message : String(caught))
     }
   }
   const [replacementPreview, setReplacementPreview] = useDraftState("validation", "replacementPreview", "")
   const [highlighted, setHighlighted] = useState<{ value: string; match: boolean }[]>([])
   const previewAbort = useRef<AbortController | null>(null)
+  const [previewRunning, setPreviewRunning] = useState(false)
+  const cancelPreview = () => {
+    previewAbort.current?.abort()
+    setPreviewRunning(false)
+  }
   useEffect(() => {
     const controller = new AbortController()
     previewAbort.current = controller
-    if (mode !== "regex") return () => controller.abort()
+    setPreviewRunning(false)
+    setHighlighted([])
+    setReplacementPreview("")
+    if (mode !== "regex" || checkInput({ format: "regex", input, expression, flags })) return () => controller.abort()
+    setPreviewRunning(true)
     const timer = setTimeout(() => {
+      if (controller.signal.aborted) return
       void evaluateRegex<{ segments: { value: string; match: boolean }[]; replacement: string }>(
         { kind: "preview", expression, input, flags, replacement },
         controller.signal,
       )
         .then((result) => {
+          if (controller.signal.aborted) return
           setHighlighted(result.segments)
           setReplacementPreview(result.replacement)
         })
         .catch((error) => {
-          if (error.name !== "AbortError") {
+          if (!controller.signal.aborted && error.name !== "AbortError") {
             setHighlighted([])
             setReplacementPreview(error.message)
           }
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setPreviewRunning(false)
         })
     }, 200)
     return () => {
@@ -245,13 +256,16 @@ function useValidationPageModel() {
                 })
               : []
             if (!cases.length) throw new Error("请提供至少一个测试用例")
-            const results = await evaluateRegex<RegexTestResult[]>({
-              kind: "tests",
-              expression: nextExpression,
-              flags: nextFlags,
-              input: "",
-              cases,
-            }, options?.signal)
+            const results = await evaluateRegex<RegexTestResult[]>(
+              {
+                kind: "tests",
+                expression: nextExpression,
+                flags: nextFlags,
+                input: "",
+                cases,
+              },
+              options?.signal,
+            )
             setTestCases(cases)
             setTestResults(results)
             setError("")
@@ -323,7 +337,8 @@ function useValidationPageModel() {
     runTests,
     replacementPreview,
     highlighted,
-    previewAbort,
+    previewRunning,
+    cancelPreview,
     modes,
   }
 }

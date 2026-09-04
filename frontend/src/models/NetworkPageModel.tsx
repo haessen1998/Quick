@@ -1,3 +1,4 @@
+import { recordManualOperation } from "@/lib/tool-results"
 import { useAssistantCapability } from "@/lib/assistant-capabilities"
 import { useLanguage } from "@/lib/i18n"
 import type { ProxySettings } from "@/lib/proxy"
@@ -526,7 +527,7 @@ function useNetworkPageModel({ proxy }: { proxy: ProxySettings }) {
   })
 
   const executeHTTP = async (request: HTTPRequest) => {
-    const result = (await NetworkService.HTTPRequest(
+    const result = (await recordManualOperation("network", "http", () => NetworkService.HTTPRequest(
       request.method,
       request.url,
       request.headers,
@@ -534,7 +535,7 @@ function useNetworkPageModel({ proxy }: { proxy: ProxySettings }) {
       proxy.mode,
       proxy.url,
       15000,
-    )) as unknown as HTTPResult
+    ))) as unknown as HTTPResult
     setOutput(`${result.status || "请求失败"} · ${result.durationMs} ms\n\n${JSON.stringify(result.headers, null, 2)}\n\n${result.body}`)
     if (!result.success) toast.error("HTTP 请求失败")
   }
@@ -544,7 +545,7 @@ function useNetworkPageModel({ proxy }: { proxy: ProxySettings }) {
     setOutput("")
     try {
       if (mode === "cidr") {
-        setOutput(calculateCIDR(cidr))
+        setOutput(await recordManualOperation("network", "cidr", () => calculateCIDR(cidr)))
         return
       }
       if (mode === "http") {
@@ -554,14 +555,14 @@ function useNetworkPageModel({ proxy }: { proxy: ProxySettings }) {
       let result: NetworkResult
       if (mode === "ping") {
         const parameters = validatedPingParameters(pingCount, pingTimeoutMS, pingPacketSize)
-        result = (await NetworkService.Ping(
+        result = (await recordManualOperation("network", "ping", () => NetworkService.Ping(
           host,
           parameters.count,
           parameters.timeoutMS,
           parameters.packetSize,
-        )) as unknown as NetworkResult
-      } else if (mode === "dns") result = (await NetworkService.DNSQuery(host, recordType, 5000)) as unknown as NetworkResult
-      else result = (await NetworkService.CheckPort(host, port, 5000)) as unknown as NetworkResult
+        ))) as unknown as NetworkResult
+      } else if (mode === "dns") result = (await recordManualOperation("network", "DNSQuery", () => NetworkService.DNSQuery(host, recordType, 5000))) as unknown as NetworkResult
+      else result = (await recordManualOperation("network", "CheckPort", () => NetworkService.CheckPort(host, port, 5000))) as unknown as NetworkResult
       setOutput(`${result.success ? "成功" : "失败"} · ${result.durationMs} ms\n\n${result.output}`)
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : String(caught)
@@ -596,7 +597,7 @@ function useNetworkPageModel({ proxy }: { proxy: ProxySettings }) {
   const findProcesses = async () => {
     setRunning(true)
     try {
-      const result = (await NetworkService.FindProcesses(processSearchType, processQuery)) as unknown as ProcessResult
+      const result = (await recordManualOperation("network", "FindProcesses", () => NetworkService.FindProcesses(processSearchType, processQuery))) as unknown as ProcessResult
       if (!result.success) throw new Error(result.output)
       setProcesses(result.processes ?? [])
       setProcessCanTerminate(Boolean(processQuery.trim()))
@@ -615,7 +616,7 @@ function useNetworkPageModel({ proxy }: { proxy: ProxySettings }) {
     if (!processCanTerminate) return
     setTerminatingPID(process.pid)
     try {
-      const result = (await NetworkService.TerminateProcess(process.pid)) as unknown as NetworkResult
+      const result = (await recordManualOperation("network", "TerminateProcess", () => NetworkService.TerminateProcess(process.pid))) as unknown as NetworkResult
       if (!result.success) throw new Error(result.output)
       setPendingTermination(null)
       toast.success(`已关闭 ${process.name}`)
