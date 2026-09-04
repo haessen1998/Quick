@@ -10,9 +10,16 @@ import { createContext, useContext, useEffect, useRef, useState, type ReactNode 
 
 export type Mode = "jsonpath" | "json-schema" | "xpath" | "selector" | "glob" | "regex"
 
-export type RegexTestCase = { input: string; expected: boolean; label?: string }
+export type RegexTestCase = {
+  input: string
+  expected: boolean
+  label?: string
+}
 
-export type RegexTestResult = RegexTestCase & { actual: boolean; passed: boolean }
+export type RegexTestResult = RegexTestCase & {
+  actual: boolean
+  passed: boolean
+}
 
 export const inputClass =
   "app-interactive w-full rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/40"
@@ -80,7 +87,10 @@ export function evaluateGlob(input: string, expression: string) {
     .replace(/\r\n?/g, "\n")
     .split("\n")
     .filter(Boolean)
-    .map((value) => ({ value, matched: regex.test(value.replace(/\\/g, "/")) }))
+    .map((value) => ({
+      value,
+      matched: regex.test(value.replace(/\\/g, "/")),
+    }))
   return JSON.stringify(values, null, 2)
 }
 
@@ -110,6 +120,9 @@ function useValidationPageModel() {
   const [flags, setFlags] = useDraftState("validation", "flags", "gi")
   const [replacement, setReplacement] = useDraftState("validation", "replacement", "$<host>")
   const [output, setOutput] = useDraftState("validation", "output", "")
+  const [outputKind, setOutputKind] = useDraftState("validation", "outputKind", "matches")
+  const [hasOutput, setHasOutput] = useDraftState("validation", "hasOutput", Boolean(output))
+  const [running, setRunning] = useState(false)
   const [error, setError] = useDraftState("validation", "error", "")
   const [testCases, setTestCases] = useDraftState<RegexTestCase[]>("validation", "testCases", [
     { label: "有效 HTTPS", input: "https://go.dev", expected: true },
@@ -122,6 +135,7 @@ function useValidationPageModel() {
 
   const selectMode = (next: Mode) => {
     setMode(next)
+    setHasOutput(false)
     setOutput("")
     setError("")
     setTestResults([])
@@ -162,16 +176,33 @@ function useValidationPageModel() {
     }
   }
 
-  const run = async () => {
+  const run = async (action = "run") => {
+    setRunning(true)
     try {
-      await registry.execute("validation", "run", { mode, expression, input, flags, replacement })
+      await registry.execute("validation", "run", {
+        action,
+        mode,
+        expression,
+        input,
+        flags,
+        replacement,
+      })
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught))
+    } finally {
+      setRunning(false)
     }
   }
   const runTests = async () => {
     try {
-      await registry.execute("validation", "run", { action: "test-cases", mode: "regex", expression, input, flags, testCases })
+      await registry.execute("validation", "run", {
+        action: "test-cases",
+        mode: "regex",
+        expression,
+        input,
+        flags,
+        testCases,
+      })
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught))
     }
@@ -205,10 +236,10 @@ function useValidationPageModel() {
     setPreviewRunning(true)
     const timer = setTimeout(() => {
       if (controller.signal.aborted) return
-      void evaluateRegex<{ segments: { value: string; match: boolean }[]; replacement: string }>(
-        { kind: "preview", expression, input, flags, replacement },
-        controller.signal,
-      )
+      void evaluateRegex<{
+        segments: { value: string; match: boolean }[]
+        replacement: string
+      }>({ kind: "preview", expression, input, flags, replacement }, controller.signal)
         .then((result) => {
           if (controller.signal.aborted) return
           setHighlighted(result.segments)
@@ -265,7 +296,11 @@ function useValidationPageModel() {
             const cases = Array.isArray(values.testCases)
               ? values.testCases.slice(0, 100).map((item) => {
                   const value = item as Record<string, unknown>
-                  return { input: String(value.input ?? ""), expected: Boolean(value.expected), label: String(value.label ?? "") }
+                  return {
+                    input: String(value.input ?? ""),
+                    expected: Boolean(value.expected),
+                    label: String(value.label ?? ""),
+                  }
                 })
               : []
             if (!cases.length) throw new Error("请提供至少一个测试用例")
@@ -299,18 +334,53 @@ function useValidationPageModel() {
             setGeneratedCode(code)
             setCodeExplanation(String(values.explanation ?? ""))
             setError("")
-            return { success: true, action, language, codeLength: code.length, executed: true }
+            return {
+              success: true,
+              action,
+              language,
+              codeLength: code.length,
+              executed: true,
+            }
           }
-          const result = await evaluate(nextMode, nextExpression, nextInput, nextFlags, options?.signal)
+          if (action === "replace" && nextMode !== "regex") throw new Error("替换操作仅支持正则表达式")
+          const result =
+            action === "replace"
+              ? await evaluateRegex<string>(
+                  {
+                    kind: "replace",
+                    expression: nextExpression,
+                    input: nextInput,
+                    flags: nextFlags,
+                    replacement: String(values.replacement ?? replacement),
+                  },
+                  options?.signal,
+                )
+              : await evaluate(nextMode, nextExpression, nextInput, nextFlags, options?.signal)
+          setOutputKind(action === "replace" ? "replacement" : "matches")
+          setHasOutput(true)
           setReplacement(String(values.replacement ?? replacement))
           setOutput(result)
           setError("")
-          return { success: true, action, mode: nextMode, result, truncated: result.length > 16000, executed: true }
+          return {
+            success: true,
+            action,
+            mode: nextMode,
+            result,
+            truncated: result.length > 16000,
+            executed: true,
+          }
         } catch (caught) {
           const message = caught instanceof Error ? caught.message : String(caught)
           setOutput("")
+          setHasOutput(false)
           setError(message)
-          return { success: false, action, mode: nextMode, error: message, executed: true }
+          return {
+            success: false,
+            action,
+            mode: nextMode,
+            error: message,
+            executed: true,
+          }
         }
       },
     },
@@ -337,6 +407,9 @@ function useValidationPageModel() {
     replacement,
     setReplacement,
     output,
+    outputKind,
+    hasOutput,
+    running,
     error,
     testCases,
     setTestCases,

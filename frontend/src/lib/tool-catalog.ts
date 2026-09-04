@@ -24,7 +24,7 @@ export const TIME_OPERATIONS = [
   "cron",
 ] as const
 export const VALIDATION_MODES = ["jsonpath", "json-schema", "xpath", "selector", "glob", "regex"] as const
-export const VALIDATION_ACTIONS = ["run", "test-cases", "show-code"] as const
+export const VALIDATION_ACTIONS = ["run", "replace", "test-cases", "show-code"] as const
 export const CRYPTO_OPERATIONS = [
   "hash",
   "hmac",

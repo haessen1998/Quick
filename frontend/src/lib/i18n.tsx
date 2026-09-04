@@ -8,6 +8,13 @@ export type AppLanguage = "zh-CN" | "en-US"
 const STORAGE_KEY = "quick-language"
 
 const ENGLISH: Record<string, string> = {
+  "查找表达式": "Search expression",
+  "输入替换内容，例如 bar；留空则删除匹配内容": "Enter replacement text, e.g. bar; leave empty to delete matches",
+  "可直接输入文本，也支持 $1、$<name> 捕获组。勾选 g 替换全部，否则只替换首个匹配。": "Enter plain text or use $1 / $<name> capture groups. Enable g to replace all matches; otherwise only the first is replaced.",
+  "查找匹配": "Find matches",
+  "执行替换": "Replace",
+  "替换结果": "Replacement result",
+
   "显示编辑器行号": "Show editor line numbers",
   "适用于所有带行号的输入与输出框，默认开启。": "Applies to all code input and output fields. Enabled by default.",
   "允许小Q免确认执行所选文件的批量重命名与撤销；关闭后逐次确认。第三方 MCP 文件操作由 MCP 权限单独控制。": "Let Quick AI rename selected files and undo renames without confirmation. When off, each action requires approval. Third-party MCP file operations use the separate MCP permission.",

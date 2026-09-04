@@ -1,8 +1,9 @@
 export type RegexCase = { input: string; expected: boolean; label?: string }
-export type RegexJob = { kind: "matches" | "preview" | "tests"; expression: string; flags: string; input: string; replacement?: string; cases?: RegexCase[] }
+export type RegexJob = { kind: "matches" | "preview" | "tests" | "replace"; expression: string; flags: string; input: string; replacement?: string; cases?: RegexCase[] }
 export function runRegexJob(job: RegexJob): unknown {
   if (job.input.length > 1_000_000 || job.expression.length > 10_000 || (job.cases?.length ?? 0) > 100) throw new Error("正则输入超过限制")
   const flags = [...new Set(job.flags.replace(/[^dgimsuvy]/g, ""))].join("")
+  if (job.kind === "replace") return job.input.replace(new RegExp(job.expression, flags), job.replacement ?? "")
   if (job.kind === "tests") {
     const regex = new RegExp(job.expression, flags.replace(/[gy]/g, ""))
     return (job.cases ?? []).map(item => {

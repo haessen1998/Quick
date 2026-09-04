@@ -12,3 +12,12 @@
 验证：19 项单元测试通过；Playwright CLI 的 test:ui、test:ui:regressions 和 test:ui:editors 通过。编辑器专项实测长文本横纵滚动、行号开关和重载持久化、小 Mermaid 自适应高度和鼠标拖动、JSON Schema 粘贴成功/失败、`$<host>` 与 `[$<host>]` 的真实替换结果。TypeScript/生产构建和发布入口隔离检查通过，已有大 chunk 提示保留。
 
 截图与日志存放于忽略目录 output/playwright；代表截图为 editor-long-scroll.png、mermaid-adaptive-pan.png、schema-paste.png、regex-replacement-visible.png。测试在 Chromium 中运行，未进行修改文件操作，也未调用模型修复服务。
+
+
+## 正则替换交互补全
+
+根据后续确认，将查找表达式、替换为、原始文本及替换结果明确分开。替换为支持多行文本、空字符串删除和捕获组引用；保留查找匹配按钮，新增执行替换与复制结果。原始文本不被自动覆盖，自动预览作为辅助信息放到下方。
+
+替换通过注册表的 validation.run（action=replace）执行，复用 Worker 超时隔离及执行记录，可供工作流使用。修改保留在 dev，尚未合入 main。
+
+验证覆盖普通文本、命名捕获组、g 标志开关、空结果、原始文本保留以及桌面和窄屏布局。使用 Playwright CLI 并按 shadcn MCP 检查清单检查界面；测试代码位于 frontend/tests，不进入发布资源。

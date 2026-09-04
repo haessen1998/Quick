@@ -22,6 +22,9 @@ export default function ValidationPage() {
     replacement,
     setReplacement,
     output,
+    outputKind,
+    hasOutput,
+    running,
     error,
     testCases,
     setTestCases,
@@ -63,8 +66,9 @@ export default function ValidationPage() {
           ))}
         </div>
         <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
-          <div className="grid gap-3 border-b p-4 lg:grid-cols-[minmax(0,1fr)_auto]">
+          <div className={cn("grid gap-3 border-b p-4", mode !== "regex" && "lg:grid-cols-[minmax(0,1fr)_auto]")}>
             <div className="space-y-3">
+              {mode === "regex" && <div className="text-sm font-medium">{uiText("查找表达式")}</div>}
               {mode === "json-schema" ? (
                 <JSONSchemaEditor value={expression} onValueChange={setExpression} />
               ) : (
@@ -105,47 +109,19 @@ export default function ValidationPage() {
                     </code>
                   </div>
                   <label className="block space-y-2 text-xs text-muted-foreground">
-                    <span>{uiText("替换模板：$<host> 引用名为 host 的捕获组，例如 (?<host>...)。")}</span>
-                    <input
-                      aria-label={uiText("替换模板")}
+                    <span>{uiText("替换为")}</span>
+                    <textarea
+                      rows={2}
+                      aria-label={uiText("替换为")}
                       className={inputClass}
                       value={replacement}
                       onChange={(event) => setReplacement(event.target.value)}
-                      placeholder={uiText("替换模板，例如 $1 或 $<name>")}
+                      placeholder={uiText("输入替换内容，例如 bar；留空则删除匹配内容")}
                     />
+                    <span className="block">
+                      {uiText("可直接输入文本，也支持 $1、$<name> 捕获组。勾选 g 替换全部，否则只替换首个匹配。")}
+                    </span>
                   </label>
-                  <div className="rounded-lg border bg-muted/20">
-                    <div className="flex items-center justify-between border-b px-3 py-2 text-xs">
-                      <span>
-                        {uiText("替换结果预览")}
-                        {previewRunning && ` · ${uiText("处理中…")}`}
-                      </span>
-                      <Button
-                        variant="ghost"
-                        size="xs"
-                        disabled={!previewReady || !replacementPreview || previewRunning}
-                        onClick={async () => {
-                          await writeClipboard(replacementPreview)
-                          toast.success(t("已复制"))
-                        }}
-                      >
-                        <Copy />
-                        {uiText("复制替换结果")}
-                      </Button>
-                    </div>
-                    <pre
-                      aria-label={uiText("替换结果预览")}
-                      className="max-h-40 min-h-12 overflow-auto whitespace-pre-wrap break-all p-3 text-sm"
-                    >
-                      {previewError
-                        ? t(previewError)
-                        : previewRunning
-                          ? uiText("正在预览…")
-                          : previewReady
-                            ? replacementPreview || uiText("替换结果为空")
-                            : uiText("编辑表达式、数据或替换模板后自动预览。")}
-                    </pre>
-                  </div>
                 </>
               )}
             </div>
@@ -158,10 +134,16 @@ export default function ValidationPage() {
                   {uiText("取消预览")}
                 </Button>
               )}
-              <Button onClick={() => void run()}>
+              <Button variant={mode === "regex" ? "outline" : "default"} disabled={running} onClick={() => void run()}>
                 <Play />
-                {uiText("执行校验")}
+                {uiText(mode === "regex" ? "查找匹配" : "执行校验")}
               </Button>
+              {mode === "regex" && (
+                <Button disabled={running} onClick={() => void run("replace")}>
+                  <Play />
+                  {uiText("执行替换")}
+                </Button>
+              )}
             </div>
           </div>
           <InputPreflight identity={mode} format={mode} expression={expression} input={input} flags={flags} />
@@ -173,7 +155,9 @@ export default function ValidationPage() {
           )}
           <div className="grid md:grid-cols-2">
             <label className="border-b md:border-r md:border-b-0">
-              <div className="flex h-10 items-center border-b px-4 text-xs text-muted-foreground">{uiText("待校验数据")}</div>
+              <div className="flex h-10 items-center border-b px-4 text-xs text-muted-foreground">
+                {uiText(mode === "regex" ? "原始文本" : "待校验数据")}
+              </div>
               <CodeEditor
                 className={cn(
                   inputClass,
@@ -188,10 +172,28 @@ export default function ValidationPage() {
             <div>
               <div className="flex h-10 items-center gap-2 border-b px-4 text-xs text-muted-foreground">
                 <CheckCircle2 className="size-3.5" />
-                {uiText("匹配结果")}
+                {uiText(mode === "regex" && outputKind === "replacement" ? "替换结果" : "匹配结果")}
+                {mode === "regex" && outputKind === "replacement" && (
+                  <Button
+                    className="ml-auto"
+                    variant="ghost"
+                    size="xs"
+                    disabled={!hasOutput}
+                    onClick={async () => {
+                      await writeClipboard(output)
+                      toast.success(t("已复制"))
+                    }}
+                  >
+                    <Copy />
+                    {uiText("复制结果")}
+                  </Button>
+                )}
               </div>
-              <pre className="h-[24rem] overflow-auto whitespace-pre-wrap break-words bg-muted/20 p-4 font-mono text-sm leading-6">
-                {output || t("执行后显示结果")}
+              <pre
+                aria-label={uiText(mode === "regex" && outputKind === "replacement" ? "替换结果" : "匹配结果")}
+                className="h-[24rem] overflow-auto whitespace-pre-wrap break-words bg-muted/20 p-4 font-mono text-sm leading-6"
+              >
+                {hasOutput ? output || uiText("替换结果为空") : t("执行后显示结果")}
               </pre>
             </div>
           </div>
@@ -211,6 +213,38 @@ export default function ValidationPage() {
                   ),
                 )}
               </pre>
+              <div className="rounded-lg border bg-muted/20">
+                <div className="flex items-center justify-between border-b px-3 py-2 text-xs">
+                  <span>
+                    {uiText("替换结果预览")}
+                    {previewRunning && ` · ${uiText("处理中…")}`}
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="xs"
+                    disabled={!previewReady || !replacementPreview || previewRunning}
+                    onClick={async () => {
+                      await writeClipboard(replacementPreview)
+                      toast.success(t("已复制"))
+                    }}
+                  >
+                    <Copy />
+                    {uiText("复制替换结果")}
+                  </Button>
+                </div>
+                <pre
+                  aria-label={uiText("替换结果预览")}
+                  className="max-h-40 min-h-12 overflow-auto whitespace-pre-wrap break-all p-3 text-sm"
+                >
+                  {previewError
+                    ? t(previewError)
+                    : previewRunning
+                      ? uiText("正在预览…")
+                      : previewReady
+                        ? replacementPreview || uiText("替换结果为空")
+                        : uiText("编辑表达式、数据或替换模板后自动预览。")}
+                </pre>
+              </div>
             </article>
             <article className="overflow-hidden rounded-xl border bg-card shadow-sm">
               <div className="flex items-center justify-between border-b px-4 py-3">

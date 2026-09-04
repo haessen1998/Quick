@@ -49,7 +49,7 @@ try {
     return await page.locator("body").ariaSnapshot()
   })
   code(async (page) => {
-    for (const name of ["载入示例", "取消预览", "执行校验"]) {
+    for (const name of ["载入示例", "取消预览", "查找匹配", "执行替换"]) {
       const bounds = await page.getByRole("button", { name, exact: true }).boundingBox()
       if (!bounds || bounds.width > 160 || bounds.height > 40) throw Error("Validation toolbar button stretched")
     }
@@ -67,11 +67,11 @@ try {
   })
   run("resize", "640", "520")
   code(async (page) => {
-    for (const name of ["载入示例", "取消预览", "执行校验"]) {
+    for (const name of ["载入示例", "取消预览", "查找匹配", "执行替换"]) {
       const bounds = await page.getByRole("button", { name, exact: true }).boundingBox()
       if (!bounds || bounds.width > 160 || bounds.x + bounds.width > 640) throw Error("Narrow toolbar overflow")
     }
-    await page.getByRole("button", { name: "执行校验", exact: true }).scrollIntoViewIfNeeded()
+    await page.getByRole("button", { name: "执行替换", exact: true }).scrollIntoViewIfNeeded()
     await page.screenshot({ animations: "disabled", path: "output/playwright/validation-toolbar-narrow.png" })
   })
   run("resize", "1000", "618")
