@@ -4,8 +4,8 @@ import { cn } from "@/lib/utils"
 import { useLineNumbers } from "@/lib/editor-settings"
 import { useLayoutEffect, useMemo, useRef, type TextareaHTMLAttributes } from "react"
 
-type Props = TextareaHTMLAttributes<HTMLTextAreaElement> & { error?: string }
-export function CodeEditor({ className, value = "", error, ...props }: Props) {
+type Props = TextareaHTMLAttributes<HTMLTextAreaElement> & { error?: string; fill?: boolean }
+export function CodeEditor({ className, value = "", error, fill = false, ...props }: Props) {
   const editor = useRef<HTMLTextAreaElement>(null)
   const showLineNumbers = useLineNumbers()
   const gutter = useRef<HTMLDivElement>(null)
@@ -33,14 +33,19 @@ export function CodeEditor({ className, value = "", error, ...props }: Props) {
     editor.current.scrollTop = Math.max(0, (location - 3) * 24)
   }
   return (
-    <div className="min-w-0">
+    <div className={cn("min-w-0", fill && "flex min-h-0 flex-1 flex-col")}>
       {location && (
         <Button type="button" variant="ghost" size="sm" className="m-2 text-destructive" onClick={revealError}>
           {uiText("定位错误：第")}
           {location} {uiText("行")}
         </Button>
       )}
-      <div className="relative flex min-w-0 overflow-hidden bg-background focus-within:outline-1 focus-within:-outline-offset-1 focus-within:outline-ring/50">
+      <div
+        className={cn(
+          "relative flex min-w-0 overflow-hidden bg-background focus-within:outline-1 focus-within:-outline-offset-1 focus-within:outline-ring/50",
+          fill && "min-h-0 flex-1",
+        )}
+      >
         {showLineNumbers && (
           <div data-slot="editor-gutter" className="relative w-12 shrink-0 overflow-hidden border-r bg-muted/40" aria-hidden>
             <div

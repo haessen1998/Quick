@@ -145,7 +145,6 @@ function useValidationPageModel() {
     setOutput("")
     setError("")
     setTestResults([])
-    setGeneratedCode("")
   }
 
   const loadSample = () => {
@@ -280,6 +279,23 @@ function useValidationPageModel() {
     actions: {
       run: async (values, options) => {
         const action = String(values.action ?? "run")
+        if (action === "show-code") {
+          const language = String(values.language ?? "javascript")
+          const code = String(values.code ?? "")
+          if (!code.trim()) throw new Error("没有可显示的代码")
+          setGeneratedLanguage(language)
+          setGeneratedCode(code)
+          setCodeExplanation(String(values.explanation ?? ""))
+          setMode("regex")
+          setError("")
+          return {
+            success: true,
+            action,
+            language,
+            codeLength: code.length,
+            executed: true,
+          }
+        }
         const nextMode = String(values.mode ?? "regex") as Mode
         if (!(["jsonpath", "json-schema", "xpath", "selector", "glob", "regex"] as string[]).includes(nextMode))
           throw new Error(`不支持的校验模式：${nextMode}`)
@@ -323,22 +339,6 @@ function useValidationPageModel() {
               passed: results.filter((item) => item.passed).length,
               total: results.length,
               results,
-              executed: true,
-            }
-          }
-          if (action === "show-code") {
-            const language = String(values.language ?? "javascript")
-            const code = String(values.code ?? "")
-            if (!code.trim()) throw new Error("没有可显示的代码")
-            setGeneratedLanguage(language)
-            setGeneratedCode(code)
-            setCodeExplanation(String(values.explanation ?? ""))
-            setError("")
-            return {
-              success: true,
-              action,
-              language,
-              codeLength: code.length,
               executed: true,
             }
           }

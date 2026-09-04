@@ -1,3 +1,4 @@
+import { ResizableRegexGrid } from "@/components/ResizableRegexGrid"
 import { CodeEditor } from "@/components/CodeEditor"
 import { InputPreflight } from "@/components/InputPreflight"
 import { Button } from "@/components/ui/button"
@@ -89,32 +90,33 @@ export function RegexWorkspace({ model }: { model: ReturnType<typeof useValidati
           {error}
         </div>
       )}
-      <div data-slot="regex-grid" className="grid md:grid-cols-2">
-        <section aria-label={uiText("原始文本")} className="min-w-0 border-b md:border-r">
+      <ResizableRegexGrid>
+        <section aria-label={uiText("原始文本")} className="flex min-h-0 min-w-0 flex-col border-b md:border-r">
           <h2 className={cellHeader}>{uiText("原始文本")}</h2>
           <CodeEditor
             aria-label={uiText("待校验数据")}
-            className="h-56 resize-none"
+            fill
+            className="h-56 resize-none md:h-full"
             value={input}
             onChange={(event) => setInput(event.target.value)}
             spellCheck={false}
           />
         </section>
-        <section aria-label={uiText("匹配结果")} className="min-w-0 border-b">
+        <section aria-label={uiText("匹配结果")} className="flex min-h-0 min-w-0 flex-col border-b">
           <h2 className={cellHeader}>{uiText("匹配结果")}</h2>
           <pre
             aria-label={uiText("匹配结果")}
-            className="h-56 overflow-auto whitespace-pre-wrap break-all bg-muted/20 p-4 font-mono text-sm leading-6"
+            className="h-56 min-h-0 md:h-auto md:flex-1 overflow-auto whitespace-pre-wrap break-all bg-muted/20 p-4 font-mono text-sm leading-6"
           >
             {matchResult ?? t("执行后显示结果")}
           </pre>
         </section>
-        <section aria-label={uiText("匹配高亮与替换")} className="min-w-0 border-b md:border-r md:border-b-0">
+        <section aria-label={uiText("匹配高亮与替换")} className="flex min-h-0 min-w-0 flex-col border-b md:border-r md:border-b-0">
           <h2 className={cellHeader}>{uiText("匹配高亮与替换")}</h2>
-          <div className="flex h-80 flex-col gap-3 p-4">
+          <div className="flex h-80 min-h-0 flex-col gap-3 overflow-auto p-4 md:h-auto md:flex-1">
             <pre
               aria-label={uiText("匹配高亮")}
-              className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap break-all font-mono text-sm leading-6"
+              className="min-h-12 flex-1 overflow-auto whitespace-pre-wrap break-all font-mono text-sm leading-6"
             >
               {previewError
                 ? t(previewError)
@@ -152,7 +154,7 @@ export function RegexWorkspace({ model }: { model: ReturnType<typeof useValidati
             </div>
           </div>
         </section>
-        <section aria-label={uiText("替换结果")} className="min-w-0">
+        <section aria-label={uiText("替换结果")} className="flex min-h-0 min-w-0 flex-col">
           <div className={cellHeader}>
             <h2>{uiText("替换结果")}</h2>
             <Button
@@ -170,12 +172,12 @@ export function RegexWorkspace({ model }: { model: ReturnType<typeof useValidati
           </div>
           <pre
             aria-label={uiText("替换结果")}
-            className="h-80 overflow-auto whitespace-pre-wrap break-all bg-muted/20 p-4 font-mono text-sm leading-6"
+            className="h-80 min-h-0 md:h-auto md:flex-1 overflow-auto whitespace-pre-wrap break-all bg-muted/20 p-4 font-mono text-sm leading-6"
           >
             {replaceResult === null ? t("执行后显示结果") : replaceResult || uiText("替换结果为空")}
           </pre>
         </section>
-      </div>
+      </ResizableRegexGrid>
     </div>
   )
 }

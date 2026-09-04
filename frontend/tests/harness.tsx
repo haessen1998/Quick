@@ -1,3 +1,4 @@
+import ValidationPage from "../src/pages/ValidationPage"
 import { writeClipboard } from "../src/lib/clipboard"
 import { clipboardObserver } from "../src/lib/clipboard-observer"
 import { AssistantContextPreview } from "../src/components/AssistantContextPreview"
@@ -17,6 +18,7 @@ function BrokenPage() {
   return null
 }
 function Harness() {
+  const [showValidation, setShowValidation] = useState(false)
   const [broken, setBroken] = useState(false)
   const registry = useAssistantCapabilityRegistry()
   const [status, setStatus] = useState("ready")
@@ -53,6 +55,17 @@ function Harness() {
   }
   return (
     <>
+      <button onClick={async () => {
+        try {
+          await registry.execute("validation", "run", {mode:"regex", expression:"foo", input:"foo", flags:"m"})
+          const result = await registry.execute("validation", "run", {action:"show-code", mode:"jsonpath", language:"python", code:'import re\nprint(re.findall(r"foo", "foo"))', explanation:"Python example"}) as {success?: boolean}
+          const context = registry.getPageContext("validation")
+          if (!result.success || context?.mode !== "regex" || context?.flags !== "m" || context?.expression !== "foo" || !context?.hasGeneratedCode) throw Error("Code sync changed source or did not select visible mode")
+          setShowValidation(true)
+          setStatus("code sync passed")
+        } catch (error) { setStatus(`FAILED: ${String(error)}`) }
+      }}>Show generated code</button>
+      {showValidation && <ValidationPage />}
       <button onClick={workflow}>Run headless workflow</button>
       <button onClick={permission}>Check permission</button>
       <button

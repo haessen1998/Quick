@@ -42,7 +42,7 @@
 
 - 用户用自然语言描述规则或给出输入样例时，可以直接生成 JSONPath、XPath、CSS Selector 或正则表达式及参数，并调用 `validate_content` 的 `run` 动作在页面实际验证；不要只在回答中贴出未经执行的表达式。
 - 用户要求检验正则完整性或逻辑时，先覆盖典型正例、典型反例、边界值、空值、Unicode、大小写、接近但无效的输入，再调用 `test-cases`。如果测试暴露问题，应修正表达式并重新运行，而不是宣称原表达式正确。
-- 用户要求语言代码时，由你根据当前表达式生成完整、可复制的最小示例，然后调用 `show-code` 同步到页面。支持 JavaScript、TypeScript、Python、C#、Java、Go、Rust 和 PHP；必须说明锚点、命名组、转义、Unicode、全局匹配等方言差异，不能机械照搬 JavaScript 正则。
+- 用户要求语言代码时，由你根据当前表达式生成完整、可复制的最小示例，然后调用 `validate_content`，传入 `action: "show-code"`、`mode: "regex"`、`language`、完整 `code` 和 `explanation` 同步到页面；`show-code` 是动作参数，不是独立工具名。只有工具返回 `success: true`、`executed: true` 才能声称代码已写入页面，不要仅在聊天中展示代码。支持 JavaScript、TypeScript、Python、C#、Java、Go、Rust 和 PHP；必须说明锚点、命名组、转义、Unicode、全局匹配等方言差异，不能机械照搬 JavaScript 正则。
 - 生成校验规则前应从用户描述推断允许范围；存在会明显改变规则的歧义时只询问一个关键问题。不要把复杂语义（例如完整 RFC 邮箱或 URL 语法）伪装成一个绝对正确的短正则。
 
 ## 当前运行策略

@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react"
 import { RegexWorkspace } from "@/components/RegexWorkspace"
 import { JSONSchemaEditor } from "@/components/JSONSchemaEditor"
 import { InputPreflight } from "@/components/InputPreflight"
@@ -36,6 +37,10 @@ export default function ValidationPage() {
     runTests,
     modes,
   } = model
+  const codePanel = useRef<HTMLElement>(null)
+  useEffect(() => {
+    if (generatedCode) codePanel.current?.scrollIntoView({ block: "nearest" })
+  }, [generatedCode])
   return (
     <section className="page-shell">
       <div className="mx-auto w-full max-w-7xl">
@@ -191,7 +196,7 @@ export default function ValidationPage() {
                 })}
               </div>
             </article>
-            <article className="overflow-hidden rounded-xl border bg-card shadow-sm">
+            <article ref={codePanel} aria-label={uiText("AI 生成的使用代码")} className="overflow-hidden rounded-xl border bg-card shadow-sm">
               <div className="flex items-center justify-between border-b px-4 py-3">
                 <span className="flex items-center gap-2 text-sm font-medium">
                   <Code2 className="size-4" />
@@ -214,7 +219,7 @@ export default function ValidationPage() {
                 </div>
               </div>
               {codeExplanation && <div className="border-b bg-muted/20 px-4 py-2 text-xs text-muted-foreground">{codeExplanation}</div>}
-              <pre className="min-h-28 max-h-96 overflow-auto whitespace-pre p-4 font-mono text-sm">
+              <pre aria-label={uiText("生成代码")} className="min-h-28 max-h-96 overflow-auto whitespace-pre p-4 font-mono text-sm">
                 {generatedCode || uiText("让小Q根据当前正则生成 JavaScript、TypeScript、Python、C#、Java、Go、Rust 或 PHP 使用代码。")}
               </pre>
             </article>

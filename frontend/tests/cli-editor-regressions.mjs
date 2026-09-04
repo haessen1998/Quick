@@ -143,6 +143,24 @@ try {
     await page.getByRole("button", { name: "执行替换", exact: true }).click()
     await page.waitForFunction(() => document.querySelector('pre[aria-label="替换结果"]')?.textContent === "bar foo")
     if (await page.locator('pre[aria-label="匹配结果"]').textContent() !== previousMatches) throw Error("Replacement overwrote matches")
+    const vertical = page.getByRole("separator", { name: "调整左右区域", exact: true })
+    const horizontal = page.getByRole("separator", { name: "调整上下区域", exact: true })
+    for (const [handle, dx, dy] of [[vertical, 60, 0], [horizontal, 0, -50]]) {
+      await handle.scrollIntoViewIfNeeded()
+      const before = Number(await handle.getAttribute("aria-valuenow"))
+      const box = await handle.boundingBox()
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+      await page.mouse.down()
+      await page.mouse.move(box.x + box.width / 2 + dx, box.y + box.height / 2 + dy, {steps:6})
+      await page.mouse.up()
+      if (Math.abs(Number(await handle.getAttribute("aria-valuenow")) - before) < 3) throw Error("Grid divider did not move")
+    }
+    await vertical.focus()
+    const beforeKey = Number(await vertical.getAttribute("aria-valuenow"))
+    await vertical.press("ArrowLeft")
+    if (Number(await vertical.getAttribute("aria-valuenow")) >= beforeKey) throw Error("Keyboard resize failed")
+    const widths = await page.locator('[data-slot="regex-grid"] > section').evaluateAll(els => els.map(el => el.getBoundingClientRect().width))
+    if (Math.abs(widths[0] - widths[2]) > 1 || Math.abs(widths[1] - widths[3]) > 1) throw Error("Rows lost column alignment")
     await page.getByRole("textbox", { name: "表达式", exact: true }).scrollIntoViewIfNeeded()
     await page.waitForFunction(() => document.querySelector('pre[aria-label="匹配高亮"]')?.textContent === "foo foo")
     await source.focus()
@@ -156,8 +174,22 @@ try {
     await replaceGroup.scrollIntoViewIfNeeded()
     await page.screenshot({ path: "output/playwright/regex-replacement-visible.png" })
   })
+  run("goto", new URL("/tests/harness.html", process.env.QUICK_UI_URL || "http://127.0.0.1:43121").href)
+  run("snapshot")
+  code(async page => {
+    await page.getByRole("button", {name:"Show generated code", exact:true}).click()
+    await page.getByRole("status").filter({hasText:"code sync passed"}).waitFor()
+    const generated = page.locator('pre[aria-label="生成代码"]')
+    await generated.waitFor()
+    if (!(await generated.textContent()).includes('import re')) throw Error("Generated code not rendered")
+    await page.getByRole("button", {name:"JSONPath", exact:true}).click()
+    await page.getByRole("button", {name:"正则表达式", exact:true}).click()
+    if (!(await generated.textContent()).includes('import re')) throw Error("Mode switching erased generated code")
+    await generated.scrollIntoViewIfNeeded()
+    await page.screenshot({path:"output/playwright/regex-generated-code.png"})
+  })
   console.log(
-    "PASS: gutter scroll/toggle/persistence, adaptive Mermaid panning, schema paste success/failure, 2x2 regex layout, unified editor focus, fixed replacement input, independent matching/replacement results.",
+    "PASS: gutter scroll/toggle/persistence, adaptive Mermaid panning, schema paste success/failure, 2x2 regex layout, unified editor focus, fixed replacement input, independent matching/replacement results, draggable dividers, headless generated-code display/persistence.",
   )
 } finally {
   run("close")
