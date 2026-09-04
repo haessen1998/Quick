@@ -1,3 +1,4 @@
+import { AssistantContextPreview } from "@/components/AssistantContextPreview"
 import { appStorage, DEVELOPMENT_PROFILE } from "@/lib/app-storage"
 import { shouldSendOnEnter } from "@/lib/chat-input"
 import { useAINetwork,useConversationChat } from "@/lib/chat-session"
@@ -349,7 +350,7 @@ function AssistantSession({ profile, activePage, onNavigate, sidebarOrder, onSid
     {!atBottom && <Button type="button" variant="secondary" size="icon-lg" className="absolute bottom-3 left-1/2 z-10 -translate-x-1/2 rounded-full border bg-background shadow-lg" onClick={() => scrollToBottom()} aria-label={uiText("回到对话底部")} title={uiText("回到底部并继续跟随")}><ArrowDown className="size-4" /></Button>}
     </div>
     <div className="shrink-0 border-t bg-background p-3">
-      <details className="mb-2 text-xs text-muted-foreground"><summary className="cursor-pointer">{uiText("可供小Q读取的页面上下文")}</summary><p className="my-2">{uiText("仅在小Q调用上下文工具时发送；密钥等字段已过滤。自由文本仍可能含私人内容，请先检查。")}</p><pre className="max-h-40 overflow-auto whitespace-pre-wrap break-all">{JSON.stringify(registry.getPageContext(activePage), null, 2)}</pre></details>
+      <AssistantContextPreview context={registry.getPageContext(activePage)} />
       {error && <div className="mb-2 rounded-lg border border-destructive/30 bg-destructive/8 p-2 text-xs text-destructive">{error.message || uiText("AI 请求失败")}</div>}
       <form onSubmit={submit} className="rounded-xl border bg-background p-2 shadow-sm focus-within:ring-3 focus-within:ring-ring/25">
         <textarea value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={keyDown} disabled={busy} className="block max-h-28 min-h-14 w-full resize-none bg-transparent px-1.5 py-1 text-sm leading-5 outline-none" placeholder={uiText("问问题，或让我调用 Quick 工具…")} />

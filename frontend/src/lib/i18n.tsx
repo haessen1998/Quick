@@ -8,6 +8,13 @@ export type AppLanguage = "zh-CN" | "en-US"
 const STORAGE_KEY = "quick-language"
 
 const ENGLISH: Record<string, string> = {
+  "结果仅保留在当前应用会话，可继续交给其他工具。": "Results stay in this session and can be sent to another tool.",
+  "执行工具后显示记录": "Run a tool to see its results here",
+  "查看工具": "Open tool",
+  "发送到 JSON 格式化": "Send to JSON formatter",
+  "页面加载失败，文档数据仍保留。": "This page could not load. Your document is still available.",
+  "重试": "Retry",
+
   "搜索工具": "Search tools", "执行记录": "Run history", "清空记录": "Clear history", "定位错误：第": "Go to error: line ", "行": "", "文档已关闭": "Document closed",
   "按名称或操作搜索；打开工具会保留当前文档。": "Search by name or operation. Opening a tool preserves the current document.",
   "没有匹配的工具": "No matching tools", "个动作已就绪，无需打开页面": "actions ready without opening pages",

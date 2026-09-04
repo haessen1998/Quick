@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogBody, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { uiText } from "@/lib/i18n"
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { type PageId } from "./pages"
@@ -134,16 +134,16 @@ export function AssistantCapabilityProvider({
           if (!open) approvalRef.current?.resolve(false)
         }}
       >
-        <DialogContent>
+        <DialogContent className="flex flex-col overflow-hidden">
           <DialogHeader>
             <DialogTitle>{uiText("允许此次操作？")}</DialogTitle>
             <DialogDescription>
               {approval && PERMISSION_LABELS[approval.effect]} {uiText("· 仅允许下面这一个操作。")}
             </DialogDescription>
           </DialogHeader>
-          <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-all rounded border p-3 text-xs">
+          <DialogBody><pre className="max-h-64 overflow-auto whitespace-pre-wrap break-all rounded border p-3 text-xs">
             {JSON.stringify(approval?.input, null, 2)}
-          </pre>
+          </pre></DialogBody>
           <DialogFooter>
             <Button variant="outline" onClick={() => approvalRef.current?.resolve(false)}>
               {uiText("取消")}

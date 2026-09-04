@@ -1,4 +1,6 @@
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Button } from "@/components/ui/button"
+import { Command, CommandInput, CommandList, CommandItem, CommandEmpty } from "@/components/ui/command"
+import { Dialog, DialogTrigger, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { useAssistantCapabilityRegistry } from "@/lib/assistant-capabilities"
 import { useLanguage } from "@/lib/i18n"
 import { PAGE_IDS, PAGE_LABELS, type PageId } from "@/lib/pages"
@@ -56,47 +58,49 @@ export function CommandPalette({ onNavigate }: { onNavigate: (page: PageId) => v
   }
   return (
     <>
-      <button
-        type="button"
-        className="flex items-center gap-2 rounded-md border px-2 py-1.5 text-xs text-muted-foreground"
-        onClick={() => setOpen(true)}
-        aria-label={t("搜索工具")}
+      <Dialog
+        open={open}
+        onOpenChange={(value) => {
+          setOpen(value)
+          if (!value) setQuery("")
+        }}
       >
-        <Search className="size-4" />
-        <span className="hidden sm:inline">Ctrl/⌘ K</span>
-      </button>
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent>
+        <DialogTrigger asChild>
+          <Button
+            variant="outline"
+            className="text-muted-foreground"
+            aria-label={t("搜索工具")}
+            aria-haspopup="dialog"
+            data-wails-no-drag
+          >
+            <Search className="size-4" />
+            <span className="hidden sm:inline">Ctrl/⌘ K</span>
+          </Button>
+        </DialogTrigger>
+        <DialogContent className="flex flex-col overflow-hidden">
           <DialogHeader>
             <DialogTitle>{t("搜索工具")}</DialogTitle>
             <DialogDescription>{t("按名称或操作搜索；打开工具会保留当前文档。")}</DialogDescription>
           </DialogHeader>
-          <input
-            autoFocus
-            className="rounded-lg border p-3 text-sm outline-none"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="JSON、Base64、正则…"
-            onKeyDown={(event) => {
-              if (event.key === "Enter" && !event.nativeEvent.isComposing && items[0]) choose(items[0])
-            }}
-          />
-          <div className="max-h-80 overflow-auto">
-            {items.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                className="block w-full rounded px-3 py-2 text-left text-sm hover:bg-muted"
-                onClick={() => choose(item)}
-              >
-                {t(item.label)}
-              </button>
-            ))}
-            {!items.length && <p className="p-3 text-sm text-muted-foreground">{t("没有匹配的工具")}</p>}
-          </div>
-          <p className="text-xs text-muted-foreground">
-            {registry.catalog().length} {t("个动作已就绪，无需打开页面")}
-          </p>
+          <Command shouldFilter={false} loop>
+            <CommandInput value={query} onValueChange={setQuery} placeholder="JSON、Base64、正则…" aria-label={t("搜索工具")} />
+            <CommandList className="mx-3 my-2" aria-label={t("搜索工具")}>
+              <CommandEmpty>{t("没有匹配的工具")}</CommandEmpty>
+              {items.map((item) => (
+                <CommandItem key={item.id} value={item.id} onSelect={() => choose(item)}>
+                  {t(item.label)}
+                </CommandItem>
+              ))}
+            </CommandList>
+          </Command>
+          <DialogFooter className="flex-row flex-wrap items-center justify-between sm:justify-between">
+            <p className="text-xs leading-5 text-muted-foreground">
+              {registry.catalog().length} {t("个动作已就绪，无需打开页面")}
+            </p>
+            <span className="text-xs text-muted-foreground" aria-hidden="true">
+              ↑ ↓ · Enter · Esc
+            </span>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </>

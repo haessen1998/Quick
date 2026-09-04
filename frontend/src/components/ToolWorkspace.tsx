@@ -48,7 +48,7 @@ return (
 
           <div className="min-w-0 rounded-xl border bg-card text-card-foreground shadow-sm">
             <div className="flex flex-wrap items-center gap-3 border-b p-4">
-<select className="w-full rounded border bg-background p-2 @3xl/workspace:hidden" aria-label={uiText("选择工具")} value={activeTool.id} onChange={event => { const tool = tools.find(t => t.id === event.target.value); if (tool) selectTool(tool) }}>{tools.map(tool => <option key={tool.id} value={tool.id}>{t(tool.label)}</option>)}</select>
+<select className="h-9 w-full min-w-0 rounded-lg border border-input bg-background px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 @3xl/workspace:hidden" aria-label={uiText("选择工具")} value={activeTool.id} onChange={event => { const tool = tools.find(t => t.id === event.target.value); if (tool) selectTool(tool) }}>{tools.map(tool => <option key={tool.id} value={tool.id}>{t(tool.label)}</option>)}</select>
               <div className="min-w-0 flex-1">
                 <h2 className="font-medium">{t(activeTool.label)}</h2>
                 <p className="mt-0.5 text-xs text-muted-foreground">{t(activeTool.description)}</p>

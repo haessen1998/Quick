@@ -1,3 +1,4 @@
+import { Button } from "@/components/ui/button"
 import { uiText } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 import { useMemo, useRef, type TextareaHTMLAttributes } from "react"
@@ -29,12 +30,12 @@ export function CodeEditor({ className, value = "", error, ...props }: Props) {
   return (
     <div className="min-w-0">
       {location && (
-        <button type="button" className="px-3 py-1 text-xs text-destructive underline" onClick={revealError}>
+        <Button type="button" variant="ghost" size="sm" className="m-2 text-destructive" onClick={revealError}>
           {uiText("定位错误：第")}
           {location} {uiText("行")}
-        </button>
+        </Button>
       )}
-      <div className="relative flex min-w-0 overflow-hidden bg-background">
+      <div className="relative flex min-w-0 overflow-hidden bg-background focus-within:ring-2 focus-within:ring-inset focus-within:ring-ring/50">
         <div
           ref={gutter}
           aria-hidden

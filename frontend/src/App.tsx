@@ -825,7 +825,7 @@ function App() {
           </Button>
         </header>
 
-        <WorkspaceTabs page={activePage} />
+        <WorkspaceTabs page={activePage}>
         <PageErrorBoundary key={activePage}><Suspense fallback={<div className="page-shell text-sm text-muted-foreground">{uiText("正在加载工具…")}</div>}>
           {visitedPages.has("home") && <PageSlot active={activePage === "home"}><HomePage onNavigate={navigateTo} /></PageSlot>}
           {visitedPages.has("ai-chat") && <PageSlot active={activePage === "ai-chat"}><AIChatPage profiles={aiProfiles} onSaveProfile={saveAIProfileFromTest} proxy={proxy} /></PageSlot>}
@@ -841,7 +841,7 @@ function App() {
           {visitedPages.has("file-tools") && <PageSlot active={activePage === "file-tools"}><FileToolsPage /></PageSlot>}
           {visitedPages.has("navigation") && <PageSlot active={activePage === "navigation"}><NavigationPage /></PageSlot>}
           {visitedPages.has("settings") && <PageSlot active={activePage === "settings"}><SettingsPage page={currentPage} theme={theme} onThemeChange={changeTheme} proxy={proxy} onProxyChange={setProxy} aiProfiles={aiProfiles} onAIProfilesChange={setAIProfiles} mcpServers={mcpServers} onMCPServersChange={setMCPServers} assistantSettings={assistantSettings} onAssistantSettingsChange={setAssistantSettings} /></PageSlot>}
-        </Suspense></PageErrorBoundary>
+        </Suspense></PageErrorBoundary></WorkspaceTabs>
         </SidebarInset>
         <GlobalAssistant profiles={aiProfiles} mcpServers={enabledMCPServers} proxy={proxy} autoApproveOperations={assistantSettings.autoApproveOperations} activePage={activePage} onNavigate={navigateTo} sidebarOrder={sidebarOrder} onSidebarOrderChange={changeSidebarOrder} open={assistantOpen} onOpenChange={setAssistantOpen} />
         <Toaster theme={theme} position="top-right" richColors closeButton />

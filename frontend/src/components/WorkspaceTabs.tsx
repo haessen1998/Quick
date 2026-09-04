@@ -1,3 +1,6 @@
+import { useLayoutEffect, useRef, type ReactNode } from "react"
+import { Button } from "@/components/ui/button"
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { useLanguage } from "@/lib/i18n"
 import type { PageId } from "@/lib/pages"
 import {
@@ -7,56 +10,80 @@ import {
   selectWorkspaceDocument,
   useWorkspaceDocuments,
 } from "@/lib/workspace-store"
-import { Plus, X } from "lucide-react"
+import { Plus, X, FileText } from "lucide-react"
 import { toast } from "sonner"
 
 export const DOCUMENT_PAGES: PageId[] = ["formatter", "converter", "validation", "text-workbench", "frontend", "time-ids"]
-export function WorkspaceTabs({ page }: { page: PageId }) {
+export function WorkspaceTabs({ page, children }: { page: PageId; children: ReactNode }) {
   const { t } = useLanguage()
   const { documents, selected } = useWorkspaceDocuments(page)
-  if (!DOCUMENT_PAGES.includes(page)) return null
+  const scrollArea = useRef<HTMLDivElement>(null)
+  useLayoutEffect(() => {
+    const area = scrollArea.current
+    if (!area) return
+    const reveal = () =>
+      area.querySelector<HTMLElement>('[role="tab"][data-state="active"]')?.scrollIntoView({ block: "nearest", inline: "nearest" })
+    reveal()
+    const observer = new ResizeObserver(reveal)
+    observer.observe(area)
+    return () => observer.disconnect()
+  }, [page, selected])
+  if (!DOCUMENT_PAGES.includes(page)) return <>{children}</>
+  const current = documents.find((doc) => doc.id === selected)!
+  const closeCurrent = () => {
+    closeWorkspaceDocument(page, selected)
+    toast(t("文档已关闭"), { action: { label: t("撤销"), onClick: () => restoreWorkspaceDocument(page) } })
+  }
   return (
-    <div className="flex min-w-0 items-center gap-1 overflow-x-auto border-b bg-muted/20 px-3 py-2" aria-label={t("工作文档")}>
-      {documents.map((doc) => (
-        <div
-          key={doc.id}
-          className={`flex shrink-0 items-center rounded-md border ${doc.id === selected ? "bg-background shadow-sm" : "border-transparent"}`}
-        >
-          <button
-            className="px-3 py-1 text-xs"
-            onClick={() => selectWorkspaceDocument(page, doc.id)}
-            aria-current={doc.id === selected ? "page" : undefined}
-          >
-            {t(doc.title)}
-          </button>
-          {documents.length > 1 && (
-            <button
-              className="p-1.5 text-muted-foreground"
-              aria-label={`${t("关闭")} ${t(doc.title)}`}
-              onClick={() => {
-                closeWorkspaceDocument(page, doc.id)
-                toast(t("文档已关闭"), { action: { label: t("撤销"), onClick: () => restoreWorkspaceDocument(page) } })
-              }}
-            >
-              <X className="size-3" />
-            </button>
-          )}
+    <Tabs value={selected} onValueChange={(id) => selectWorkspaceDocument(page, id)} className="shrink-0">
+      <div className="flex h-12 min-w-0 shrink-0 items-center gap-2 border-b px-4" title={t("切页保留 · 关闭应用后清除")}>
+        <div ref={scrollArea} className="min-w-0 overflow-x-auto py-1">
+          <TabsList aria-label={t("工作文档")} className="h-9 bg-transparent p-0">
+            {documents.map((doc) => (
+              <TabsTrigger
+                key={doc.id}
+                value={doc.id}
+                className="relative h-9 rounded-none px-3 after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:rounded-full data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:after:bg-foreground hover:text-foreground"
+                onFocus={(event) => event.currentTarget.scrollIntoView({ block: "nearest", inline: "nearest" })}
+              >
+                <FileText className="size-3.5" aria-hidden />
+                {t(doc.title)}
+              </TabsTrigger>
+            ))}
+          </TabsList>
         </div>
-      ))}
-      <button
-        className="rounded p-1.5 hover:bg-muted"
-        aria-label={t("新建文档")}
-        onClick={() => {
-          try {
-            addWorkspaceDocument(page)
-          } catch (error) {
-            toast.error(String(error))
-          }
-        }}
-      >
-        <Plus className="size-4" />
-      </button>
-      <span className="ml-auto shrink-0 px-2 text-[10px] text-muted-foreground">{t("切页保留 · 关闭应用后清除")}</span>
-    </div>
+        <div className="flex shrink-0 items-center gap-1 border-l pl-2">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label={t("新建文档")}
+            title={t("新建文档")}
+            disabled={documents.length >= 12}
+            onClick={() => {
+              try {
+                addWorkspaceDocument(page)
+              } catch (error) {
+                toast.error(String(error))
+              }
+            }}
+          >
+            <Plus />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label={`${t("关闭")} ${t(current.title)}`}
+            title={`${t("关闭")} ${t(current.title)}`}
+            disabled={documents.length <= 1}
+            onClick={closeCurrent}
+          >
+            <X />
+          </Button>
+        </div>
+      </div>
+      <TabsContent value={selected}>{children}</TabsContent>
+    </Tabs>
   )
 }

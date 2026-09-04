@@ -1,3 +1,6 @@
+import { AssistantContextPreview } from "../src/components/AssistantContextPreview"
+import { PageErrorBoundary } from "../src/components/PageErrorBoundary"
+import "../src/styles/globals.css"
 // Test-only entrypoint. Production has a single index.html entry and never imports this file.
 import { createRoot } from "react-dom/client"
 import { useState } from "react"
@@ -7,7 +10,12 @@ import { ToolModels } from "../src/models/ToolModels"
 import { runWorkflow } from "../src/lib/workflow"
 import { findToolRun } from "../src/lib/tool-results"
 
+function BrokenPage() {
+  throw new Error("UI review: " + "long-error-detail/".repeat(30))
+  return null
+}
 function Harness() {
+  const [broken, setBroken] = useState(false)
   const registry = useAssistantCapabilityRegistry()
   const [status, setStatus] = useState("ready")
   const workflow = async () => {
@@ -46,6 +54,15 @@ function Harness() {
       <button onClick={workflow}>Run headless workflow</button>
       <button onClick={permission}>Check permission</button>
       <p role="status">{status}</p>
+      <div className="mx-auto mt-8 max-w-sm p-4">
+        <AssistantContextPreview context={{ input: "long-text/".repeat(100), operation: "json-format" }} />
+      </div>
+      <button onClick={() => setBroken(true)}>Show page error</button>
+      {broken && (
+        <PageErrorBoundary>
+          <BrokenPage />
+        </PageErrorBoundary>
+      )}
     </>
   )
 }
