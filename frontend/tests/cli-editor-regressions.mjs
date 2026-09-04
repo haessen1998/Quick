@@ -110,14 +110,12 @@ try {
     return await page.locator("body").ariaSnapshot()
   })
   code(async (page) => {
-    const preview = page.locator('pre[aria-label="替换结果预览"]')
-    await page.waitForFunction(
-      () => document.querySelector('pre[aria-label="替换结果预览"]')?.textContent === "访问 github.com/haessen1998/Quick 或 go.dev",
-    )
     await page.getByRole("textbox", { name: "替换为", exact: true }).fill("[$<host>]")
-    await page.waitForFunction(
-      () => document.querySelector('pre[aria-label="替换结果预览"]')?.textContent === "访问 [github.com]/haessen1998/Quick 或 [go.dev]",
-    )
+    if (await page.getByRole("textbox", { name: "替换为", exact: true }).evaluate(el => getComputedStyle(el).resize) !== "none") throw Error("Replacement input can resize")
+    const findGroup = page.getByRole("region", { name: "输入与查找匹配", exact: true })
+    const replaceGroup = page.getByRole("region", { name: "替换与结果", exact: true })
+    if (await findGroup.getByRole("button", { name: "执行替换", exact: true }).count()) throw Error("Replace action in input group")
+    if (await replaceGroup.getByRole("button", { name: "查找匹配", exact: true }).count()) throw Error("Find action in replacement group")
     await page.getByRole("button", { name: "执行替换", exact: true }).click()
     await page.waitForFunction(() => document.querySelector('pre[aria-label="替换结果"]')?.textContent === "访问 [github.com]/haessen1998/Quick 或 [go.dev]")
     const source = page.getByRole("textbox", { name: "待校验数据", exact: true })
@@ -138,20 +136,23 @@ try {
     await page.waitForFunction(() => document.querySelector('pre[aria-label="替换结果"]')?.textContent === "替换结果为空")
     await page.getByRole("button", { name: "查找匹配", exact: true }).click()
     await page.waitForFunction(() => document.querySelector('pre[aria-label="匹配结果"]')?.textContent.includes('"value": "foo"'))
+    if (await page.locator('pre[aria-label="替换结果"]').textContent() !== "替换结果为空") throw Error("Find overwrote replacement result")
+    const previousMatches = await page.locator('pre[aria-label="匹配结果"]').textContent()
     await source.fill("foo foo")
     await replacement.fill("bar")
     await page.getByRole("button", { name: "执行替换", exact: true }).click()
     await page.waitForFunction(() => document.querySelector('pre[aria-label="替换结果"]')?.textContent === "bar foo")
+    if (await page.locator('pre[aria-label="匹配结果"]').textContent() !== previousMatches) throw Error("Replacement overwrote matches")
     await page.getByRole("textbox", { name: "表达式", exact: true }).scrollIntoViewIfNeeded()
     await page.screenshot({ path: "output/playwright/regex-replacement-form.png" })
     await page.setViewportSize({ width: 640, height: 800 })
     if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)) throw Error("Replacement form overflows")
     await page.screenshot({ path: "output/playwright/regex-replacement-narrow.png" })
-    await preview.scrollIntoViewIfNeeded()
+    await replaceGroup.scrollIntoViewIfNeeded()
     await page.screenshot({ path: "output/playwright/regex-replacement-visible.png" })
   })
   console.log(
-    "PASS: gutter scroll/toggle/persistence, adaptive Mermaid panning, schema paste success/failure, named-group replacement preview.",
+    "PASS: gutter scroll/toggle/persistence, adaptive Mermaid panning, schema paste success/failure, two-group regex layout, fixed replacement input, independent matching/replacement results.",
   )
 } finally {
   run("close")

@@ -122,6 +122,8 @@ function useValidationPageModel() {
   const [output, setOutput] = useDraftState("validation", "output", "")
   const [outputKind, setOutputKind] = useDraftState("validation", "outputKind", "matches")
   const [hasOutput, setHasOutput] = useDraftState("validation", "hasOutput", Boolean(output))
+  const [matchResult, setMatchResult] = useDraftState<string | null>("validation", "matchResult", null)
+  const [replaceResult, setReplaceResult] = useDraftState<string | null>("validation", "replaceResult", null)
   const [running, setRunning] = useState(false)
   const [error, setError] = useDraftState("validation", "error", "")
   const [testCases, setTestCases] = useDraftState<RegexTestCase[]>("validation", "testCases", [
@@ -356,6 +358,10 @@ function useValidationPageModel() {
                   options?.signal,
                 )
               : await evaluate(nextMode, nextExpression, nextInput, nextFlags, options?.signal)
+          if (nextMode === "regex") {
+            if (action === "replace") setReplaceResult(result)
+            else setMatchResult(result)
+          }
           setOutputKind(action === "replace" ? "replacement" : "matches")
           setHasOutput(true)
           setReplacement(String(values.replacement ?? replacement))
@@ -408,6 +414,8 @@ function useValidationPageModel() {
     setReplacement,
     output,
     outputKind,
+    matchResult,
+    replaceResult,
     hasOutput,
     running,
     error,

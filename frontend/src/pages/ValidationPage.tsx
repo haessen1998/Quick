@@ -1,3 +1,4 @@
+import { RegexWorkspace } from "@/components/RegexWorkspace"
 import { JSONSchemaEditor } from "@/components/JSONSchemaEditor"
 import { InputPreflight } from "@/components/InputPreflight"
 import { CodeEditor } from "@/components/CodeEditor"
@@ -5,11 +6,12 @@ import { Button } from "@/components/ui/button"
 import { writeClipboard } from "@/lib/clipboard"
 import { uiText } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
-import { inputClass, regexFlags, useValidationPageViewModel } from "@/models/ValidationPageModel"
+import { inputClass, useValidationPageViewModel } from "@/models/ValidationPageModel"
 import { CheckCircle2, Code2, Copy, ListChecks, Play, Plus, Sparkles, Trash2, TriangleAlert } from "lucide-react"
 import { toast } from "sonner"
 
 export default function ValidationPage() {
+  const model = useValidationPageViewModel()
   const {
     t,
     mode,
@@ -18,11 +20,7 @@ export default function ValidationPage() {
     input,
     setInput,
     flags,
-    setFlags,
-    replacement,
-    setReplacement,
     output,
-    outputKind,
     hasOutput,
     running,
     error,
@@ -36,14 +34,8 @@ export default function ValidationPage() {
     loadSample,
     run,
     runTests,
-    replacementPreview,
-    highlighted,
-    previewRunning,
-    previewReady,
-    previewError,
-    cancelPreview,
     modes,
-  } = useValidationPageViewModel()
+  } = model
   return (
     <section className="page-shell">
       <div className="mx-auto w-full max-w-7xl">
@@ -65,10 +57,11 @@ export default function ValidationPage() {
             </Button>
           ))}
         </div>
-        <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
-          <div className={cn("grid gap-3 border-b p-4", mode !== "regex" && "lg:grid-cols-[minmax(0,1fr)_auto]")}>
-            <div className="space-y-3">
-              {mode === "regex" && <div className="text-sm font-medium">{uiText("查找表达式")}</div>}
+        {mode === "regex" ? (
+          <RegexWorkspace model={model} />
+        ) : (
+          <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
+            <div className="grid gap-3 border-b p-4 lg:grid-cols-[minmax(0,1fr)_auto]">
               {mode === "json-schema" ? (
                 <JSONSchemaEditor value={expression} onValueChange={setExpression} />
               ) : (
@@ -80,172 +73,54 @@ export default function ValidationPage() {
                   placeholder={`${mode} 表达式`}
                 />
               )}
-              {mode === "regex" && (
-                <>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="mr-1 text-xs text-muted-foreground">Flags</span>
-                    {regexFlags.map((flag) => (
-                      <label
-                        key={flag.id}
-                        title={flag.title}
-                        className={cn(
-                          "app-interactive flex cursor-pointer items-center gap-1.5 rounded-md border px-2.5 py-1.5 font-mono text-xs",
-                          flags.includes(flag.id) && "border-primary bg-primary/8 text-primary",
-                        )}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={flags.includes(flag.id)}
-                          onChange={() =>
-                            setFlags((current) => (current.includes(flag.id) ? current.replace(flag.id, "") : `${current}${flag.id}`))
-                          }
-                          className="size-3 accent-primary"
-                        />
-                        {flag.label}
-                      </label>
-                    ))}
-                    <code className="ml-auto text-xs text-muted-foreground">
-                      /{expression}/{flags}
-                    </code>
-                  </div>
-                  <label className="block space-y-2 text-xs text-muted-foreground">
-                    <span>{uiText("替换为")}</span>
-                    <textarea
-                      rows={2}
-                      aria-label={uiText("替换为")}
-                      className={inputClass}
-                      value={replacement}
-                      onChange={(event) => setReplacement(event.target.value)}
-                      placeholder={uiText("输入替换内容，例如 bar；留空则删除匹配内容")}
-                    />
-                    <span className="block">
-                      {uiText("可直接输入文本，也支持 $1、$<name> 捕获组。勾选 g 替换全部，否则只替换首个匹配。")}
-                    </span>
-                  </label>
-                </>
-              )}
-            </div>
-            <div className="flex flex-wrap items-start gap-2 self-start">
-              <Button variant="outline" onClick={loadSample}>
-                {uiText("载入示例")}
-              </Button>
-              {mode === "regex" && (
-                <Button variant="outline" disabled={!previewRunning} onClick={cancelPreview}>
-                  {uiText("取消预览")}
+              <div className="flex flex-wrap items-start gap-2 self-start">
+                <Button variant="outline" onClick={loadSample}>
+                  {uiText("载入示例")}
                 </Button>
-              )}
-              <Button variant={mode === "regex" ? "outline" : "default"} disabled={running} onClick={() => void run()}>
-                <Play />
-                {uiText(mode === "regex" ? "查找匹配" : "执行校验")}
-              </Button>
-              {mode === "regex" && (
-                <Button disabled={running} onClick={() => void run("replace")}>
+                <Button disabled={running} onClick={() => void run()}>
                   <Play />
-                  {uiText("执行替换")}
+                  {uiText("执行校验")}
                 </Button>
-              )}
-            </div>
-          </div>
-          <InputPreflight identity={mode} format={mode} expression={expression} input={input} flags={flags} />
-          {error && (
-            <div className="m-4 flex gap-2 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
-              <TriangleAlert className="size-4 shrink-0" />
-              {error}
-            </div>
-          )}
-          <div className="grid md:grid-cols-2">
-            <label className="border-b md:border-r md:border-b-0">
-              <div className="flex h-10 items-center border-b px-4 text-xs text-muted-foreground">
-                {uiText(mode === "regex" ? "原始文本" : "待校验数据")}
               </div>
-              <CodeEditor
-                className={cn(
-                  inputClass,
-                  "h-[24rem] resize-none overflow-auto rounded-none border-0 p-4 font-mono leading-6 focus-visible:ring-0",
-                )}
-                aria-label={uiText("待校验数据")}
-                value={input}
-                onChange={(event) => setInput(event.target.value)}
-                spellCheck={false}
-              />
-            </label>
-            <div>
-              <div className="flex h-10 items-center gap-2 border-b px-4 text-xs text-muted-foreground">
-                <CheckCircle2 className="size-3.5" />
-                {uiText(mode === "regex" && outputKind === "replacement" ? "替换结果" : "匹配结果")}
-                {mode === "regex" && outputKind === "replacement" && (
-                  <Button
-                    className="ml-auto"
-                    variant="ghost"
-                    size="xs"
-                    disabled={!hasOutput}
-                    onClick={async () => {
-                      await writeClipboard(output)
-                      toast.success(t("已复制"))
-                    }}
-                  >
-                    <Copy />
-                    {uiText("复制结果")}
-                  </Button>
-                )}
-              </div>
-              <pre
-                aria-label={uiText(mode === "regex" && outputKind === "replacement" ? "替换结果" : "匹配结果")}
-                className="h-[24rem] overflow-auto whitespace-pre-wrap break-words bg-muted/20 p-4 font-mono text-sm leading-6"
-              >
-                {hasOutput ? output || uiText("替换结果为空") : t("执行后显示结果")}
-              </pre>
             </div>
-          </div>
-        </div>
-        {mode === "regex" && (
-          <div className="mt-4 grid gap-4 xl:grid-cols-2">
-            <article className="overflow-hidden rounded-xl border bg-card shadow-sm">
-              <div className="border-b px-4 py-3 text-sm font-medium">{uiText("匹配高亮")}</div>
-              <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words border-b p-4 font-mono text-sm">
-                {highlighted.map((segment, index) =>
-                  segment.match ? (
-                    <mark key={index} className="rounded bg-amber-300/70 px-0.5 text-foreground">
-                      {segment.value}
-                    </mark>
-                  ) : (
-                    <span key={index}>{segment.value}</span>
-                  ),
-                )}
-              </pre>
-              <div className="rounded-lg border bg-muted/20">
-                <div className="flex items-center justify-between border-b px-3 py-2 text-xs">
-                  <span>
-                    {uiText("替换结果预览")}
-                    {previewRunning && ` · ${uiText("处理中…")}`}
-                  </span>
-                  <Button
-                    variant="ghost"
-                    size="xs"
-                    disabled={!previewReady || !replacementPreview || previewRunning}
-                    onClick={async () => {
-                      await writeClipboard(replacementPreview)
-                      toast.success(t("已复制"))
-                    }}
-                  >
-                    <Copy />
-                    {uiText("复制替换结果")}
-                  </Button>
+            <InputPreflight identity={mode} format={mode} expression={expression} input={input} flags={flags} />
+            {error && (
+              <div className="m-4 flex gap-2 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+                <TriangleAlert className="size-4 shrink-0" />
+                {error}
+              </div>
+            )}
+            <div className="grid md:grid-cols-2">
+              <label className="border-b md:border-r md:border-b-0">
+                <div className="flex h-10 items-center border-b px-4 text-xs text-muted-foreground">{uiText("待校验数据")}</div>
+                <CodeEditor
+                  className={cn(
+                    inputClass,
+                    "h-[24rem] resize-none overflow-auto rounded-none border-0 p-4 font-mono leading-6 focus-visible:ring-0",
+                  )}
+                  aria-label={uiText("待校验数据")}
+                  value={input}
+                  onChange={(event) => setInput(event.target.value)}
+                  spellCheck={false}
+                />
+              </label>
+              <div>
+                <div className="flex h-10 items-center gap-2 border-b px-4 text-xs text-muted-foreground">
+                  <CheckCircle2 className="size-3.5" />
+                  {uiText("匹配结果")}
                 </div>
                 <pre
-                  aria-label={uiText("替换结果预览")}
-                  className="max-h-40 min-h-12 overflow-auto whitespace-pre-wrap break-all p-3 text-sm"
+                  aria-label={uiText("匹配结果")}
+                  className="h-[24rem] overflow-auto whitespace-pre-wrap break-words bg-muted/20 p-4 font-mono text-sm leading-6"
                 >
-                  {previewError
-                    ? t(previewError)
-                    : previewRunning
-                      ? uiText("正在预览…")
-                      : previewReady
-                        ? replacementPreview || uiText("替换结果为空")
-                        : uiText("编辑表达式、数据或替换模板后自动预览。")}
+                  {hasOutput ? output : t("执行后显示结果")}
                 </pre>
               </div>
-            </article>
+            </div>
+          </div>
+        )}
+        {mode === "regex" && (
+          <div className="mt-4 grid gap-4">
             <article className="overflow-hidden rounded-xl border bg-card shadow-sm">
               <div className="flex items-center justify-between border-b px-4 py-3">
                 <span className="flex items-center gap-2 text-sm font-medium">
@@ -316,7 +191,7 @@ export default function ValidationPage() {
                 })}
               </div>
             </article>
-            <article className="overflow-hidden rounded-xl border bg-card shadow-sm xl:col-span-2">
+            <article className="overflow-hidden rounded-xl border bg-card shadow-sm">
               <div className="flex items-center justify-between border-b px-4 py-3">
                 <span className="flex items-center gap-2 text-sm font-medium">
                   <Code2 className="size-4" />

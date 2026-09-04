@@ -8,6 +8,9 @@ export type AppLanguage = "zh-CN" | "en-US"
 const STORAGE_KEY = "quick-language"
 
 const ENGLISH: Record<string, string> = {
+  "输入与查找匹配": "Input and matching",
+  "替换与结果": "Replacement and result",
+  "使用输入组的原始文本和查找表达式。支持 $1、$<name>，留空删除匹配内容；g 控制是否替换全部。": "Uses the original text and expression from the input group. Supports $1 and $<name>; leave empty to delete matches. Enable g to replace all.",
   "查找表达式": "Search expression",
   "输入替换内容，例如 bar；留空则删除匹配内容": "Enter replacement text, e.g. bar; leave empty to delete matches",
   "可直接输入文本，也支持 $1、$<name> 捕获组。勾选 g 替换全部，否则只替换首个匹配。": "Enter plain text or use $1 / $<name> capture groups. Enable g to replace all matches; otherwise only the first is replaced.",
