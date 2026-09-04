@@ -38,7 +38,7 @@ AI 网络代理只在应用内部创建带会话凭据的回环地址，校验�
 ## 环境要求
 
 - Go 1.25 或兼容版本
-- Wails CLI `v3.0.0-beta.14`
+- Wails CLI `v3.0.0-beta.16`
 - Node.js 和 npm
 - 对应平台的 Wails 构建依赖
 

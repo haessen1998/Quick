@@ -18,7 +18,7 @@ jobs:
     name: Build Microsoft Store package
     runs-on: windows-latest
     env:
-      WAILS_VERSION: v3.0.0-beta.14
+      WAILS_VERSION: v3.0.0-beta.16
       WAILS_MCP: "1"
       QUICK_MCP_HOST: "127.0.0.1"
       QUICK_MCP_PORT: "43122"
