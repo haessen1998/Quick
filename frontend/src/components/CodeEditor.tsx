@@ -40,7 +40,7 @@ export function CodeEditor({ className, value = "", error, ...props }: Props) {
           {location} {uiText("行")}
         </Button>
       )}
-      <div className="relative flex min-w-0 overflow-hidden bg-background focus-within:ring-2 focus-within:ring-inset focus-within:ring-ring/50">
+      <div className="relative flex min-w-0 overflow-hidden bg-background focus-within:outline-1 focus-within:-outline-offset-1 focus-within:outline-ring/50">
         {showLineNumbers && (
           <div data-slot="editor-gutter" className="relative w-12 shrink-0 overflow-hidden border-r bg-muted/40" aria-hidden>
             <div
@@ -65,7 +65,7 @@ export function CodeEditor({ className, value = "", error, ...props }: Props) {
           className={cn(
             "w-full min-w-0 resize-y bg-transparent py-4 pr-4 pl-14 font-mono text-sm leading-6 outline-none",
             className,
-            "w-0! flex-1 px-3! py-4!",
+            "w-0! flex-1 rounded-none! border-0! px-3! py-4! shadow-none! focus-visible:ring-0!",
           )}
           onScroll={(event) => {
             if (gutter.current) gutter.current.style.transform = `translateY(${-event.currentTarget.scrollTop}px)`

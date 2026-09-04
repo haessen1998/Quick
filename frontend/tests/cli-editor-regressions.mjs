@@ -112,10 +112,10 @@ try {
   code(async (page) => {
     await page.getByRole("textbox", { name: "替换为", exact: true }).fill("[$<host>]")
     if (await page.getByRole("textbox", { name: "替换为", exact: true }).evaluate(el => getComputedStyle(el).resize) !== "none") throw Error("Replacement input can resize")
-    const findGroup = page.getByRole("region", { name: "输入与查找匹配", exact: true })
-    const replaceGroup = page.getByRole("region", { name: "替换与结果", exact: true })
-    if (await findGroup.getByRole("button", { name: "执行替换", exact: true }).count()) throw Error("Replace action in input group")
-    if (await replaceGroup.getByRole("button", { name: "查找匹配", exact: true }).count()) throw Error("Find action in replacement group")
+    const replaceGroup = page.getByRole("region", { name: "替换结果", exact: true })
+    const cells = await page.locator('[data-slot="regex-grid"] > section').evaluateAll(els => els.map(el => { const r = el.getBoundingClientRect(); return { x:r.x, y:r.y, width:r.width, height:r.height, name:el.getAttribute("aria-label") } }))
+    if (cells.map(c => c.name).join("|") !== "原始文本|匹配结果|匹配高亮与替换|替换结果") throw Error("Wrong quadrant order")
+    if (Math.abs(cells[0].y-cells[1].y)>1 || Math.abs(cells[2].y-cells[3].y)>1 || cells[1].x<=cells[0].x || cells[2].y<=cells[0].y) throw Error("Not a 2x2 grid")
     await page.getByRole("button", { name: "执行替换", exact: true }).click()
     await page.waitForFunction(() => document.querySelector('pre[aria-label="替换结果"]')?.textContent === "访问 [github.com]/haessen1998/Quick 或 [go.dev]")
     const source = page.getByRole("textbox", { name: "待校验数据", exact: true })
@@ -144,7 +144,12 @@ try {
     await page.waitForFunction(() => document.querySelector('pre[aria-label="替换结果"]')?.textContent === "bar foo")
     if (await page.locator('pre[aria-label="匹配结果"]').textContent() !== previousMatches) throw Error("Replacement overwrote matches")
     await page.getByRole("textbox", { name: "表达式", exact: true }).scrollIntoViewIfNeeded()
+    await page.waitForFunction(() => document.querySelector('pre[aria-label="匹配高亮"]')?.textContent === "foo foo")
+    await source.focus()
+    const focusStyle = await source.evaluate(el => ({ radius: getComputedStyle(el).borderRadius, border: getComputedStyle(el).borderWidth, wrapperShadow: getComputedStyle(el.parentElement).boxShadow }))
+    if (focusStyle.radius !== "0px" || focusStyle.border !== "0px" || focusStyle.wrapperShadow !== "none") throw Error("Nested editor focus decoration returned")
     await page.screenshot({ path: "output/playwright/regex-replacement-form.png" })
+    await page.locator('[data-slot="regex-grid"]').screenshot({ path: "output/playwright/regex-quadrants.png" })
     await page.setViewportSize({ width: 640, height: 800 })
     if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)) throw Error("Replacement form overflows")
     await page.screenshot({ path: "output/playwright/regex-replacement-narrow.png" })
@@ -152,7 +157,7 @@ try {
     await page.screenshot({ path: "output/playwright/regex-replacement-visible.png" })
   })
   console.log(
-    "PASS: gutter scroll/toggle/persistence, adaptive Mermaid panning, schema paste success/failure, two-group regex layout, fixed replacement input, independent matching/replacement results.",
+    "PASS: gutter scroll/toggle/persistence, adaptive Mermaid panning, schema paste success/failure, 2x2 regex layout, unified editor focus, fixed replacement input, independent matching/replacement results.",
   )
 } finally {
   run("close")
