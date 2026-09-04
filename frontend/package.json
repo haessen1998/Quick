@@ -4,6 +4,9 @@
   "version": "0.3.3",
   "type": "module",
   "scripts": {
+    "test": "tsx --test tests/*.test.ts",
+    "test:ui": "node tests/cli-smoke.mjs",
+    "check:release": "node tests/release-check.mjs",
     "dev": "vite",
     "build:dev": "tsc && vite build --minify false --mode development",
     "build": "tsc && vite build --mode production",
@@ -35,7 +38,9 @@
     "diff": "^9.0.0",
     "dompurify": "^3.4.14",
     "fast-xml-parser": "^5.11.0",
+    "html-minifier-terser": "^7.2.0",
     "jsonpath-plus": "^10.4.0",
+    "lossless-json": "^4.3.1",
     "lucide-react": "^1.32.0",
     "luxon": "^3.7.2",
     "marked": "^18.0.10",
@@ -54,13 +59,16 @@
     "yaml": "^2.9.0"
   },
   "devDependencies": {
+    "@playwright/cli": "^0.1.19",
     "@types/csso": "^5.0.5",
     "@types/diff": "^7.0.2",
+    "@types/html-minifier-terser": "^7.0.2",
     "@types/luxon": "^3.7.4",
     "@types/papaparse": "^5.5.2",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
     "@vitejs/plugin-react": "^6.0.0",
+    "tsx": "^4.23.13",
     "typescript": "^5.2.2",
     "vite": "^8.0.5"
   }

@@ -1,150 +1,25 @@
-import { useCallback, useMemo, useState, type ReactNode } from "react"
-import { ArrowRightLeft, Check, Clipboard, Eraser, Play, Sparkles, TriangleAlert, type LucideIcon } from "lucide-react"
-import { toast } from "sonner"
-
+import { CodeEditor } from "@/components/CodeEditor"
 import { Button } from "@/components/ui/button"
-import { useAssistantCapability } from "@/lib/assistant-capabilities"
-import { writeClipboard } from "@/lib/clipboard"
-import { useLanguage } from "@/lib/i18n"
-import type { PageId } from "@/lib/pages"
-import { useSmartInput } from "@/lib/smart-input"
+import { uiText } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
+import { useToolWorkspaceViewModel } from "@/models/ToolWorkspaceModel"
+import { ArrowRightLeft,Check,Clipboard,Eraser,Play,Sparkles,TriangleAlert } from "lucide-react"
 
-export type TextTool = {
-  id: string
-  label: string
-  description: string
-  group: string
-  icon: LucideIcon
-  sample: string
-  run: (input: string) => string | Promise<string>
-}
-
-type ToolWorkspaceProps = {
-  title: string
-  description: string
-  tools: TextTool[]
-  outputPlaceholder?: string
-  assistantPage: PageId
-  activeToolOptions?: Partial<Record<string, ReactNode>>
-}
-
-export function getErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : String(error)
-}
-
-export function ToolWorkspace({ title, description, tools, assistantPage, activeToolOptions, outputPlaceholder = "处理结果会显示在这里…" }: ToolWorkspaceProps) {
-  const { language, t } = useLanguage()
-  const [activeToolId, setActiveToolId] = useState(tools[0]?.id ?? "")
-  const activeTool = useMemo(() => tools.find((tool) => tool.id === activeToolId) ?? tools[0], [activeToolId, tools])
-  const [input, setInput] = useState(tools[0]?.sample ?? "")
-  const [output, setOutput] = useState("")
-  const [error, setError] = useState("")
-  const [processing, setProcessing] = useState(false)
-  const [copied, setCopied] = useState(false)
-  const groups = useMemo(() => Array.from(new Set(tools.map((tool) => tool.group))), [tools])
-
-  useSmartInput(assistantPage, useCallback((values) => {
-    const operation = String(values.operation ?? "")
-    const nextTool = tools.find((tool) => tool.id === operation) ?? tools[0]
-    if (!nextTool) return
-    setActiveToolId(nextTool.id)
-    setInput(String(values.input ?? ""))
-    setOutput("")
-    setError("")
-  }, [tools]))
-
-  const executeTool = async (tool: TextTool, value: string, fromAssistant = false) => {
-    setActiveToolId(tool.id)
-    setInput(value)
-    setProcessing(true)
-    setError("")
-    try {
-      const result = await tool.run(value)
-      setOutput(result)
-      toast.success(`${tool.label}完成`)
-      return { success: true, operation: tool.id, label: tool.label, result: result.slice(0, 16000), truncated: result.length > 16000, executed: true }
-    } catch (caughtError) {
-      const message = getErrorMessage(caughtError)
-      setOutput("")
-      setError(message)
-      toast.error(`${tool.label}失败`, { description: message })
-      if (fromAssistant) return { success: false, operation: tool.id, error: message, executed: true }
-      throw caughtError
-    } finally {
-      setProcessing(false)
-    }
-  }
-
-  useAssistantCapability({
-    page: assistantPage,
-    getContext: () => ({
-      operation: activeTool?.id ?? "",
-      operationLabel: activeTool?.label ?? "",
-      input: input.slice(0, 8000),
-      output: output.slice(0, 8000),
-      error,
-    }),
-    actions: {
-      fill: (values) => {
-        const operation = String(values.operation ?? "")
-        const nextTool = tools.find((tool) => tool.id === operation)
-        if (!nextTool) throw new Error(`不支持的格式化操作：${operation}`)
-        const nextInput = String(values.input ?? "")
-        setActiveToolId(nextTool.id)
-        setInput(nextInput)
-        setOutput("")
-        setError("")
-        toast.success(`小Q已填写：${nextTool.label}`)
-        return { success: true, operation: nextTool.id, label: nextTool.label, inputLength: nextInput.length, executed: false }
-      },
-      run: (values) => {
-        const operation = String(values.operation ?? "")
-        const nextTool = tools.find((tool) => tool.id === operation)
-        if (!nextTool) throw new Error(`不支持的格式化操作：${operation}`)
-        return executeTool(nextTool, String(values.input ?? ""), true)
-      },
-    },
-  })
-
-  if (!activeTool) return null
-
-  const selectTool = (tool: TextTool) => {
-    setActiveToolId(tool.id)
-    setInput(tool.sample)
-    setOutput("")
-    setError("")
-  }
-
-  const processInput = async () => {
-    try { await executeTool(activeTool, input) } catch { /* Error state and toast are handled by executeTool. */ }
-  }
-
-  const copyOutput = async () => {
-    try {
-      await writeClipboard(output)
-      setCopied(true)
-      toast.success("结果已复制")
-      window.setTimeout(() => setCopied(false), 1500)
-    } catch (caughtError) {
-      toast.error("复制失败", { description: getErrorMessage(caughtError) })
-    }
-  }
-
-  return (
-    <section className="page-shell">
+export function ToolWorkspace() {
+ const { title, description, tools, activeToolOptions, outputPlaceholder, language, t, activeTool, input, setInput, output, setOutput, error, setError, processing, copied, groups, selectTool, processInput, copyOutput } = useToolWorkspaceViewModel()
+return (
+    <section className="page-shell @container/workspace">
       <div className="mx-auto w-full max-w-7xl">
         <div className="mb-6">
           <div className="mb-2 flex items-center gap-2 text-sm text-muted-foreground">
             <Sparkles className="size-4" />
-            开发工具
-          </div>
+            {uiText("开发工具")}</div>
           <h1 className="text-3xl font-semibold tracking-tight">{t(title)}</h1>
           <p className="mt-2 text-sm text-muted-foreground">{t(description)}</p>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-[14rem_minmax(0,1fr)]">
-          <aside className="max-h-[calc(100dvh-11rem)] overflow-auto rounded-xl border bg-card p-2 text-card-foreground shadow-sm">
+        <div className="grid gap-4 @3xl/workspace:grid-cols-[12rem_minmax(0,1fr)]">
+          <aside className="hidden @3xl/workspace:block max-h-[calc(100dvh-11rem)] overflow-auto rounded-xl border bg-card p-2 text-card-foreground shadow-sm">
             {groups.map((group) => (
               <div key={group} className="mb-2 last:mb-0">
                 <div className="px-2 py-2 text-xs font-medium text-muted-foreground">{t(group)}</div>
@@ -173,11 +48,13 @@ export function ToolWorkspace({ title, description, tools, assistantPage, active
 
           <div className="min-w-0 rounded-xl border bg-card text-card-foreground shadow-sm">
             <div className="flex flex-wrap items-center gap-3 border-b p-4">
+<select className="w-full rounded border bg-background p-2 @3xl/workspace:hidden" aria-label={uiText("选择工具")} value={activeTool.id} onChange={event => { const tool = tools.find(t => t.id === event.target.value); if (tool) selectTool(tool) }}>{tools.map(tool => <option key={tool.id} value={tool.id}>{t(tool.label)}</option>)}</select>
               <div className="min-w-0 flex-1">
                 <h2 className="font-medium">{t(activeTool.label)}</h2>
                 <p className="mt-0.5 text-xs text-muted-foreground">{t(activeTool.description)}</p>
               </div>
               <div className="flex flex-wrap gap-2">
+                <Button variant="outline" size="sm" onClick={() => { setInput(activeTool.sample); setOutput(""); setError("") }}>{t("载入示例")}</Button>
                 <Button variant="outline" size="sm" onClick={() => { setInput(""); setOutput(""); setError("") }}>
                   <Eraser /> {t("清空")}
                 </Button>
@@ -202,19 +79,20 @@ export function ToolWorkspace({ title, description, tools, assistantPage, active
               </div>
             )}
 
-            <div className="grid md:grid-cols-2">
-              <label className="min-w-0 border-b md:border-r md:border-b-0">
+            <div className="grid @4xl/workspace:grid-cols-2">
+              <div className="min-w-0 border-b @4xl/workspace:border-r @4xl/workspace:border-b-0">
                 <div className="flex h-10 items-center justify-between border-b px-4 text-xs text-muted-foreground">
-                  <span>{t("输入")}</span><span>{input.length} {language === "en-US" ? "characters" : "字符"}</span>
+                  <span>{t("输入")}</span><span>{input.length} {language === "en-US" ? "characters" : uiText("字符")}</span>
                 </div>
-                <textarea
+                <CodeEditor
+                  aria-label={t("输入")}
                   className="app-interactive h-[28rem] w-full resize-none overflow-auto bg-transparent p-4 font-mono text-sm leading-6 outline-none placeholder:text-muted-foreground"
-                  value={input}
+                  error={error} value={input}
                   onChange={(event) => setInput(event.target.value)}
                   placeholder={t("在这里输入内容…")}
                   spellCheck={false}
                 />
-              </label>
+              </div>
               <div className="min-w-0">
                 <div className="flex h-10 items-center justify-between border-b px-4 text-xs text-muted-foreground">
                   <span>{t("输出")}</span>
@@ -222,7 +100,7 @@ export function ToolWorkspace({ title, description, tools, assistantPage, active
                     {copied ? <Check /> : <Clipboard />}{t(copied ? "已复制" : "复制")}
                   </Button>
                 </div>
-                <textarea
+                <CodeEditor
                   className="app-interactive h-[28rem] w-full resize-none overflow-auto bg-muted/20 p-4 font-mono text-sm leading-6 outline-none"
                   value={output}
                   readOnly

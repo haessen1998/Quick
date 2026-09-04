@@ -1,96 +1,102 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react"
-import { DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core"
-import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable"
+import { appStorage } from "@/lib/app-storage"
+import { CommandPalette } from "@/components/CommandPalette"
+import { PageErrorBoundary } from "@/components/PageErrorBoundary"
+import { ToolRunHistory } from "@/components/ToolRunHistory"
+import { WorkspaceTabs } from "@/components/WorkspaceTabs"
+import { uiText } from "@/lib/i18n"
+import { PERMISSION_LABELS,type ToolPermissions } from "@/lib/tool-policy"
+import { ToolModels } from "@/models/ToolModels"
+import { DndContext,KeyboardSensor,PointerSensor,closestCenter,useSensor,useSensors,type DragEndEvent } from "@dnd-kit/core"
+import { SortableContext,arrayMove,sortableKeyboardCoordinates,useSortable,verticalListSortingStrategy } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
+import { Clipboard,WML } from "@wailsio/runtime"
 import {
-  ArrowRight,
-  ArrowLeftRight,
-  Bot,
-  Blocks,
-  Clock3,
-  Compass,
-  Download,
-  FileCheck2,
-  FileSpreadsheet,
-  Files,
-  FolderOpen,
-  Gauge,
-  GitBranch,
-  GripVertical,
-  Home,
-  KeyRound,
-  Languages,
-  Moon,
-  CaseSensitive,
-  Network,
-  Pencil,
-  Palette,
-  Plus,
-  PanelRightClose,
-  PanelRightOpen,
-  ShieldCheck,
-  Settings,
-  Sparkles,
-  Sun,
-  Trash2,
-  Upload,
-  Eye,
-  EyeOff,
-  type LucideIcon,
+ArrowLeftRight,
+ArrowRight,
+Blocks,
+Bot,
+CaseSensitive,
+Clock3,
+Compass,
+Download,
+Eye,
+EyeOff,
+FileCheck2,
+FileSpreadsheet,
+Files,
+FolderOpen,
+Gauge,
+GitBranch,
+GripVertical,
+Home,
+KeyRound,
+Languages,
+Moon,
+Network,
+Palette,
+PanelRightClose,
+PanelRightOpen,
+Pencil,
+Plus,
+Settings,
+ShieldCheck,
+Sparkles,
+Sun,
+Trash2,
+Upload,
+type LucideIcon,
 } from "lucide-react"
-import { Clipboard, WML } from "@wailsio/runtime"
+import { Suspense,lazy,useCallback,useEffect,useMemo,useState,type CSSProperties,type ReactNode } from "react"
 import { toast } from "sonner"
 
 import { FileDialogService } from "@/../bindings/github.com/haessen1998/Quick/internal/files"
-import { Button } from "@/components/ui/button"
-import { Switch } from "@/components/ui/switch"
-import { GlobalAssistant } from "@/components/GlobalAssistant"
-import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { GlitchText } from "@/components/GlitchText"
-import { Toaster } from "@/components/ui/sonner"
+import { GlobalAssistant } from "@/components/GlobalAssistant"
+import { Button } from "@/components/ui/button"
+import { Dialog,DialogClose,DialogContent,DialogDescription,DialogFooter,DialogHeader,DialogTitle } from "@/components/ui/dialog"
 import {
-  Sidebar,
-  SidebarContent,
-  SidebarFooter,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
-  SidebarHeader,
-  SidebarInset,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  SidebarProvider,
-  SidebarTrigger,
-  useSidebar,
+Sidebar,
+SidebarContent,
+SidebarFooter,
+SidebarGroup,
+SidebarGroupContent,
+SidebarGroupLabel,
+SidebarHeader,
+SidebarInset,
+SidebarMenu,
+SidebarMenuButton,
+SidebarMenuItem,
+SidebarProvider,
+SidebarTrigger,
+useSidebar,
 } from "@/components/ui/sidebar"
-import { cn } from "@/lib/utils"
+import { Toaster } from "@/components/ui/sonner"
+import { Switch } from "@/components/ui/switch"
+import { AI_PROVIDER_OPTIONS,getAIProviderOption,isAIProfileReady } from "@/lib/ai-provider"
 import { AssistantCapabilityProvider } from "@/lib/assistant-capabilities"
-import { getInitialAssistantSettings, saveAssistantSettings, type AssistantSettings } from "@/lib/assistant-settings"
+import { getInitialAssistantSettings,saveAssistantSettings,type AssistantSettings } from "@/lib/assistant-settings"
 import { useLanguage } from "@/lib/i18n"
-import { AI_PROVIDER_OPTIONS, getAIProviderOption, isAIProfileReady } from "@/lib/ai-provider"
+import { NAVIGATION_GROUPS_CHANGED_EVENT,loadNavigationGroups,mergeNavigationGroups,navigationCSVTemplate,navigationGroupsToCSV,parseNavigationCSV,persistNavigationGroups,saveNavigationGroups } from "@/lib/navigation-sites"
 import type { PageId } from "@/lib/pages"
-import { getInitialTheme, type AppTheme } from "@/lib/theme"
-import { getInitialProxySettings, saveProxySettings, type ProxySettings } from "@/lib/proxy"
-import { sendSmartInput } from "@/lib/smart-input"
-import quickAppIcon from "../../build/appicon.icon/Assets/quick_icon_vector.svg"
-import { NAVIGATION_GROUPS_CHANGED_EVENT, loadNavigationGroups, mergeNavigationGroups, navigationCSVTemplate, navigationGroupsToCSV, parseNavigationCSV, persistNavigationGroups, saveNavigationGroups } from "@/lib/navigation-sites"
-import { hydrateSidebarOrder, loadSidebarOrder, normalizeSidebarOrder, persistSidebarOrder, saveSidebarOrder } from "@/lib/sidebar-order"
+import { getInitialProxySettings,saveProxySettings,type ProxySettings } from "@/lib/proxy"
 import {
-  clearLegacySensitiveConnectionCache,
-  createAIProfile,
-  createMCPServerProfile,
-  getInitialAIProfiles,
-  getInitialMCPServers,
-  hydrateAIProfiles,
-  hydrateMCPServers,
-  persistAIProfiles,
-  persistMCPServers,
-  saveAIProfiles,
-  saveMCPServers,
-  type AIProfile,
-  type MCPServerProfile,
+clearLegacySensitiveConnectionCache,
+createAIProfile,
+createMCPServerProfile,
+getInitialAIProfiles,
+getInitialMCPServers,
+hydrateAIProfiles,
+hydrateMCPServers,
+persistAIProfiles,
+persistMCPServers,
+type AIProfile,
+type MCPServerProfile
 } from "@/lib/saved-connections"
+import { hydrateSidebarOrder,loadSidebarOrder,normalizeSidebarOrder,persistSidebarOrder,saveSidebarOrder } from "@/lib/sidebar-order"
+import { sendSmartInput } from "@/lib/smart-input"
+import { getInitialTheme,type AppTheme } from "@/lib/theme"
+import { cn } from "@/lib/utils"
+import quickAppIcon from "../../build/appicon.icon/Assets/quick_icon_vector.svg"
 
 const CryptoPage = lazy(() => import("@/pages/CryptoPage"))
 const AIChatPage = lazy(() => import("@/pages/AIChatPage"))
@@ -113,7 +119,7 @@ type PageDefinition = {
 }
 
 function PageSlot({ active, children }: { active: boolean; children: ReactNode }) {
-  return <div hidden={!active}>{children}</div>
+  return active ? <div>{children}</div> : null
 }
 
 const pages: PageDefinition[] = [
@@ -186,14 +192,14 @@ function AppSidebar({ pages, activePage, order, onNavigate, onOrderChange }: { p
           </div>
           <div className={cn("min-w-0 leading-tight", !open && "md:hidden")}>
             <div className="truncate text-sm font-semibold">Quick</div>
-            <div className="truncate text-xs text-sidebar-foreground/55">开发工具箱</div>
+            <div className="truncate text-xs text-sidebar-foreground/55">{uiText("开发工具箱")}</div>
           </div>
         </div>
       </SidebarHeader>
 
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>应用导航</SidebarGroupLabel>
+          <SidebarGroupLabel>{uiText("应用导航")}</SidebarGroupLabel>
           <SidebarGroupContent>
             <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={dragEnd}>
               <SidebarMenu>
@@ -215,10 +221,10 @@ function AppSidebar({ pages, activePage, order, onNavigate, onOrderChange }: { p
             !open && "md:justify-center md:px-0",
           )}
           data-wml-openurl="https://github.com/haessen1998/Quick"
-          aria-label="Quick GitHub 仓库"
+          aria-label={uiText("Quick GitHub 仓库")}
         >
           <GitBranch className="size-4 shrink-0" />
-          <span className={cn("truncate", !open && "md:hidden")}>GitHub 仓库</span>
+          <span className={cn("truncate", !open && "md:hidden")}>{uiText("GitHub 仓库")}</span>
         </a>
         <div className={cn("flex items-center gap-3 overflow-hidden px-2 py-1", !open && "md:justify-center md:px-0")}>
           <img src="/icon.png" alt="Quick" className="size-7 shrink-0 rounded-full border border-sidebar-border object-cover" />
@@ -254,17 +260,27 @@ function detectSmartInput(input: string): SmartInputAction[] {
   return actions.slice(0, 4)
 }
 
-function HomePage({ time, onNavigate }: { time: string; onNavigate: (page: PageId) => void }) {
+function HomePage({ onNavigate }: { onNavigate: (page: PageId) => void }) {
+ const { language } = useLanguage()
+ const [time, setTime] = useState("")
+  useEffect(() => {
+    const update = () => setTime(new Intl.DateTimeFormat(language, window.matchMedia("(max-width: 640px)").matches
+      ? { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }
+      : { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }).format(new Date()))
+    update()
+    const timer = window.setInterval(update, 1000)
+    return () => window.clearInterval(timer)
+  }, [language])
   return (
     <section className="home-page">
       <main className="home-container quick-hero">
         <div className="quick-hero-kicker"><Sparkles aria-hidden="true" />LOCAL-FIRST DEVELOPER TOOLKIT</div>
         <h1 className="quick-hero-heading"><GlitchText speed={0.8} enableShadows forceMotion className="quick-hero-title">QUICK</GlitchText></h1>
-        <p className="quick-hero-subtitle">一个持续生长的跨平台开发者工具箱。把格式化、转换、校验、网络与加密操作集中在一个轻量桌面应用中。</p>
-        <div className="quick-hero-tags" aria-label="主要功能"><span>FORMAT</span><span>CONVERT</span><span>VALIDATE</span><span>NETWORK</span><span>CRYPTO</span></div>
+        <p className="quick-hero-subtitle">{uiText("一个持续生长的跨平台开发者工具箱。把格式化、转换、校验、网络与加密操作集中在一个轻量桌面应用中。")}</p>
+        <div className="quick-hero-tags" aria-label={uiText("主要功能")}><span>FORMAT</span><span>CONVERT</span><span>VALIDATE</span><span>NETWORK</span><span>CRYPTO</span></div>
         <div className="quick-hero-actions">
-          <Button className="app-interactive" onClick={() => onNavigate("formatter")}>开始使用<ArrowRight aria-hidden="true" /></Button>
-          <Button className="app-interactive" variant="outline" asChild><a data-wml-openurl="https://github.com/haessen1998/Quick">查看 GitHub</a></Button>
+          <Button className="app-interactive" onClick={() => onNavigate("formatter")}>{uiText("开始使用")}<ArrowRight aria-hidden="true" /></Button>
+          <Button className="app-interactive" variant="outline" asChild><a data-wml-openurl="https://github.com/haessen1998/Quick">{uiText("查看 GitHub")}</a></Button>
         </div>
       </main>
 
@@ -275,9 +291,8 @@ function HomePage({ time, onNavigate }: { time: string; onNavigate: (page: PageI
           <Gauge aria-hidden="true" />
           <span>{time}</span>
         </span>
-        <a className="footer-docs" data-wml-openurl="https://github.com/haessen1998/Quick" aria-label="Quick GitHub 仓库">
-          源码
-          <ArrowRight aria-hidden="true" />
+        <a className="footer-docs" data-wml-openurl="https://github.com/haessen1998/Quick" aria-label={uiText("Quick GitHub 仓库")}>
+          {uiText("源码")}<ArrowRight aria-hidden="true" />
         </a>
       </footer>
 
@@ -292,8 +307,7 @@ function PageShell({ page, children }: { page: PageDefinition; children: React.R
         <div className="mb-8">
           <div className="mb-2 flex items-center gap-2 text-sm text-muted-foreground">
             <Sparkles className="size-4" />
-            开发工具
-          </div>
+            {uiText("开发工具")}</div>
           <h1 className="text-3xl font-semibold tracking-tight">{page.label}</h1>
           <p className="mt-2 text-sm text-muted-foreground">{page.description}</p>
         </div>
@@ -318,20 +332,20 @@ function AIProfileEditor({ profile, isNew, onChange, onSave, onClose }: { profil
   return (
     <Dialog open onOpenChange={(open) => { if (!open) onClose() }}>
       <DialogContent>
-        <DialogHeader><DialogTitle>{isNew ? "新增 AI 配置" : "修改 AI 配置"}</DialogTitle><DialogDescription>保存后可在 AI 对话页直接选择。</DialogDescription></DialogHeader>
+        <DialogHeader><DialogTitle>{isNew ? uiText("新增 AI 配置") : uiText("修改 AI 配置")}</DialogTitle><DialogDescription>{uiText("保存后可在 AI 对话页直接选择。")}</DialogDescription></DialogHeader>
         <div className="grid gap-4 p-5 sm:grid-cols-2">
-          <label className="space-y-1.5 text-xs font-medium"><span>名称</span><input autoFocus className={SETTINGS_INPUT_CLASS} value={profile.name} onChange={(event) => patch({ name: event.target.value })} /></label>
+          <label className="space-y-1.5 text-xs font-medium"><span>{uiText("名称")}</span><input autoFocus className={SETTINGS_INPUT_CLASS} value={profile.name} onChange={(event) => patch({ name: event.target.value })} /></label>
           <label className="space-y-1.5 text-xs font-medium"><span>Provider</span><select className={SETTINGS_INPUT_CLASS} value={profile.provider} onChange={(event) => changeProvider(event.target.value as AIProfile["provider"])}>{AI_PROVIDER_OPTIONS.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
           <label className="space-y-1.5 text-xs font-medium"><span>{provider.modelLabel}</span><input className={SETTINGS_INPUT_CLASS} value={profile.model} onChange={(event) => patch({ model: event.target.value })} placeholder={provider.modelPlaceholder} /></label>
-          <label className="space-y-1.5 text-xs font-medium"><span>{provider.endpointLabel}{provider.endpointRequired && <span className="font-normal text-muted-foreground">（必填）</span>}</span><input className={SETTINGS_INPUT_CLASS} value={profile.baseURL} onChange={(event) => patch({ baseURL: event.target.value })} placeholder={provider.endpointPlaceholder} spellCheck={false} /></label>
-          {profile.provider === "azure" && <label className="space-y-1.5 text-xs font-medium"><span>Resource Name <span className="font-normal text-muted-foreground">（与 Base URL 二选一）</span></span><input className={SETTINGS_INPUT_CLASS} value={profile.resourceName} onChange={(event) => patch({ resourceName: event.target.value })} placeholder="your-resource-name" spellCheck={false} /></label>}
-          {profile.provider === "azure" && <label className="space-y-1.5 text-xs font-medium"><span>API Version <span className="font-normal text-muted-foreground">（可选）</span></span><input className={SETTINGS_INPUT_CLASS} value={profile.apiVersion} onChange={(event) => patch({ apiVersion: event.target.value })} placeholder={profile.useDeploymentBasedUrls ? "例如 2025-04-01-preview" : "默认 v1"} spellCheck={false} /></label>}
-          {profile.provider === "azure" && <div className="flex items-center gap-3 rounded-lg border bg-muted/20 px-3 py-2"><div className="min-w-0 flex-1"><div className="text-xs font-medium">部署路径兼容模式</div><p className="mt-0.5 text-[10px] leading-4 text-muted-foreground">使用旧版 /deployments/ 路径，需要匹配的 API Version。</p></div><Switch checked={Boolean(profile.useDeploymentBasedUrls)} onCheckedChange={(checked) => patch({ useDeploymentBasedUrls: checked })} aria-label="部署路径兼容模式" /></div>}
-          <label className="space-y-1.5 text-xs font-medium sm:col-span-2"><span>API Key{provider.apiKeyOptional && <span className="font-normal text-muted-foreground">（可选）</span>}</span><span className="relative block"><input type={showKey ? "text" : "password"} className={`${SETTINGS_INPUT_CLASS} pr-10`} value={profile.apiKey} onChange={(event) => patch({ apiKey: event.target.value })} autoComplete="off" /><button type="button" className="absolute right-0 top-0 flex size-9 items-center justify-center text-muted-foreground" onClick={() => setShowKey((value) => !value)} aria-label={showKey ? "隐藏 API Key" : "显示 API Key"}>{showKey ? <EyeOff className="size-4" /> : <Eye className="size-4" />}</button></span></label>
+          <label className="space-y-1.5 text-xs font-medium"><span>{provider.endpointLabel}{provider.endpointRequired && <span className="font-normal text-muted-foreground">{uiText("（必填）")}</span>}</span><input className={SETTINGS_INPUT_CLASS} value={profile.baseURL} onChange={(event) => patch({ baseURL: event.target.value })} placeholder={provider.endpointPlaceholder} spellCheck={false} /></label>
+          {profile.provider === "azure" && <label className="space-y-1.5 text-xs font-medium"><span>Resource Name <span className="font-normal text-muted-foreground">{uiText("（与 Base URL 二选一）")}</span></span><input className={SETTINGS_INPUT_CLASS} value={profile.resourceName} onChange={(event) => patch({ resourceName: event.target.value })} placeholder="your-resource-name" spellCheck={false} /></label>}
+          {profile.provider === "azure" && <label className="space-y-1.5 text-xs font-medium"><span>API Version <span className="font-normal text-muted-foreground">{uiText("（可选）")}</span></span><input className={SETTINGS_INPUT_CLASS} value={profile.apiVersion} onChange={(event) => patch({ apiVersion: event.target.value })} placeholder={profile.useDeploymentBasedUrls ? uiText("例如 2025-04-01-preview") : uiText("默认 v1")} spellCheck={false} /></label>}
+          {profile.provider === "azure" && <div className="flex items-center gap-3 rounded-lg border bg-muted/20 px-3 py-2"><div className="min-w-0 flex-1"><div className="text-xs font-medium">{uiText("部署路径兼容模式")}</div><p className="mt-0.5 text-[10px] leading-4 text-muted-foreground">{uiText("使用旧版 /deployments/ 路径，需要匹配的 API Version。")}</p></div><Switch checked={Boolean(profile.useDeploymentBasedUrls)} onCheckedChange={(checked) => patch({ useDeploymentBasedUrls: checked })} aria-label={uiText("部署路径兼容模式")} /></div>}
+          <label className="space-y-1.5 text-xs font-medium sm:col-span-2"><span>API Key{provider.apiKeyOptional && <span className="font-normal text-muted-foreground">{uiText("（可选）")}</span>}</span><span className="relative block"><input type={showKey ? "text" : "password"} className={`${SETTINGS_INPUT_CLASS} pr-10`} value={profile.apiKey} onChange={(event) => patch({ apiKey: event.target.value })} autoComplete="off" /><button type="button" className="absolute right-0 top-0 flex size-9 items-center justify-center text-muted-foreground" onClick={() => setShowKey((value) => !value)} aria-label={showKey ? uiText("隐藏 API Key") : uiText("显示 API Key")}>{showKey ? <EyeOff className="size-4" /> : <Eye className="size-4" />}</button></span></label>
           <p className="rounded-lg bg-muted/35 p-3 text-[11px] leading-5 text-muted-foreground sm:col-span-2">{provider.description} · {provider.protocol}</p>
-          <label className="space-y-1.5 text-xs font-medium sm:col-span-2"><span>系统提示词</span><textarea className={SETTINGS_TEXTAREA_CLASS} value={profile.systemPrompt} onChange={(event) => patch({ systemPrompt: event.target.value })} /></label>
+          <label className="space-y-1.5 text-xs font-medium sm:col-span-2"><span>{uiText("系统提示词")}</span><textarea className={SETTINGS_TEXTAREA_CLASS} value={profile.systemPrompt} onChange={(event) => patch({ systemPrompt: event.target.value })} /></label>
         </div>
-        <DialogFooter><DialogClose asChild><Button type="button" variant="outline">取消</Button></DialogClose><Button type="button" disabled={!profile.name.trim() || !profile.model.trim()} onClick={onSave}>保存配置</Button></DialogFooter>
+        <DialogFooter><DialogClose asChild><Button type="button" variant="outline">{uiText("取消")}</Button></DialogClose><Button type="button" disabled={!profile.name.trim() || !profile.model.trim()} onClick={onSave}>{uiText("保存配置")}</Button></DialogFooter>
       </DialogContent>
     </Dialog>
   )
@@ -343,26 +357,26 @@ function MCPProfileEditor({ profile, isNew, onChange, onSave, onClose }: { profi
   return (
     <Dialog open onOpenChange={(open) => { if (!open) onClose() }}>
       <DialogContent>
-        <DialogHeader><DialogTitle>{isNew ? "新增 MCP Server" : "修改 MCP Server"}</DialogTitle><DialogDescription>配置远程 Transport 或本地 STDIO 启动参数。</DialogDescription></DialogHeader>
+        <DialogHeader><DialogTitle>{isNew ? uiText("新增 MCP Server") : uiText("修改 MCP Server")}</DialogTitle><DialogDescription>{uiText("配置远程 Transport 或本地 STDIO 启动参数。")}</DialogDescription></DialogHeader>
         <div className="grid gap-4 p-5 sm:grid-cols-2">
-          <label className="space-y-1.5 text-xs font-medium"><span>名称</span><input autoFocus className={SETTINGS_INPUT_CLASS} value={profile.name} onChange={(event) => patch({ name: event.target.value })} /></label>
-          <label className="space-y-1.5 text-xs font-medium"><span>Transport</span><select className={SETTINGS_INPUT_CLASS} value={profile.transport} onChange={(event) => patch({ transport: event.target.value as MCPServerProfile["transport"] })}><option value="streamable-http">Streamable HTTP</option><option value="sse">SSE（旧版兼容）</option><option value="stdio">STDIO</option></select></label>
+          <label className="space-y-1.5 text-xs font-medium"><span>{uiText("名称")}</span><input autoFocus className={SETTINGS_INPUT_CLASS} value={profile.name} onChange={(event) => patch({ name: event.target.value })} /></label>
+          <label className="space-y-1.5 text-xs font-medium"><span>Transport</span><select className={SETTINGS_INPUT_CLASS} value={profile.transport} onChange={(event) => patch({ transport: event.target.value as MCPServerProfile["transport"] })}><option value="streamable-http">Streamable HTTP</option><option value="sse">{uiText("SSE（旧版兼容）")}</option><option value="stdio">STDIO</option></select></label>
           <div className="flex items-center gap-3 rounded-lg border bg-muted/20 px-3 py-2 sm:col-span-2">
-            <div className="min-w-0 flex-1"><div className="text-xs font-medium">启用此配置</div><p className="mt-0.5 text-[11px] text-muted-foreground">启用后可在 MCP 测试页选择，并注册到小Q。</p></div>
-            <Switch checked={profile.enabled} onCheckedChange={(checked) => patch({ enabled: checked })} aria-label="启用 MCP 配置" />
+            <div className="min-w-0 flex-1"><div className="text-xs font-medium">{uiText("启用此配置")}</div><p className="mt-0.5 text-[11px] text-muted-foreground">{uiText("启用后可在 MCP 测试页选择，并注册到小Q。")}</p></div>
+            <Switch checked={profile.enabled} onCheckedChange={(checked) => patch({ enabled: checked })} aria-label={uiText("启用 MCP 配置")} />
           </div>
           {profile.transport === "stdio" ? <>
-            <label className="space-y-1.5 text-xs font-medium"><span>命令</span><input className={`${SETTINGS_INPUT_CLASS} font-mono`} value={profile.command} onChange={(event) => patch({ command: event.target.value })} placeholder="npx、uvx 或可执行文件路径" /></label>
-            <label className="space-y-1.5 text-xs font-medium"><span>参数（JSON 数组）</span><input className={`${SETTINGS_INPUT_CLASS} font-mono`} value={profile.argsJSON} onChange={(event) => patch({ argsJSON: event.target.value })} placeholder={'["server.js"]'} /></label>
-            <label className="space-y-1.5 text-xs font-medium sm:col-span-2"><span>工作目录（可选）</span><input className={`${SETTINGS_INPUT_CLASS} font-mono`} value={profile.cwd} onChange={(event) => patch({ cwd: event.target.value })} /></label>
-            <label className="space-y-1.5 text-xs font-medium sm:col-span-2"><span>环境变量（每行 KEY=value）</span><textarea className={`${SETTINGS_TEXTAREA_CLASS} font-mono text-xs`} value={profile.env} onChange={(event) => patch({ env: event.target.value })} /></label>
+            <label className="space-y-1.5 text-xs font-medium"><span>{uiText("命令")}</span><input className={`${SETTINGS_INPUT_CLASS} font-mono`} value={profile.command} onChange={(event) => patch({ command: event.target.value })} placeholder={uiText("npx、uvx 或可执行文件路径")} /></label>
+            <label className="space-y-1.5 text-xs font-medium"><span>{uiText("参数（JSON 数组）")}</span><input className={`${SETTINGS_INPUT_CLASS} font-mono`} value={profile.argsJSON} onChange={(event) => patch({ argsJSON: event.target.value })} placeholder={'["server.js"]'} /></label>
+            <label className="space-y-1.5 text-xs font-medium sm:col-span-2"><span>{uiText("工作目录（可选）")}</span><input className={`${SETTINGS_INPUT_CLASS} font-mono`} value={profile.cwd} onChange={(event) => patch({ cwd: event.target.value })} /></label>
+            <label className="space-y-1.5 text-xs font-medium sm:col-span-2"><span>{uiText("环境变量（每行 KEY=value）")}</span><textarea className={`${SETTINGS_TEXTAREA_CLASS} font-mono text-xs`} value={profile.env} onChange={(event) => patch({ env: event.target.value })} /></label>
           </> : <>
             <label className="space-y-1.5 text-xs font-medium"><span>Server URL</span><input className={`${SETTINGS_INPUT_CLASS} font-mono`} value={profile.url} onChange={(event) => patch({ url: event.target.value })} /></label>
-            <label className="space-y-1.5 text-xs font-medium"><span>连接方式</span><select className={SETTINGS_INPUT_CLASS} value={profile.connectionMode} onChange={(event) => patch({ connectionMode: event.target.value as MCPServerProfile["connectionMode"] })}><option value="quick-proxy">Quick 本地代理</option><option value="direct">直接连接</option></select></label>
-            <label className="space-y-1.5 text-xs font-medium sm:col-span-2"><span>请求头</span><textarea className={`${SETTINGS_TEXTAREA_CLASS} font-mono text-xs`} value={profile.headers} onChange={(event) => patch({ headers: event.target.value })} placeholder="Authorization: Bearer …" /></label>
+            <label className="space-y-1.5 text-xs font-medium"><span>{uiText("连接方式")}</span><select className={SETTINGS_INPUT_CLASS} value={profile.connectionMode} onChange={(event) => patch({ connectionMode: event.target.value as MCPServerProfile["connectionMode"] })}><option value="quick-proxy">{uiText("Quick 本地代理")}</option><option value="direct">{uiText("直接连接")}</option></select></label>
+            <label className="space-y-1.5 text-xs font-medium sm:col-span-2"><span>{uiText("请求头")}</span><textarea className={`${SETTINGS_TEXTAREA_CLASS} font-mono text-xs`} value={profile.headers} onChange={(event) => patch({ headers: event.target.value })} placeholder="Authorization: Bearer …" /></label>
           </>}
         </div>
-        <DialogFooter><DialogClose asChild><Button type="button" variant="outline">取消</Button></DialogClose><Button type="button" disabled={invalid} onClick={onSave}>保存配置</Button></DialogFooter>
+        <DialogFooter><DialogClose asChild><Button type="button" variant="outline">{uiText("取消")}</Button></DialogClose><Button type="button" disabled={invalid} onClick={onSave}>{uiText("保存配置")}</Button></DialogFooter>
       </DialogContent>
     </Dialog>
   )
@@ -372,8 +386,8 @@ function DeleteConfigDialog({ kind, name, onConfirm, onClose }: { kind: "AI" | "
   return (
     <Dialog open onOpenChange={(open) => { if (!open) onClose() }}>
       <DialogContent className="max-w-md">
-        <DialogHeader><DialogTitle>删除{kind}配置</DialogTitle><DialogDescription>确定删除“{name}”吗？删除后将立即从本地长期配置中移除。</DialogDescription></DialogHeader>
-        <DialogFooter><DialogClose asChild><Button type="button" variant="outline">取消</Button></DialogClose><Button type="button" variant="destructive" onClick={onConfirm}><Trash2 />确认删除</Button></DialogFooter>
+        <DialogHeader><DialogTitle>{uiText("删除")}{kind}{uiText("配置")}</DialogTitle><DialogDescription>{uiText("确定删除“")}{name}{uiText("”吗？删除后将立即从本地长期配置中移除。")}</DialogDescription></DialogHeader>
+        <DialogFooter><DialogClose asChild><Button type="button" variant="outline">{uiText("取消")}</Button></DialogClose><Button type="button" variant="destructive" onClick={onConfirm}><Trash2 />{uiText("确认删除")}</Button></DialogFooter>
       </DialogContent>
     </Dialog>
   )
@@ -455,17 +469,17 @@ function SettingsPage({
       <div className="max-w-5xl space-y-4">
       <article className="rounded-xl border bg-card text-card-foreground shadow-sm">
         <div className="border-b p-6">
-          <h2 className="font-medium">数据保存方式</h2>
-          <p className="mt-1 text-sm text-muted-foreground">Quick 将长期偏好与临时工作状态分开处理。</p>
+          <h2 className="font-medium">{uiText("数据保存方式")}</h2>
+          <p className="mt-1 text-sm text-muted-foreground">{uiText("Quick 将长期偏好与临时工作状态分开处理。")}</p>
         </div>
         <div className="grid gap-3 p-6 sm:grid-cols-2">
           <div className="rounded-xl border bg-background p-4">
-            <div className="flex items-center gap-2 text-sm font-medium"><Gauge className="size-4" />临时工作状态</div>
-            <p className="mt-2 text-xs leading-5 text-muted-foreground">页面输入、输出、AI 对话、MCP 连接和调用历史仅保留在本次运行的内存中。切换页面不会清空，关闭应用后释放。</p>
+            <div className="flex items-center gap-2 text-sm font-medium"><Gauge className="size-4" />{uiText("临时工作状态")}</div>
+            <p className="mt-2 text-xs leading-5 text-muted-foreground">{uiText("页面输入、输出、AI 对话、MCP 连接和调用历史仅保留在本次运行的内存中。切换页面不会清空，关闭应用后释放。")}</p>
           </div>
           <div className="rounded-xl border bg-background p-4">
-            <div className="flex items-center gap-2 text-sm font-medium"><Settings className="size-4" />长期配置</div>
-            <p className="mt-2 text-xs leading-5 text-muted-foreground">AI/MCP 列表等长期配置会写入当前用户的 Quick 配置文件；主题、面板尺寸等界面偏好保存在 WebView 本地缓存中。</p>
+            <div className="flex items-center gap-2 text-sm font-medium"><Settings className="size-4" />{uiText("长期配置")}</div>
+            <p className="mt-2 text-xs leading-5 text-muted-foreground">{uiText("AI/MCP 列表等长期配置会写入当前用户的 Quick 配置文件；主题、面板尺寸等界面偏好保存在 WebView 本地缓存中。")}</p>
           </div>
         </div>
       </article>
@@ -473,40 +487,30 @@ function SettingsPage({
       <article className="rounded-xl border bg-card text-card-foreground shadow-sm">
         <div className="flex flex-wrap items-center gap-3 border-b p-6">
           <div className="min-w-0 flex-1">
-            <h2 className="font-medium">站点导航数据</h2>
-            <p className="mt-1 text-sm text-muted-foreground">通过 CSV 批量维护导航分组与站点，适合迁移或集中录入。</p>
+            <h2 className="font-medium">{uiText("站点导航数据")}</h2>
+            <p className="mt-1 text-sm text-muted-foreground">{uiText("通过 CSV 批量维护导航分组与站点，适合迁移或集中录入。")}</p>
           </div>
           <FileSpreadsheet className="size-5 text-muted-foreground" />
         </div>
         <div className="p-6">
           <div className="grid gap-3 sm:grid-cols-3">
-            <button type="button" className="app-interactive rounded-xl border bg-background p-4 text-left transition-colors hover:bg-muted/35" onClick={() => void exportNavigationCSV("quick-navigation-template.csv", navigationCSVTemplate())}><FileSpreadsheet className="size-5 text-muted-foreground" /><span className="mt-3 block text-sm font-medium">下载导入模板</span><span className="mt-1 block text-xs leading-5 text-muted-foreground">包含 group、list、title、url、icon、description、size 列。</span></button>
-            <button type="button" className="app-interactive rounded-xl border bg-background p-4 text-left transition-colors hover:bg-muted/35" onClick={() => void exportNavigationCSV("quick-navigation.csv", navigationGroupsToCSV(loadNavigationGroups()))}><Download className="size-5 text-muted-foreground" /><span className="mt-3 block text-sm font-medium">导出 CSV</span><span className="mt-1 block text-xs leading-5 text-muted-foreground">导出全部站点，保留 Tab、list 小组、图标和尺寸。</span></button>
-            <button type="button" className="app-interactive rounded-xl border bg-background p-4 text-left transition-colors hover:bg-muted/35" onClick={() => void importNavigationCSV()}><Upload className="size-5 text-muted-foreground" /><span className="mt-3 block text-sm font-medium">导入 CSV</span><span className="mt-1 block text-xs leading-5 text-muted-foreground">合并同名分组，以网址匹配并更新已有站点。</span></button>
+            <button type="button" className="app-interactive rounded-xl border bg-background p-4 text-left transition-colors hover:bg-muted/35" onClick={() => void exportNavigationCSV("quick-navigation-template.csv", navigationCSVTemplate())}><FileSpreadsheet className="size-5 text-muted-foreground" /><span className="mt-3 block text-sm font-medium">{uiText("下载导入模板")}</span><span className="mt-1 block text-xs leading-5 text-muted-foreground">{uiText("包含 group、list、title、url、icon、description、size 列。")}</span></button>
+            <button type="button" className="app-interactive rounded-xl border bg-background p-4 text-left transition-colors hover:bg-muted/35" onClick={() => void exportNavigationCSV("quick-navigation.csv", navigationGroupsToCSV(loadNavigationGroups()))}><Download className="size-5 text-muted-foreground" /><span className="mt-3 block text-sm font-medium">{uiText("导出 CSV")}</span><span className="mt-1 block text-xs leading-5 text-muted-foreground">{uiText("导出全部站点，保留 Tab、list 小组、图标和尺寸。")}</span></button>
+            <button type="button" className="app-interactive rounded-xl border bg-background p-4 text-left transition-colors hover:bg-muted/35" onClick={() => void importNavigationCSV()}><Upload className="size-5 text-muted-foreground" /><span className="mt-3 block text-sm font-medium">{uiText("导入 CSV")}</span><span className="mt-1 block text-xs leading-5 text-muted-foreground">{uiText("合并同名分组，以网址匹配并更新已有站点。")}</span></button>
           </div>
-          <p className="mt-3 rounded-lg bg-muted/35 px-3 py-2 text-[11px] leading-5 text-muted-foreground">导入采用安全合并，不会删除 CSV 中未包含的现有站点。group 对应一级 Tab，list 对应 Tab 内可选小组；size 支持 1x1、2x2、4x2。</p>
+          <p className="mt-3 rounded-lg bg-muted/35 px-3 py-2 text-[11px] leading-5 text-muted-foreground">{uiText("导入采用安全合并，不会删除 CSV 中未包含的现有站点。group 对应一级 Tab，list 对应 Tab 内可选小组；size 支持 1x1、2x2、4x2。")}</p>
         </div>
       </article>
 
       <article className="rounded-xl border bg-card text-card-foreground shadow-sm">
         <div className="border-b p-6">
-          <h2 className="font-medium">小Q</h2>
-          <p className="mt-1 text-sm text-muted-foreground">配置小Q调用 Quick、网络和 MCP 扩展能力时的行为。</p>
+          <h2 className="font-medium">{uiText("小Q")}</h2>
+          <p className="mt-1 text-sm text-muted-foreground">{uiText("配置小Q调用 Quick、网络和 MCP 扩展能力时的行为。")}</p>
         </div>
         <div className="p-6">
-          <div className="flex items-center gap-4 rounded-xl border bg-background p-4">
-            <span className={cn("flex size-10 shrink-0 items-center justify-center rounded-lg border", assistantSettings.autoApproveOperations ? "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-200" : "bg-muted/30 text-muted-foreground")}><ShieldCheck className="size-4" /></span>
-            <div className="min-w-0 flex-1">
-              <div className="text-sm font-medium">操作自动审核</div>
-              <p className="mt-1 text-xs leading-5 text-muted-foreground">只读操作始终自动执行；开启后，小Q还可自动发送明确的 HTTP 请求、关闭已带条件搜索到的进程，以及调用未知或可能有副作用的 MCP Tool。</p>
-            </div>
-            <Switch checked={assistantSettings.autoApproveOperations} aria-label="操作自动审核" onCheckedChange={(enabled) => {
-              onAssistantSettingsChange({ ...assistantSettings, autoApproveOperations: enabled })
-              if (enabled) toast.warning("已开启操作自动审核", { description: "小Q可执行明确请求的高风险操作，请仅在可信环境中开启。" })
-              else toast.success("已关闭操作自动审核")
-            }} />
-          </div>
-          {assistantSettings.autoApproveOperations && <div className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/8 p-3 text-xs leading-5 text-amber-800 dark:text-amber-200">风险提示：HTTP 请求、关闭进程和第三方 MCP Tool 可能造成外部副作用。自动审核只建议用于可信环境和可信 Server。</div>}
+          <p className="mb-3 text-xs text-muted-foreground">{uiText("本地转换自动执行；其他操作默认逐次确认。可单独允许下面的操作类型。")}</p>
+          {(Object.keys(PERMISSION_LABELS) as (keyof ToolPermissions)[]).map(effect => <label key={effect} className="mb-2 flex items-center justify-between rounded-lg border p-3 text-sm"><span>{t(PERMISSION_LABELS[effect])}</span><Switch checked={assistantSettings.permissions[effect]} aria-label={t(PERMISSION_LABELS[effect])} onCheckedChange={enabled => onAssistantSettingsChange({...assistantSettings, permissions: {...assistantSettings.permissions, [effect]: enabled}})} /></label>)}
+
         </div>
       </article>
 
@@ -523,7 +527,7 @@ function SettingsPage({
             onClick={() => {
               if (language === "zh-CN") return
               setLanguage("zh-CN")
-              toast.success("已切换到中文")
+              toast.success(uiText("已切换到中文"))
             }}
           >
             <span className="block text-sm font-medium">{t("简体中文")}</span>
@@ -547,8 +551,8 @@ function SettingsPage({
 
       <article className="rounded-xl border bg-card text-card-foreground shadow-sm">
         <div className="border-b p-6">
-          <h2 className="font-medium">外观</h2>
-          <p className="mt-1 text-sm text-muted-foreground">选择应用界面的颜色主题。</p>
+          <h2 className="font-medium">{uiText("外观")}</h2>
+          <p className="mt-1 text-sm text-muted-foreground">{uiText("选择应用界面的颜色主题。")}</p>
         </div>
         <div className="grid gap-3 p-6 sm:grid-cols-2">
           <button
@@ -563,8 +567,8 @@ function SettingsPage({
               <Sun className="size-4" />
             </span>
             <span>
-              <span className="block text-sm font-medium">浅色</span>
-              <span className="mt-0.5 block text-xs text-muted-foreground">明亮的应用界面</span>
+              <span className="block text-sm font-medium">{uiText("浅色")}</span>
+              <span className="mt-0.5 block text-xs text-muted-foreground">{uiText("明亮的应用界面")}</span>
             </span>
           </button>
           <button
@@ -579,8 +583,8 @@ function SettingsPage({
               <Moon className="size-4" />
             </span>
             <span>
-              <span className="block text-sm font-medium">深色</span>
-              <span className="mt-0.5 block text-xs text-muted-foreground">适合低光环境</span>
+              <span className="block text-sm font-medium">{uiText("深色")}</span>
+              <span className="mt-0.5 block text-xs text-muted-foreground">{uiText("适合低光环境")}</span>
             </span>
           </button>
         </div>
@@ -588,15 +592,15 @@ function SettingsPage({
 
       <article className="rounded-xl border bg-card text-card-foreground shadow-sm">
         <div className="border-b p-6">
-          <h2 className="font-medium">网络代理</h2>
-          <p className="mt-1 text-sm text-muted-foreground">应用于网络工具、AI Provider 与 MCP 本地代理的 HTTP 请求；Ping、DNS 与 TCP 检测不经过 HTTP 代理。</p>
+          <h2 className="font-medium">{uiText("网络代理")}</h2>
+          <p className="mt-1 text-sm text-muted-foreground">{uiText("应用于网络工具、AI Provider 与 MCP 本地代理的 HTTP 请求；Ping、DNS 与 TCP 检测不经过 HTTP 代理。")}</p>
         </div>
         <div className="space-y-4 p-6">
           <div className="grid gap-3 sm:grid-cols-3">
             {([
-              { mode: "system", label: "系统/环境代理", description: "跟随 HTTP_PROXY 等系统环境" },
-              { mode: "custom", label: "指定代理", description: "使用自定义代理 URL" },
-              { mode: "none", label: "不使用代理", description: "HTTP 请求直接连接" },
+              { mode: "system", label: uiText("系统/环境代理"), description: uiText("跟随 HTTP_PROXY 等系统环境") },
+              { mode: "custom", label: uiText("指定代理"), description: uiText("使用自定义代理 URL") },
+              { mode: "none", label: uiText("不使用代理"), description: uiText("HTTP 请求直接连接") },
             ] as const).map((option) => (
               <button key={option.mode} type="button" className={cn("app-interactive rounded-xl border p-4 text-left transition-colors hover:bg-muted", proxy.mode === option.mode && "border-primary bg-muted ring-1 ring-primary")} onClick={() => onProxyChange({ ...proxy, mode: option.mode })}>
                 <span className="block text-sm font-medium">{option.label}</span>
@@ -605,8 +609,8 @@ function SettingsPage({
             ))}
           </div>
           <label className="block space-y-2 text-sm">
-            <span>代理地址</span>
-            <input className="h-10 w-full rounded-lg border border-input bg-transparent px-3 outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50" disabled={proxy.mode !== "custom"} value={proxy.url} onChange={(event) => onProxyChange({ ...proxy, url: event.target.value })} placeholder="http://127.0.0.1:7890 或 socks5://127.0.0.1:1080" />
+            <span>{uiText("代理地址")}</span>
+            <input className="h-10 w-full rounded-lg border border-input bg-transparent px-3 outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50" disabled={proxy.mode !== "custom"} value={proxy.url} onChange={(event) => onProxyChange({ ...proxy, url: event.target.value })} placeholder={uiText("http://127.0.0.1:7890 或 socks5://127.0.0.1:1080")} />
           </label>
         </div>
       </article>
@@ -614,19 +618,18 @@ function SettingsPage({
       <article className="rounded-xl border bg-card text-card-foreground shadow-sm">
         <div className="flex flex-wrap items-center gap-3 border-b p-6">
           <div className="min-w-0 flex-1">
-            <h2 className="font-medium">AI 配置列表</h2>
-            <p className="mt-1 text-sm text-muted-foreground">保存常用 Provider，AI 对话页可直接选择。</p>
+            <h2 className="font-medium">{uiText("AI 配置列表")}</h2>
+            <p className="mt-1 text-sm text-muted-foreground">{uiText("保存常用 Provider，AI 对话页可直接选择。")}</p>
           </div>
-          <Button type="button" variant="outline" size="sm" onClick={() => setAIEditor({ value: createAIProfile(), isNew: true })}><Plus />新增 AI</Button>
+          <Button type="button" variant="outline" size="sm" onClick={() => setAIEditor({ value: createAIProfile(), isNew: true })}><Plus />{uiText("新增 AI")}</Button>
         </div>
         <div className="space-y-3 p-4 sm:p-6">
           <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/8 p-3 text-xs leading-5 text-amber-800 dark:text-amber-200">
-            <KeyRound className="mt-0.5 size-4 shrink-0" />API Key 使用应用内固定密钥进行 AES-256-GCM 加密后保存在 Quick 配置文件中。它可避免直接读取明文，但不能替代系统密钥链。
-          </div>
+            <KeyRound className="mt-0.5 size-4 shrink-0" />{uiText("API Key 使用应用内固定密钥进行 AES-256-GCM 加密后保存在 Quick 配置文件中。它可避免直接读取明文，但不能替代系统密钥链。")}</div>
           <div className="overflow-x-auto rounded-xl border bg-background">
             <table className="w-full min-w-[44rem] text-left text-sm">
-              <thead className="border-b bg-muted/45 text-xs text-muted-foreground"><tr><th className="px-4 py-3 font-medium">名称</th><th className="px-4 py-3 font-medium">Provider</th><th className="px-4 py-3 font-medium">模型 / 部署</th><th className="px-4 py-3 font-medium">Endpoint / Resource</th><th className="px-4 py-3 font-medium">状态</th><th className="w-32 px-4 py-3 text-right font-medium">操作</th></tr></thead>
-              <tbody>{aiProfiles.length ? aiProfiles.map((profile) => { const ready = isAIProfileReady(profile); const option = getAIProviderOption(profile.provider); const endpoint = profile.provider === "azure" ? profile.baseURL || profile.resourceName : profile.baseURL; return <tr key={profile.id} className="border-b last:border-b-0 hover:bg-muted/25"><td className="px-4 py-3 font-medium">{profile.name}</td><td className="px-4 py-3 text-muted-foreground" title={option.protocol}>{option.label}</td><td className="px-4 py-3"><code className="text-xs">{profile.model}</code></td><td className="max-w-52 truncate px-4 py-3 text-xs text-muted-foreground" title={endpoint}>{endpoint || "官方默认"}</td><td className="px-4 py-3"><span className={cn("rounded-full px-2 py-1 text-[10px]", ready ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" : "bg-muted text-muted-foreground")}>{ready ? "可使用" : "待完善"}</span></td><td className="px-4 py-3"><div className="flex justify-end gap-1"><Button type="button" variant="ghost" size="icon-xs" onClick={() => setAIEditor({ value: { ...profile }, isNew: false })} aria-label={`修改 ${profile.name}`}><Pencil className="size-3.5" /></Button><Button type="button" variant="ghost" size="icon-xs" onClick={() => setPendingDelete({ kind: "AI", id: profile.id, name: profile.name })} aria-label={`删除 ${profile.name}`}><Trash2 className="size-3.5" /></Button></div></td></tr> }) : <tr><td colSpan={6} className="px-4 py-10 text-center text-sm text-muted-foreground">暂无 AI 配置，可点击右上角新增。</td></tr>}</tbody>
+              <thead className="border-b bg-muted/45 text-xs text-muted-foreground"><tr><th className="px-4 py-3 font-medium">{uiText("名称")}</th><th className="px-4 py-3 font-medium">Provider</th><th className="px-4 py-3 font-medium">{uiText("模型 / 部署")}</th><th className="px-4 py-3 font-medium">Endpoint / Resource</th><th className="px-4 py-3 font-medium">{uiText("状态")}</th><th className="w-32 px-4 py-3 text-right font-medium">{uiText("操作")}</th></tr></thead>
+              <tbody>{aiProfiles.length ? aiProfiles.map((profile) => { const ready = isAIProfileReady(profile); const option = getAIProviderOption(profile.provider); const endpoint = profile.provider === "azure" ? profile.baseURL || profile.resourceName : profile.baseURL; return <tr key={profile.id} className="border-b last:border-b-0 hover:bg-muted/25"><td className="px-4 py-3 font-medium">{profile.name}</td><td className="px-4 py-3 text-muted-foreground" title={option.protocol}>{option.label}</td><td className="px-4 py-3"><code className="text-xs">{profile.model}</code></td><td className="max-w-52 truncate px-4 py-3 text-xs text-muted-foreground" title={endpoint}>{endpoint || uiText("官方默认")}</td><td className="px-4 py-3"><span className={cn("rounded-full px-2 py-1 text-[10px]", ready ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" : "bg-muted text-muted-foreground")}>{ready ? uiText("可使用") : uiText("待完善")}</span></td><td className="px-4 py-3"><div className="flex justify-end gap-1"><Button type="button" variant="ghost" size="icon-xs" onClick={() => setAIEditor({ value: { ...profile }, isNew: false })} aria-label={`修改 ${profile.name}`}><Pencil className="size-3.5" /></Button><Button type="button" variant="ghost" size="icon-xs" onClick={() => setPendingDelete({ kind: "AI", id: profile.id, name: profile.name })} aria-label={`删除 ${profile.name}`}><Trash2 className="size-3.5" /></Button></div></td></tr> }) : <tr><td colSpan={6} className="px-4 py-10 text-center text-sm text-muted-foreground">{uiText("暂无 AI 配置，可点击右上角新增。")}</td></tr>}</tbody>
             </table>
           </div>
         </div>
@@ -635,17 +638,17 @@ function SettingsPage({
       <article className="rounded-xl border bg-card text-card-foreground shadow-sm">
         <div className="flex flex-wrap items-center gap-3 border-b p-6">
           <div className="min-w-0 flex-1">
-            <h2 className="font-medium">MCP Server 列表</h2>
-            <p className="mt-1 text-sm text-muted-foreground">保存远程地址或本地 STDIO 命令，MCP 测试页可直接选择。</p>
+            <h2 className="font-medium">{uiText("MCP Server 列表")}</h2>
+            <p className="mt-1 text-sm text-muted-foreground">{uiText("保存远程地址或本地 STDIO 命令，MCP 测试页可直接选择。")}</p>
           </div>
-          <Button type="button" variant="outline" size="sm" onClick={() => setMCPEditor({ value: createMCPServerProfile(), isNew: true })}><Plus />新增 MCP</Button>
+          <Button type="button" variant="outline" size="sm" onClick={() => setMCPEditor({ value: createMCPServerProfile(), isNew: true })}><Plus />{uiText("新增 MCP")}</Button>
         </div>
         <div className="space-y-3 p-4 sm:p-6">
-          <p className="rounded-lg bg-muted/35 p-3 text-xs leading-5 text-muted-foreground">请求头和环境变量同样保存在当前设备的 localStorage。STDIO 命令由 Quick 直接启动，不经过 Shell。</p>
+          <p className="rounded-lg bg-muted/35 p-3 text-xs leading-5 text-muted-foreground">{uiText("请求头和环境变量同样保存在当前设备的 localStorage。STDIO 命令由 Quick 直接启动，不经过 Shell。")}</p>
           <div className="overflow-x-auto rounded-xl border bg-background">
             <table className="w-full min-w-[47rem] text-left text-sm">
-              <thead className="border-b bg-muted/45 text-xs text-muted-foreground"><tr><th className="px-4 py-3 font-medium">名称</th><th className="px-4 py-3 font-medium">状态</th><th className="px-4 py-3 font-medium">Transport</th><th className="px-4 py-3 font-medium">地址 / 命令</th><th className="px-4 py-3 font-medium">连接方式</th><th className="w-32 px-4 py-3 text-right font-medium">操作</th></tr></thead>
-              <tbody>{mcpServers.length ? mcpServers.map((profile) => <tr key={profile.id} className="border-b last:border-b-0 hover:bg-muted/25"><td className="px-4 py-3 font-medium">{profile.name}</td><td className="px-4 py-3"><Switch size="compact" checked={profile.enabled} aria-label={`${profile.enabled ? "停用" : "启用"} ${profile.name}`} onCheckedChange={(checked) => onMCPServersChange(mcpServers.map((item) => item.id === profile.id ? { ...item, enabled: checked } : item))} /></td><td className="px-4 py-3 text-muted-foreground">{profile.transport === "streamable-http" ? "Streamable HTTP" : profile.transport === "sse" ? "SSE" : "STDIO"}</td><td className="max-w-80 truncate px-4 py-3 font-mono text-xs" title={profile.transport === "stdio" ? `${profile.command} ${profile.argsJSON}` : profile.url}>{profile.transport === "stdio" ? profile.command || "—" : profile.url || "—"}</td><td className="px-4 py-3 text-xs text-muted-foreground">{profile.transport === "stdio" ? "本地进程" : profile.connectionMode === "quick-proxy" ? "Quick 代理" : "直接连接"}</td><td className="px-4 py-3"><div className="flex justify-end gap-1"><Button type="button" variant="ghost" size="icon-xs" onClick={() => setMCPEditor({ value: { ...profile }, isNew: false })} aria-label={`修改 ${profile.name}`}><Pencil className="size-3.5" /></Button><Button type="button" variant="ghost" size="icon-xs" onClick={() => setPendingDelete({ kind: "MCP", id: profile.id, name: profile.name })} aria-label={`删除 ${profile.name}`}><Trash2 className="size-3.5" /></Button></div></td></tr>) : <tr><td colSpan={6} className="px-4 py-10 text-center text-sm text-muted-foreground">暂无 MCP 配置，可点击右上角新增。</td></tr>}</tbody>
+              <thead className="border-b bg-muted/45 text-xs text-muted-foreground"><tr><th className="px-4 py-3 font-medium">{uiText("名称")}</th><th className="px-4 py-3 font-medium">{uiText("状态")}</th><th className="px-4 py-3 font-medium">Transport</th><th className="px-4 py-3 font-medium">{uiText("地址 / 命令")}</th><th className="px-4 py-3 font-medium">{uiText("连接方式")}</th><th className="w-32 px-4 py-3 text-right font-medium">{uiText("操作")}</th></tr></thead>
+              <tbody>{mcpServers.length ? mcpServers.map((profile) => <tr key={profile.id} className="border-b last:border-b-0 hover:bg-muted/25"><td className="px-4 py-3 font-medium">{profile.name}</td><td className="px-4 py-3"><Switch size="compact" checked={profile.enabled} aria-label={`${profile.enabled ? uiText("停用") : uiText("启用")} ${profile.name}`} onCheckedChange={(checked) => onMCPServersChange(mcpServers.map((item) => item.id === profile.id ? { ...item, enabled: checked } : item))} /></td><td className="px-4 py-3 text-muted-foreground">{profile.transport === "streamable-http" ? "Streamable HTTP" : profile.transport === "sse" ? "SSE" : "STDIO"}</td><td className="max-w-80 truncate px-4 py-3 font-mono text-xs" title={profile.transport === "stdio" ? `${profile.command} ${profile.argsJSON}` : profile.url}>{profile.transport === "stdio" ? profile.command || "—" : profile.url || "—"}</td><td className="px-4 py-3 text-xs text-muted-foreground">{profile.transport === "stdio" ? uiText("本地进程") : profile.connectionMode === "quick-proxy" ? uiText("Quick 代理") : uiText("直接连接")}</td><td className="px-4 py-3"><div className="flex justify-end gap-1"><Button type="button" variant="ghost" size="icon-xs" onClick={() => setMCPEditor({ value: { ...profile }, isNew: false })} aria-label={`修改 ${profile.name}`}><Pencil className="size-3.5" /></Button><Button type="button" variant="ghost" size="icon-xs" onClick={() => setPendingDelete({ kind: "MCP", id: profile.id, name: profile.name })} aria-label={`删除 ${profile.name}`}><Trash2 className="size-3.5" /></Button></div></td></tr>) : <tr><td colSpan={6} className="px-4 py-10 text-center text-sm text-muted-foreground">{uiText("暂无 MCP 配置，可点击右上角新增。")}</td></tr>}</tbody>
             </table>
           </div>
         </div>
@@ -661,10 +664,9 @@ function SettingsPage({
 }
 
 function App() {
-  const { language, t } = useLanguage()
+  const { t } = useLanguage()
   const [activePage, setActivePage] = useState<PageId>("home")
   const [visitedPages, setVisitedPages] = useState<Set<PageId>>(() => new Set(["home"]))
-  const [time, setTime] = useState("")
   const [theme, setTheme] = useState<AppTheme>(() => {
     const initialTheme = getInitialTheme()
     document.documentElement.classList.toggle("dark", initialTheme === "dark")
@@ -678,18 +680,11 @@ function App() {
   const [sidebarOrder, setSidebarOrder] = useState<PageId[]>(loadSidebarOrder)
   const [sidebarOrderReady, setSidebarOrderReady] = useState(false)
   const [persistentConfigReady, setPersistentConfigReady] = useState(false)
-  const enabledMCPServers = mcpServers.filter((profile) => profile.enabled)
+  const enabledMCPServers = useMemo(() => mcpServers.filter((profile) => profile.enabled), [mcpServers])
   const localizedPages = useMemo(() => pages.map((page) => ({ ...page, label: t(page.label), description: t(page.description) })), [t])
   const currentPage = localizedPages.find((page) => page.id === activePage) ?? localizedPages[0]
 
-  useEffect(() => {
-    const update = () => setTime(new Intl.DateTimeFormat(language, window.matchMedia("(max-width: 640px)").matches
-      ? { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }
-      : { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }).format(new Date()))
-    update()
-    const timer = window.setInterval(update, 1000)
-    return () => window.clearInterval(timer)
-  }, [language])
+
 
   useEffect(() => {
     const timer = window.setTimeout(() => WML.Reload(), 0)
@@ -698,7 +693,7 @@ function App() {
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", theme === "dark")
-    window.localStorage.setItem("quick-theme", theme)
+    appStorage.setItem("quick-theme", theme)
   }, [theme])
 
   useEffect(() => {
@@ -717,20 +712,20 @@ function App() {
       setMCPServers(savedMCPServers)
       clearLegacySensitiveConnectionCache()
       setPersistentConfigReady(true)
-    }).catch((error) => console.warn("Durable configuration is unavailable; using WebView fallback storage", error))
+    }).catch(() => toast.error("无法读取配置，请解锁系统凭据存储后重新启动应用；当前修改尚未保存"))
     return () => { cancelled = true }
     // Initial WebView values are intentionally captured once for migration.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
-    if (persistentConfigReady) void persistAIProfiles(aiProfiles).catch((error) => console.warn("Unable to persist AI profiles", error))
-    else saveAIProfiles(aiProfiles)
+    if (persistentConfigReady) void persistAIProfiles(aiProfiles).catch(() => toast.error("AI 配置保存失败，请解锁系统凭据存储后重试"))
+    else { /* Wait for durable configuration; never store credentials in WebView storage. */ }
   }, [aiProfiles, persistentConfigReady])
 
   useEffect(() => {
-    if (persistentConfigReady) void persistMCPServers(mcpServers).catch((error) => console.warn("Unable to persist MCP servers", error))
-    else saveMCPServers(mcpServers)
+    if (persistentConfigReady) void persistMCPServers(mcpServers).catch(() => toast.error("MCP 配置保存失败，请解锁系统凭据存储后重试"))
+    else { /* Wait for durable configuration. */ }
   }, [mcpServers, persistentConfigReady])
 
   useEffect(() => {
@@ -812,42 +807,46 @@ function App() {
   }
 
   return (
-    <AssistantCapabilityProvider>
+    <AssistantCapabilityProvider permissions={assistantSettings.permissions}>
+      <ToolModels proxy={proxy} profiles={enabledMCPServers} onSaveProfile={saveMCPProfileFromTest}>
       <SidebarProvider className="bg-transparent">
         <div className="bg" aria-hidden="true" />
         <AppSidebar pages={localizedPages} activePage={activePage} order={sidebarOrder} onNavigate={navigateTo} onOrderChange={changeSidebarOrder} />
         <SidebarInset className={activePage === "home" ? "bg-transparent" : "bg-background"}>
         <header className="app-topbar">
           <SidebarTrigger className="app-interactive" />
+          <CommandPalette onNavigate={navigateTo} /><ToolRunHistory onNavigate={navigateTo} />
           <div className="min-w-0 flex-1">
             <div className="truncate text-sm font-medium">{currentPage.label}</div>
             <div className="truncate text-xs text-muted-foreground">{currentPage.description}</div>
           </div>
-          <Button type="button" variant={assistantOpen ? "secondary" : "ghost"} size="icon" className="app-interactive ml-auto shrink-0" data-wails-no-drag onClick={() => setAssistantOpen((value) => !value)} aria-label={assistantOpen ? "收起小Q侧边栏" : "展开小Q侧边栏"} title={assistantOpen ? "收起小Q" : "展开小Q"}>
+          <Button type="button" variant={assistantOpen ? "secondary" : "ghost"} size="icon" className="app-interactive ml-auto shrink-0" data-wails-no-drag onClick={() => setAssistantOpen((value) => !value)} aria-label={assistantOpen ? uiText("收起小Q侧边栏") : uiText("展开小Q侧边栏")} title={assistantOpen ? uiText("收起小Q") : uiText("展开小Q")}>
             {assistantOpen ? <PanelRightClose className="size-4" /> : <PanelRightOpen className="size-4" />}
           </Button>
         </header>
 
-        <Suspense fallback={<div className="page-shell text-sm text-muted-foreground">正在加载工具…</div>}>
-          {visitedPages.has("home") && <PageSlot active={activePage === "home"}><HomePage time={time} onNavigate={navigateTo} /></PageSlot>}
+        <WorkspaceTabs page={activePage} />
+        <PageErrorBoundary key={activePage}><Suspense fallback={<div className="page-shell text-sm text-muted-foreground">{uiText("正在加载工具…")}</div>}>
+          {visitedPages.has("home") && <PageSlot active={activePage === "home"}><HomePage onNavigate={navigateTo} /></PageSlot>}
           {visitedPages.has("ai-chat") && <PageSlot active={activePage === "ai-chat"}><AIChatPage profiles={aiProfiles} onSaveProfile={saveAIProfileFromTest} proxy={proxy} /></PageSlot>}
-          {visitedPages.has("mcp-inspector") && <PageSlot active={activePage === "mcp-inspector"}><MCPInspectorPage proxy={proxy} profiles={enabledMCPServers} onSaveProfile={saveMCPProfileFromTest} /></PageSlot>}
+          {visitedPages.has("mcp-inspector") && <PageSlot active={activePage === "mcp-inspector"}><MCPInspectorPage /></PageSlot>}
           {visitedPages.has("formatter") && <PageSlot active={activePage === "formatter"}><StringToolsPage /></PageSlot>}
           {visitedPages.has("converter") && <PageSlot active={activePage === "converter"}><DataConversionPage /></PageSlot>}
           {visitedPages.has("time-ids") && <PageSlot active={activePage === "time-ids"}><TimeIdentifiersPage /></PageSlot>}
           {visitedPages.has("validation") && <PageSlot active={activePage === "validation"}><ValidationPage /></PageSlot>}
           {visitedPages.has("frontend") && <PageSlot active={activePage === "frontend"}><FrontendToolsPage /></PageSlot>}
           {visitedPages.has("crypto") && <PageSlot active={activePage === "crypto"}><CryptoPage /></PageSlot>}
-          {visitedPages.has("network") && <PageSlot active={activePage === "network"}><NetworkPage proxy={proxy} /></PageSlot>}
+          {visitedPages.has("network") && <PageSlot active={activePage === "network"}><NetworkPage /></PageSlot>}
           {visitedPages.has("text-workbench") && <PageSlot active={activePage === "text-workbench"}><TextWorkbenchPage /></PageSlot>}
           {visitedPages.has("file-tools") && <PageSlot active={activePage === "file-tools"}><FileToolsPage /></PageSlot>}
           {visitedPages.has("navigation") && <PageSlot active={activePage === "navigation"}><NavigationPage /></PageSlot>}
           {visitedPages.has("settings") && <PageSlot active={activePage === "settings"}><SettingsPage page={currentPage} theme={theme} onThemeChange={changeTheme} proxy={proxy} onProxyChange={setProxy} aiProfiles={aiProfiles} onAIProfilesChange={setAIProfiles} mcpServers={mcpServers} onMCPServersChange={setMCPServers} assistantSettings={assistantSettings} onAssistantSettingsChange={setAssistantSettings} /></PageSlot>}
-        </Suspense>
+        </Suspense></PageErrorBoundary>
         </SidebarInset>
         <GlobalAssistant profiles={aiProfiles} mcpServers={enabledMCPServers} proxy={proxy} autoApproveOperations={assistantSettings.autoApproveOperations} activePage={activePage} onNavigate={navigateTo} sidebarOrder={sidebarOrder} onSidebarOrderChange={changeSidebarOrder} open={assistantOpen} onOpenChange={setAssistantOpen} />
         <Toaster theme={theme} position="top-right" richColors closeButton />
       </SidebarProvider>
+      </ToolModels>
     </AssistantCapabilityProvider>
   )
 }

@@ -1,6 +1,7 @@
-import * as React from "react"
+import { uiText } from "@/lib/i18n"
 import { X } from "lucide-react"
 import { Dialog as DialogPrimitive } from "radix-ui"
+import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
@@ -20,7 +21,7 @@ function DialogContent({ className, children, ...props }: React.ComponentProps<t
         {...props}
       >
         {children}
-        <DialogPrimitive.Close className="app-interactive absolute right-4 top-4 flex size-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground" aria-label="关闭">
+        <DialogPrimitive.Close className="app-interactive absolute right-4 top-4 flex size-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground" aria-label={uiText("关闭")}>
           <X className="size-4" />
         </DialogPrimitive.Close>
       </DialogPrimitive.Content>
@@ -44,4 +45,4 @@ function DialogFooter({ className, ...props }: React.ComponentProps<"div">) {
   return <div className={cn("flex flex-col-reverse gap-2 border-t px-5 py-4 sm:flex-row sm:justify-end", className)} {...props} />
 }
 
-export { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger }
+export { Dialog,DialogClose,DialogContent,DialogDescription,DialogFooter,DialogHeader,DialogTitle,DialogTrigger }

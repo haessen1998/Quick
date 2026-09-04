@@ -3,6 +3,7 @@ package config
 import (
 	"bytes"
 	"encoding/json"
+	"github.com/zalando/go-keyring"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -111,3 +112,5 @@ func TestConfigServiceStoresAppLanguage(t *testing.T) {
 		t.Fatalf("Load(app-language) = %q, %v", loaded, err)
 	}
 }
+
+func TestMain(m *testing.M) { keyring.MockInit(); os.Exit(m.Run()) }

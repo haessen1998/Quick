@@ -1,12 +1,20 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react"
+import { appStorage } from "@/lib/app-storage"
+import { createContext,useCallback,useContext,useEffect,useState,type ReactNode } from "react"
 
-import { loadPersistentConfig, savePersistentConfig } from "@/lib/persistent-config"
+import { loadPersistentConfig,savePersistentConfig } from "@/lib/persistent-config"
 
 export type AppLanguage = "zh-CN" | "en-US"
 
 const STORAGE_KEY = "quick-language"
 
 const ENGLISH: Record<string, string> = {
+  "搜索工具": "Search tools", "执行记录": "Run history", "清空记录": "Clear history", "定位错误：第": "Go to error: line ", "行": "", "文档已关闭": "Document closed",
+  "按名称或操作搜索；打开工具会保留当前文档。": "Search by name or operation. Opening a tool preserves the current document.",
+  "没有匹配的工具": "No matching tools", "个动作已就绪，无需打开页面": "actions ready without opening pages",
+  "可供小Q读取的页面上下文": "Page context available to Quick AI",
+  "仅在小Q调用上下文工具时发送；密钥等字段已过滤。自由文本仍可能含私人内容，请先检查。": "Sent only when Quick AI calls the context tool. Secret fields are filtered, but free text may still contain private content. Review it first.",
+  "· 仅允许下面这一个操作。": "· Applies only to this operation.",
+ "新建文档": "New document", "工作文档": "Documents", "关闭": "Close", "切页保留 · 关闭应用后清除": "Kept across pages · cleared on exit", "允许此次操作？": "Allow this operation?", "允许本次": "Allow once", "载入示例": "Load sample", "发送 HTTP 请求": "Send HTTP requests", "修改文件": "Modify files", "关闭进程": "Terminate processes", "修改站点导航": "Edit navigation sites", "调用第三方 MCP": "Call third-party MCP", "取消预览": "Cancel preview",
   "首页": "Home",
   "AI 对话": "AI Chat",
   "MCP 测试": "MCP Inspector",
@@ -206,7 +214,7 @@ const ENGLISH: Record<string, string> = {
   "删除": "Delete",
   "编辑": "Edit",
   "保存": "Save",
-  "关闭": "Close",
+
   "刷新": "Refresh",
   "预览": "Preview",
   "连接": "Connect",
@@ -646,73 +654,22 @@ const DYNAMIC_ENGLISH: Array<[RegExp, (...values: string[]) => string]> = [
   [/^网络代理：(.+)$/, (proxy) => `Network proxy: ${proxy}`],
 ]
 
-const originalText = new WeakMap<Text, string>()
-const originalAttributes = new WeakMap<Element, Map<string, string>>()
-const LOCALIZED_ATTRIBUTES = ["aria-label", "placeholder", "title"] as const
+let renderedLanguage: AppLanguage = "zh-CN"
+export function uiText(value: string): string { return translateUiText(value, renderedLanguage) }
 
 export function translateUiText(value: string, language: AppLanguage): string {
   if (language === "zh-CN" || !value) return value
+  if (/^文档 \d+$/.test(value)) return value.replace("文档", "Document")
   const leading = value.match(/^\s*/)?.[0] ?? ""
   const trailing = value.match(/\s*$/)?.[0] ?? ""
   const content = value.slice(leading.length, value.length - trailing.length)
   const exact = ENGLISH[content]
-  if (exact) return `${leading}${exact}${trailing}`
+  if (exact !== undefined) return `${leading}${exact}${trailing}`
   for (const [pattern, replacement] of DYNAMIC_ENGLISH) {
     const match = content.match(pattern)
     if (match) return `${leading}${replacement(...match.slice(1))}${trailing}`
   }
   return value
-}
-
-function shouldSkip(node: Node) {
-  const parent = node instanceof Element ? node : node.parentElement
-  return Boolean(parent?.closest("script, style, pre, code, textarea, [contenteditable='true'], [data-i18n-skip]"))
-}
-
-function localizeNode(root: Node, language: AppLanguage) {
-  const localizeText = (node: Text) => {
-    if (shouldSkip(node)) return
-    if (language === "zh-CN") {
-      const original = originalText.get(node)
-      if (original !== undefined && node.data !== original) node.data = original
-      return
-    }
-    if (/[\u3400-\u9fff]/.test(node.data)) originalText.set(node, node.data)
-    const source = originalText.get(node) ?? node.data
-    const translated = translateUiText(source, language)
-    if (translated !== node.data) node.data = translated
-  }
-  const localizeElement = (element: Element) => {
-    if (element.closest("[data-i18n-skip]")) return
-    let originals = originalAttributes.get(element)
-    for (const attribute of LOCALIZED_ATTRIBUTES) {
-      const current = element.getAttribute(attribute)
-      if (current === null) continue
-      if (language === "zh-CN") {
-        const original = originals?.get(attribute)
-        if (original !== undefined && current !== original) element.setAttribute(attribute, original)
-        continue
-      }
-      if (/[\u3400-\u9fff]/.test(current)) {
-        originals ??= new Map<string, string>()
-        originals.set(attribute, current)
-        originalAttributes.set(element, originals)
-      }
-      const source = originals?.get(attribute) ?? current
-      const translated = translateUiText(source, language)
-      if (translated !== current) element.setAttribute(attribute, translated)
-    }
-  }
-
-  if (root instanceof Text) localizeText(root)
-  if (root instanceof Element) localizeElement(root)
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT)
-  let current = walker.nextNode()
-  while (current) {
-    if (current instanceof Text) localizeText(current)
-    else if (current instanceof Element) localizeElement(current)
-    current = walker.nextNode()
-  }
 }
 
 type LanguageContextValue = {
@@ -724,20 +681,19 @@ type LanguageContextValue = {
 const LanguageContext = createContext<LanguageContextValue | null>(null)
 
 function getInitialLanguage(): AppLanguage {
-  return window.localStorage.getItem(STORAGE_KEY) === "en-US" ? "en-US" : "zh-CN"
+  return appStorage.getItem(STORAGE_KEY) === "en-US" ? "en-US" : "zh-CN"
 }
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
   const [language, setLanguageState] = useState<AppLanguage>(getInitialLanguage)
-  const languageRef = useRef(language)
-  languageRef.current = language
+  renderedLanguage = language
 
   useEffect(() => {
     let cancelled = false
     void loadPersistentConfig("app-language").then((stored) => {
       const saved = JSON.parse(stored || "null")
       if (!cancelled && (saved === "zh-CN" || saved === "en-US")) {
-        window.localStorage.setItem(STORAGE_KEY, saved)
+        appStorage.setItem(STORAGE_KEY, saved)
         setLanguageState(saved)
       }
     }).catch(() => undefined)
@@ -746,20 +702,11 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     document.documentElement.lang = language
-    localizeNode(document.body, language)
-    const observer = new MutationObserver((mutations) => {
-      for (const mutation of mutations) {
-        if (mutation.type === "characterData") localizeNode(mutation.target, languageRef.current)
-        else if (mutation.type === "attributes") localizeNode(mutation.target, languageRef.current)
-        else mutation.addedNodes.forEach((node) => localizeNode(node, languageRef.current))
-      }
-    })
-    observer.observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: [...LOCALIZED_ATTRIBUTES] })
-    return () => observer.disconnect()
+
   }, [language])
 
   const setLanguage = useCallback((nextLanguage: AppLanguage) => {
-    window.localStorage.setItem(STORAGE_KEY, nextLanguage)
+    appStorage.setItem(STORAGE_KEY, nextLanguage)
     setLanguageState(nextLanguage)
     void savePersistentConfig("app-language", nextLanguage).catch((error) => console.warn("Unable to persist app language", error))
   }, [])

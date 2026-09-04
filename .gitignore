@@ -1,4 +1,9 @@
 .task
+.dev-baseline/
+frontend/test-results/
+frontend/playwright-report/
+.playwright-cli/
+output/playwright/
 bin
 frontend/dist
 frontend/node_modules

@@ -1,92 +1,168 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, type ReactNode } from "react"
-
-import type { PageId } from "@/lib/pages"
-
-type CapabilityAction = (input: Record<string, unknown>) => unknown | Promise<unknown>
-
-export type AssistantPageCapability = {
-  page: PageId
-  getContext: () => Record<string, unknown>
-  actions: Record<string, CapabilityAction>
-}
-
-type PendingAction = {
-  action: string
-  input: Record<string, unknown>
-  resolve: (value: unknown) => void
-  reject: (reason: unknown) => void
-  timer: number
-}
-
-type RegistryValue = {
-  execute: (page: PageId, action: string, input: Record<string, unknown>) => Promise<unknown>
+import { Button } from "@/components/ui/button"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { uiText } from "@/lib/i18n"
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
+import { type PageId } from "./pages"
+import { toolDefinition, validateToolInput } from "./tool-definition"
+import {
+  DEFAULT_TOOL_PERMISSIONS,
+  PERMISSION_LABELS,
+  redactToolData,
+  toolEffect,
+  type ToolEffect,
+  type ToolPermissions,
+} from "./tool-policy"
+import { findToolRun, modelResult, recordToolRun } from "./tool-results"
+type CapabilityAction = (input: Record<string, unknown>, options?: ExecutionOptions) => unknown | Promise<unknown>
+export type AssistantPageCapability = { page: PageId; getContext: () => Record<string, unknown>; actions: Record<string, CapabilityAction> }
+type Approval = { effect: Exclude<ToolEffect, "local">; input: unknown; resolve: (approved: boolean) => void }
+type ExecutionOptions = { signal?: AbortSignal }
+type Registry = {
+  execute: (page: PageId, action: string, input: Record<string, unknown>, options?: ExecutionOptions) => Promise<unknown>
   getPageContext: (page: PageId) => Record<string, unknown> | null
-}
-
-type RegistryContextValue = RegistryValue & {
   register: (page: PageId, current: () => AssistantPageCapability) => () => void
+  requestApproval: (effect: ToolEffect, input: unknown, signal?: AbortSignal) => Promise<boolean>
+  catalog: () => ReturnType<typeof toolDefinition>[]
 }
-
-const AssistantCapabilityContext = createContext<RegistryContextValue | null>(null)
-
-export function AssistantCapabilityProvider({ children }: { children: ReactNode }) {
+const Context = createContext<Registry | null>(null)
+export function AssistantCapabilityProvider({
+  children,
+  permissions = DEFAULT_TOOL_PERMISSIONS,
+}: {
+  children: ReactNode
+  permissions?: ToolPermissions
+}) {
   const capabilities = useRef(new Map<PageId, () => AssistantPageCapability>())
-  const pending = useRef(new Map<PageId, PendingAction[]>())
-
+  const permissionRef = useRef(permissions)
+  permissionRef.current = permissions
+  const [approval, setApproval] = useState<Approval | null>(null)
+  const approvalRef = useRef<Approval | null>(null)
+  const tail = useRef<Promise<unknown>>(Promise.resolve())
   const register = useCallback((page: PageId, current: () => AssistantPageCapability) => {
     capabilities.current.set(page, current)
-    const queued = pending.current.get(page) ?? []
-    pending.current.delete(page)
-    for (const item of queued) {
-      window.clearTimeout(item.timer)
-      const capability = current()
-      const handler = capability.actions[item.action]
-      if (!handler) item.reject(new Error(`页面 ${page} 未注册动作 ${item.action}`))
-      else Promise.resolve(handler(item.input)).then(item.resolve, item.reject)
-    }
     return () => {
       if (capabilities.current.get(page) === current) capabilities.current.delete(page)
     }
   }, [])
-
-  const execute = useCallback(async (page: PageId, action: string, input: Record<string, unknown>) => {
-    const current = capabilities.current.get(page)
-    if (current) {
-      const handler = current().actions[action]
-      if (!handler) throw new Error(`页面 ${page} 未注册动作 ${action}`)
-      return handler(input)
-    }
-    return new Promise<unknown>((resolve, reject) => {
-      const item: PendingAction = {
-        action,
-        input,
-        resolve,
-        reject,
-        timer: window.setTimeout(() => {
-          const items = pending.current.get(page) ?? []
-          pending.current.set(page, items.filter((candidate) => candidate !== item))
-          reject(new Error(`等待页面 ${page} 注册能力超时`))
-        }, 5000),
+  const requestApproval = useCallback(async (effect: ToolEffect, input: unknown, signal?: AbortSignal) => {
+    if (signal?.aborted) return false
+    if (effect === "local" || permissionRef.current[effect]) return true
+    if (approvalRef.current) return false
+    return new Promise<boolean>((resolve) => {
+      const finish = (accepted: boolean) => {
+        signal?.removeEventListener("abort", cancel)
+        approvalRef.current = null
+        setApproval(null)
+        resolve(accepted)
       }
-      pending.current.set(page, [...(pending.current.get(page) ?? []), item])
+      const cancel = () => finish(false)
+      const next = { effect, input: redactToolData(input), resolve: finish }
+      approvalRef.current = next
+      setApproval(next)
+      signal?.addEventListener("abort", cancel, { once: true })
     })
   }, [])
-
-  const getPageContext = useCallback((page: PageId) => capabilities.current.get(page)?.().getContext() ?? null, [])
-  const value = useMemo(() => ({ execute, getPageContext, register }), [execute, getPageContext, register])
-
-  return <AssistantCapabilityContext.Provider value={value}>{children}</AssistantCapabilityContext.Provider>
+  useEffect(
+    () => () => {
+      approvalRef.current?.resolve(false)
+    },
+    [],
+  )
+  const execute = useCallback(
+    (page: PageId, action: string, input: Record<string, unknown>, options: ExecutionOptions = {}) => {
+      const run = async () => {
+        if (options.signal?.aborted) return { success: false, cancelled: true, executed: false }
+        const handler = capabilities.current.get(page)?.().actions[action]
+        if (!handler) throw new Error(`未注册工具 ${page}.${action}`)
+        const source = typeof input.sourceResultId === "string" ? findToolRun(input.sourceResultId) : undefined
+        if (input.sourceResultId && !source) throw new Error("源结果已过期，请重新执行来源工具")
+        const validated = validateToolInput(page, action, { ...input, ...(source ? { input: source.text } : {}) })
+        const effect = toolEffect(page, action, validated)
+        if (!(await requestApproval(effect, { page, action, ...validated }, options.signal)))
+          return { success: false, cancelled: true, executed: false }
+        if (options.signal?.aborted) return { success: false, cancelled: true, executed: false }
+        const args = { ...validated, operationAutoApproved: effect !== "local" }
+        const startedAt = Date.now()
+        let result: unknown
+        try {
+          result = await handler(args, options)
+        } catch (error) {
+          result = { success: false, executed: true, error: error instanceof Error ? error.message : String(error) }
+        }
+        const record = result && typeof result === "object" ? (result as Record<string, unknown>) : {}
+        // Only export the handler's explicit result. Reading arbitrary ViewModel output
+        // would let a workflow recover secrets intentionally kept out of AI responses.
+        const text =
+          typeof record.body === "string" ? record.body : typeof record.result === "string" ? record.result : JSON.stringify(result ?? null)
+        const entry = recordToolRun({
+          page,
+          action,
+          startedAt,
+          durationMs: Date.now() - startedAt,
+          success: record.success !== false,
+          text,
+          result,
+        })
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        return { ...(modelResult(result) as object), artifactId: entry.id, durationMs: entry.durationMs, success: entry.success }
+      }
+      const pending = tail.current.then(run, run)
+      tail.current = pending.catch(() => undefined)
+      return pending
+    },
+    [requestApproval],
+  )
+  const getPageContext = useCallback(
+    (page: PageId) => redactToolData(capabilities.current.get(page)?.().getContext() ?? null) as Record<string, unknown> | null,
+    [],
+  )
+  const catalog = useCallback(
+    () =>
+      [...capabilities.current].flatMap(([page, current]) => Object.keys(current().actions).map((action) => toolDefinition(page, action))),
+    [],
+  )
+  const value = useMemo(
+    () => ({ register, execute, getPageContext, requestApproval, catalog }),
+    [register, execute, getPageContext, requestApproval, catalog],
+  )
+  return (
+    <Context.Provider value={value}>
+      {children}
+      <Dialog
+        open={Boolean(approval)}
+        onOpenChange={(open) => {
+          if (!open) approvalRef.current?.resolve(false)
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{uiText("允许此次操作？")}</DialogTitle>
+            <DialogDescription>
+              {approval && PERMISSION_LABELS[approval.effect]} {uiText("· 仅允许下面这一个操作。")}
+            </DialogDescription>
+          </DialogHeader>
+          <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-all rounded border p-3 text-xs">
+            {JSON.stringify(approval?.input, null, 2)}
+          </pre>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => approvalRef.current?.resolve(false)}>
+              {uiText("取消")}
+            </Button>
+            <Button onClick={() => approvalRef.current?.resolve(true)}>{uiText("允许本次")}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </Context.Provider>
+  )
 }
-
 export function useAssistantCapability(capability: AssistantPageCapability) {
-  const context = useContext(AssistantCapabilityContext)
+  const context = useContext(Context)
   const current = useRef(capability)
   current.current = capability
   useEffect(() => context?.register(capability.page, () => current.current), [capability.page, context])
 }
-
 export function useAssistantCapabilityRegistry() {
-  const context = useContext(AssistantCapabilityContext)
-  if (!context) throw new Error("AssistantCapabilityProvider is missing")
+  const context = useContext(Context)
+  if (!context) throw new Error("AssistantCapabilityProvider missing")
   return context
 }

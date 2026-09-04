@@ -26,7 +26,7 @@ tasks:
     vars:
       DEFAULT_OUTPUT: '{{.BIN_DIR}}/{{.APP_NAME}}'
       OUTPUT: '{{ .OUTPUT | default .DEFAULT_OUTPUT }}'
-      MCP_BUILD_TAGS: 'mcp{{if .EXTRA_TAGS}},{{.EXTRA_TAGS}}{{end}}'
+      MCP_BUILD_TAGS: '{{if eq .QUICK_DEBUG_MCP "true"}}mcp{{if .EXTRA_TAGS}},{{end}}{{end}}{{.EXTRA_TAGS}}'
 
   build:native:
     summary: Builds the application natively on macOS

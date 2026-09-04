@@ -1,3 +1,4 @@
+import { appStorage } from "@/lib/app-storage"
 import { loadPersistentConfig, savePersistentConfig } from "@/lib/persistent-config"
 import type { PageId } from "@/lib/pages"
 
@@ -42,11 +43,11 @@ export function normalizeSidebarOrder(value: unknown): PageId[] {
 
 export function loadSidebarOrder() {
   if (typeof window === "undefined") return [...DEFAULT_SIDEBAR_ORDER]
-  return normalizeSidebarOrder(window.localStorage.getItem(STORAGE_KEY))
+  return normalizeSidebarOrder(appStorage.getItem(STORAGE_KEY))
 }
 
 export function saveSidebarOrder(order: PageId[]) {
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(normalizeSidebarOrder(order)))
+  appStorage.setItem(STORAGE_KEY, JSON.stringify(normalizeSidebarOrder(order)))
 }
 
 export async function hydrateSidebarOrder(fallback: PageId[]) {

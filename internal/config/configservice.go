@@ -15,12 +15,15 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+
+	"github.com/zalando/go-keyring"
 )
 
 const (
-	configFileVersion        = 2
-	configEncryptionPassword = "quick"
-	configEncryptionPrefix   = "aes-256-gcm:v1:"
+	configFileVersion        = 3
+	configEncryptionPassword = "quick" // Legacy v1 migration only; never used for new encryption.
+	configEncryptionPrefix   = "keyring-aes-256-gcm:v2:"
+	legacyEncryptionPrefix   = "aes-256-gcm:v1:"
 )
 
 var configEncryptionKey = sha256.Sum256([]byte(configEncryptionPassword))
@@ -59,9 +62,7 @@ func NewConfigService() *ConfigService {
 		return &ConfigService{err: err}
 	}
 	service := &ConfigService{path: filepath.Join(directory, "settings.json")}
-	if err := service.migratePlaintextValues(); err != nil {
-		service.err = err
-	}
+	// Sensitive values migrate on access. Ordinary preferences remain usable if the keychain is locked.
 	return service
 }
 
@@ -71,13 +72,13 @@ func quickConfigDirectory() (string, error) {
 		if err != nil {
 			return "", fmt.Errorf("resolve user home: %w", err)
 		}
-		return filepath.Join(home, "AppData", "Roaming", "Quick"), nil
+		return filepath.Join(home, "AppData", "Roaming", "Quick", configProfile), nil
 	}
 	directory, err := os.UserConfigDir()
 	if err != nil {
 		return "", fmt.Errorf("resolve user config directory: %w", err)
 	}
-	return filepath.Join(directory, "Quick"), nil
+	return filepath.Join(directory, "Quick", configProfile), nil
 }
 
 func validatePersistentConfigKey(key string) error {
@@ -92,8 +93,12 @@ func shouldEncryptConfigKey(key string) bool {
 	return ok
 }
 
-func encryptPersistentValue(key string, plaintext []byte) (string, error) {
-	block, err := aes.NewCipher(configEncryptionKey[:])
+func (s *ConfigService) encryptPersistentValue(key string, plaintext []byte) (string, error) {
+	secret, err := s.encryptionKey(true)
+	if err != nil {
+		return "", err
+	}
+	block, err := aes.NewCipher(secret)
 	if err != nil {
 		return "", fmt.Errorf("create AES-256 cipher: %w", err)
 	}
@@ -109,15 +114,26 @@ func encryptPersistentValue(key string, plaintext []byte) (string, error) {
 	return configEncryptionPrefix + base64.RawStdEncoding.EncodeToString(payload), nil
 }
 
-func decryptPersistentValue(key string, encrypted string) ([]byte, error) {
-	if !strings.HasPrefix(encrypted, configEncryptionPrefix) {
+func (s *ConfigService) decryptPersistentValue(key string, encrypted string) ([]byte, error) {
+	prefix := configEncryptionPrefix
+	secret := configEncryptionKey[:]
+	if strings.HasPrefix(encrypted, legacyEncryptionPrefix) {
+		prefix = legacyEncryptionPrefix
+	} else {
+		var err error
+		secret, err = s.encryptionKey(false)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if !strings.HasPrefix(encrypted, prefix) {
 		return nil, errors.New("unsupported encrypted config format")
 	}
-	payload, err := base64.RawStdEncoding.DecodeString(strings.TrimPrefix(encrypted, configEncryptionPrefix))
+	payload, err := base64.RawStdEncoding.DecodeString(strings.TrimPrefix(encrypted, prefix))
 	if err != nil {
 		return nil, fmt.Errorf("decode encrypted config: %w", err)
 	}
-	block, err := aes.NewCipher(configEncryptionKey[:])
+	block, err := aes.NewCipher(secret)
 	if err != nil {
 		return nil, fmt.Errorf("create AES-256 cipher: %w", err)
 	}
@@ -205,11 +221,23 @@ func (s *ConfigService) migratePlaintextValues() error {
 	changed := false
 	for key := range encryptedConfigKeys {
 		value, hasPlaintext := config.Values[key]
+		if old, ok := config.EncryptedValues[key]; ok && strings.HasPrefix(old, legacyEncryptionPrefix) {
+			decrypted, err := s.decryptPersistentValue(key, old)
+			if err != nil {
+				return err
+			}
+			encrypted, err := s.encryptPersistentValue(key, decrypted)
+			if err != nil {
+				return err
+			}
+			config.EncryptedValues[key] = encrypted
+			changed = true
+		}
 		if !hasPlaintext {
 			continue
 		}
 		if _, hasEncrypted := config.EncryptedValues[key]; !hasEncrypted {
-			encrypted, err := encryptPersistentValue(key, value)
+			encrypted, err := s.encryptPersistentValue(key, value)
 			if err != nil {
 				return err
 			}
@@ -226,6 +254,11 @@ func (s *ConfigService) migratePlaintextValues() error {
 }
 
 func (s *ConfigService) Load(key string) (string, error) {
+	if shouldEncryptConfigKey(key) {
+		if err := s.migratePlaintextValues(); err != nil {
+			return "", err
+		}
+	}
 	if err := validatePersistentConfigKey(key); err != nil {
 		return "", err
 	}
@@ -236,7 +269,7 @@ func (s *ConfigService) Load(key string) (string, error) {
 		return "", err
 	}
 	if encrypted, ok := config.EncryptedValues[key]; ok {
-		value, err := decryptPersistentValue(key, encrypted)
+		value, err := s.decryptPersistentValue(key, encrypted)
 		if err != nil {
 			return "", err
 		}
@@ -264,7 +297,7 @@ func (s *ConfigService) Save(key string, value string) error {
 	}
 	config.Version = configFileVersion
 	if shouldEncryptConfigKey(key) {
-		encrypted, err := encryptPersistentValue(key, []byte(value))
+		encrypted, err := s.encryptPersistentValue(key, []byte(value))
 		if err != nil {
 			return err
 		}
@@ -275,4 +308,43 @@ func (s *ConfigService) Save(key string, value string) error {
 		delete(config.EncryptedValues, key)
 	}
 	return s.writeLocked(config)
+}
+
+// The random encryption key lives in the OS credential store, never in settings.json.
+// The path-derived account name keeps independent installations/config directories separate.
+func (s *ConfigService) encryptionKey(create bool) ([]byte, error) {
+	accountHash := sha256.Sum256([]byte(filepath.Clean(s.path)))
+	account := fmt.Sprintf("settings-%x", accountHash[:12])
+	encoded, err := keyring.Get("Quick", account)
+	if errors.Is(err, keyring.ErrNotFound) && create {
+		config, readErr := s.readLocked()
+		if readErr != nil {
+			return nil, readErr
+		}
+		for _, encrypted := range config.EncryptedValues {
+			if strings.HasPrefix(encrypted, configEncryptionPrefix) {
+				return nil, errors.New("系统凭据密钥丢失；为保护现有配置，未生成新密钥或覆盖文件")
+			}
+		}
+		key := make([]byte, 32)
+		if _, err := io.ReadFull(rand.Reader, key); err != nil {
+			return nil, err
+		}
+		encoded = base64.RawStdEncoding.EncodeToString(key)
+		if err := keyring.Set("Quick", account, encoded); err != nil {
+			return nil, fmt.Errorf("无法保存系统凭据，请解锁系统钥匙串后重试: %w", err)
+		}
+		// Verify before replacing legacy data on disk.
+		saved, err := keyring.Get("Quick", account)
+		if err != nil || saved != encoded {
+			return nil, errors.New("系统凭据写入验证失败；原配置保持不变")
+		}
+	} else if err != nil {
+		return nil, fmt.Errorf("无法读取系统凭据，请解锁系统钥匙串后重试: %w", err)
+	}
+	key, err := base64.RawStdEncoding.DecodeString(encoded)
+	if err != nil || len(key) != 32 {
+		return nil, errors.New("系统凭据密钥无效")
+	}
+	return key, nil
 }

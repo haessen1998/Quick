@@ -59,7 +59,7 @@ wails3 task dev
 
 Quick 开发服务器默认使用专用地址 `127.0.0.1:43121`，可通过 `QUICK_APP_PORT` 覆盖。完整功能需要在桌面窗口中运行；直接用浏览器访问 Vite 地址只能预览前端界面。
 
-Quick 的开发与桌面发布构建默认启用内置应用 MCP 服务。应用启动后会在 Quick 专用地址 `http://127.0.0.1:43122/mcp` 提供 Streamable HTTP Endpoint，设置页内置的“Quick App MCP”配置可以直接连接；发布二进制也会应用该默认端口，可通过进程环境变量 `QUICK_MCP_HOST`、`QUICK_MCP_PORT` 显式覆盖。该服务仅监听本机回环地址，但具备窗口、DOM 和已绑定 Go 服务的操作能力，请不要通过端口转发或反向代理暴露到外网。详见 [Wails MCP Service 指南](https://v3.wails.io/guides/mcp-service/)。
+正式构建关闭 Wails 调试用应用 MCP。需要 A/B 调试时，显式运行 `wails3 build DEV=true QUICK_DEBUG_MCP=true`，然后在设置中启用 Quick App MCP（`http://127.0.0.1:43122/mcp`）。禁止在正式构建中同时启用 `production,mcp`；编译保护会阻止该组合。普通第三方 MCP 客户端不受此限制。
 
 ## 构建与打包
 
@@ -83,12 +83,27 @@ wails3 task package
 # 前端类型检查与生产构建
 npm run build --prefix frontend
 
-# Go 测试（包含发布构建启用的 Wails MCP 代码）
-go test -tags mcp ./...
+# 前端核心测试（不需要真实 AI/MCP）
+npm test --prefix frontend
+
+# Playwright CLI 行为测试：先启动前端开发服务器
+npm run test:ui --prefix frontend
+
+# 正式产物排除测试入口
+npm run check:release --prefix frontend
+
+# Go 正式配置测试
+go test -tags production ./...
 
 # 重新生成 Wails TypeScript 绑定
 wails3 generate bindings -clean -ts -i
 ```
+
+## 开发分支与配置隔离
+
+`dev` 用于待验收功能，验收通过后再合并 `main`。不带 `production` 标签的应用名为 Quick Dev，持久配置与导航图标写入 Quick/dev 子目录；正式版本继续使用原 Quick 目录。首次开发启动不会复制正式配置，需单独填写测试配置。AI/MCP 凭据使用系统凭据存储中的随机密钥加密，旧格式在成功取得系统密钥后迁移。
+
+页面卸载时保留会话内 ViewModel 和文档数据，关闭应用后清除工作文档与对话；敏感工作内容不写入草稿文件。详细范围、验收路径和发布注意事项见 [dev 交付记录](docs/dev-plan.md)。
 
 ## 项目结构
 
