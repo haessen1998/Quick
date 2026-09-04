@@ -1,3 +1,4 @@
+import { useLineNumbers, setLineNumbers } from "@/lib/editor-settings"
 import { clipboardObserver } from "@/lib/clipboard-observer"
 import { detectSmartInput } from "@/lib/smart-input-detection"
 import { appStorage } from "@/lib/app-storage"
@@ -399,6 +400,7 @@ function SettingsPage({
   onAssistantSettingsChange: (settings: AssistantSettings) => void
 }) {
   const { language, setLanguage, t } = useLanguage()
+  const lineNumbers = useLineNumbers()
   const [aiEditor, setAIEditor] = useState<{ value: AIProfile; isNew: boolean } | null>(null)
   const [mcpEditor, setMCPEditor] = useState<{ value: MCPServerProfile; isNew: boolean } | null>(null)
   const [pendingDelete, setPendingDelete] = useState<{ kind: "AI" | "MCP"; id: string; name: string } | null>(null)
@@ -489,7 +491,7 @@ function SettingsPage({
         </div>
         <div className="p-6">
           <p className="mb-3 text-xs text-muted-foreground">{uiText("本地转换自动执行；其他操作默认逐次确认。可单独允许下面的操作类型。")}</p>
-          {(Object.keys(PERMISSION_LABELS) as (keyof ToolPermissions)[]).map(effect => <label key={effect} className="mb-2 flex items-center justify-between rounded-lg border p-3 text-sm"><span>{t(PERMISSION_LABELS[effect])}</span><Switch checked={assistantSettings.permissions[effect]} aria-label={t(PERMISSION_LABELS[effect])} onCheckedChange={enabled => onAssistantSettingsChange({...assistantSettings, permissions: {...assistantSettings.permissions, [effect]: enabled}})} /></label>)}
+          {(Object.keys(PERMISSION_LABELS) as (keyof ToolPermissions)[]).map(effect => <label key={effect} className="mb-2 flex items-center justify-between rounded-lg border p-3 text-sm"><span>{t(PERMISSION_LABELS[effect])}{effect === "files" && <span className="mt-1 block max-w-xl text-xs leading-5 text-muted-foreground">{t("允许小Q免确认执行所选文件的批量重命名与撤销；关闭后逐次确认。第三方 MCP 文件操作由 MCP 权限单独控制。")}</span>}</span><Switch checked={assistantSettings.permissions[effect]} aria-label={t(PERMISSION_LABELS[effect])} onCheckedChange={enabled => onAssistantSettingsChange({...assistantSettings, permissions: {...assistantSettings.permissions, [effect]: enabled}})} /></label>)}
 
         </div>
       </article>
@@ -529,6 +531,9 @@ function SettingsPage({
         </div>
       </article>
 
+      <article className="rounded-xl border bg-card p-6 text-card-foreground shadow-sm">
+        <div className="flex items-center justify-between gap-4"><div><h2 className="font-medium">{uiText("显示编辑器行号")}</h2><p className="mt-1 text-sm text-muted-foreground">{uiText("适用于所有带行号的输入与输出框，默认开启。")}</p></div><Switch checked={lineNumbers} onCheckedChange={setLineNumbers} aria-label={uiText("显示编辑器行号")} /></div>
+      </article>
       <article className="rounded-xl border bg-card text-card-foreground shadow-sm">
         <div className="border-b p-6">
           <h2 className="font-medium">{uiText("外观")}</h2>

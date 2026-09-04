@@ -15,8 +15,8 @@ return (
 
         {mode === "markdown" ? (
           <div className="grid min-w-0 overflow-hidden rounded-xl border bg-card shadow-sm lg:grid-cols-2">
-            <label className="min-w-0 border-b lg:border-r lg:border-b-0"><div className="flex h-11 items-center gap-2 border-b px-4 text-sm font-medium"><FileText className="size-4" />Markdown</div><CodeEditor className="app-interactive h-[36rem] w-full resize-none overflow-auto bg-transparent p-4 font-mono text-sm leading-6 outline-none" value={markdown} onChange={(event) => setMarkdown(event.target.value)} spellCheck={false} /></label>
-            <div className="min-w-0"><div className="flex h-11 items-center justify-between gap-2 border-b px-4 text-sm font-medium"><span className="flex items-center gap-2"><Eye className="size-4" />{uiText("预览")}</span><span className="text-xs font-normal text-muted-foreground">{uiText("支持 Mermaid")}</span></div><div className="h-[36rem] min-w-0 overflow-auto p-4 sm:p-6"><MarkdownRenderer value={markdown} className="min-w-0 max-w-full" /></div></div>
+            <label className="min-w-0 border-b lg:border-r lg:border-b-0"><div className="flex h-11 items-center gap-2 border-b px-4 text-sm font-medium"><FileText className="size-4" />Markdown</div><CodeEditor className="app-interactive h-[36rem] w-full resize-none overflow-auto bg-transparent p-4 font-mono text-sm leading-6 outline-none" aria-label="Markdown" value={markdown} onChange={(event) => setMarkdown(event.target.value)} spellCheck={false} /></label>
+            <div className="min-w-0"><div className="flex h-11 items-center justify-between gap-2 border-b px-4 text-sm font-medium"><span className="flex items-center gap-2"><Eye className="size-4" />{uiText("预览")}</span><span className="text-xs font-normal text-muted-foreground">{uiText("支持 Mermaid")}</span></div><div className="max-h-[48rem] min-w-0 overflow-auto p-4 sm:p-6"><MarkdownRenderer value={markdown} className="min-w-0 max-w-full" /></div></div>
           </div>
         ) : (
           <div className="overflow-hidden rounded-xl border bg-card shadow-sm">

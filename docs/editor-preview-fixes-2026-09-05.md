@@ -1,0 +1,14 @@
+# 编辑器与预览修复
+
+本轮保留在 dev，未合并 main。小Q权限逻辑未扩大：文件开关仅控制已选文件批量重命名与撤销是否免逐次确认；MCP 文件操作仍走独立 MCP 权限。设置中补充了这段范围说明。
+
+- Mermaid 移除固定 28rem 高度与 32rem 最小宽度，依据实际图表高度调整画布（120–480px）。平移与内容是否溢出解耦，小图也能拖动；保留缩放、滚动条、复位和全屏。
+- 文本工作台预览内容区改为自然高度及最大高度，短图不再强制占用整个预览区域。
+- CodeEditor 行号成为独立列，文字横向滚动不覆盖行号。垂直同步采用位移，避免不同平台横向滚动条占高造成末行错位。
+- 设置增加“显示编辑器行号”，默认开启，作用于所有 CodeEditor 输入/输出，存于隔离的界面偏好中并立即生效。
+- JSON Schema 恢复较大、可纵向调整的编辑区。粘贴按光标与选区插入后使用已有无损 JSON 格式化；失败保留文本并 toast 提示可请小Q修复，不自动发送 Schema 到模型。
+- 正则替换区未删除：现在直接位于替换模板下方，有标题、复制按钮和处理/空结果/取消/失败状态。载入正则示例同时恢复 `$<host>` 模板；提示其引用 `(?<host>...)` 命名组。
+
+验证：19 项单元测试通过；Playwright CLI 的 test:ui、test:ui:regressions 和 test:ui:editors 通过。编辑器专项实测长文本横纵滚动、行号开关和重载持久化、小 Mermaid 自适应高度和鼠标拖动、JSON Schema 粘贴成功/失败、`$<host>` 与 `[$<host>]` 的真实替换结果。TypeScript/生产构建和发布入口隔离检查通过，已有大 chunk 提示保留。
+
+截图与日志存放于忽略目录 output/playwright；代表截图为 editor-long-scroll.png、mermaid-adaptive-pan.png、schema-paste.png、regex-replacement-visible.png。测试在 Chromium 中运行，未进行修改文件操作，也未调用模型修复服务。

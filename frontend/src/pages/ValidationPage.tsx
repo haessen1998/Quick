@@ -1,32 +1,317 @@
+import { JSONSchemaEditor } from "@/components/JSONSchemaEditor"
 import { InputPreflight } from "@/components/InputPreflight"
 import { CodeEditor } from "@/components/CodeEditor"
 import { Button } from "@/components/ui/button"
 import { writeClipboard } from "@/lib/clipboard"
 import { uiText } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
-import { inputClass,regexFlags,useValidationPageViewModel } from "@/models/ValidationPageModel"
-import { CheckCircle2,Code2,Copy,ListChecks,Play,Plus,Sparkles,Trash2,TriangleAlert } from "lucide-react"
+import { inputClass, regexFlags, useValidationPageViewModel } from "@/models/ValidationPageModel"
+import { CheckCircle2, Code2, Copy, ListChecks, Play, Plus, Sparkles, Trash2, TriangleAlert } from "lucide-react"
 import { toast } from "sonner"
 
 export default function ValidationPage() {
- const { t, mode, expression, setExpression, input, setInput, flags, setFlags, replacement, setReplacement, output, error, testCases, setTestCases, testResults, generatedLanguage, generatedCode, codeExplanation, selectMode, loadSample, run, runTests, replacementPreview, highlighted, previewRunning, cancelPreview, modes } = useValidationPageViewModel()
-return (
-    <section className="page-shell"><div className="mx-auto w-full max-w-7xl">
-      <div className="mb-6"><div className="mb-2 flex items-center gap-2 text-sm text-muted-foreground"><Sparkles className="size-4" />{uiText("开发工具")}</div><h1 className="text-3xl font-semibold tracking-tight">{uiText("校验工具")}</h1><p className="mt-2 text-sm text-muted-foreground">{uiText("运行 JSONPath、XPath、CSS Selector 与正则；批量验证正反及边界样例，并承接 AI 生成的多语言代码。")}</p></div>
-      <div className="mb-4 flex flex-wrap gap-2">{modes.map(({ id, label, icon: Icon }) => <Button key={id} variant={mode === id ? "default" : "outline"} onClick={() => selectMode(id)}><Icon />{label}</Button>)}</div>
-      <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
-        <div className="grid gap-3 border-b p-4 lg:grid-cols-[minmax(0,1fr)_auto]"><div className="space-y-3">{mode === "json-schema" ? <CodeEditor className={`${inputClass} h-28 resize-y font-mono`} aria-label={uiText("表达式")} value={expression} onChange={(event) => setExpression(event.target.value)} placeholder="JSON Schema" /> : <input className={inputClass} value={expression} onChange={(event) => setExpression(event.target.value)} aria-label={uiText("表达式")} placeholder={`${mode} 表达式`} />}
-          {mode === "regex" && <><div className="flex flex-wrap items-center gap-2"><span className="mr-1 text-xs text-muted-foreground">Flags</span>{regexFlags.map((flag) => <label key={flag.id} title={flag.title} className={cn("app-interactive flex cursor-pointer items-center gap-1.5 rounded-md border px-2.5 py-1.5 font-mono text-xs", flags.includes(flag.id) && "border-primary bg-primary/8 text-primary")}><input type="checkbox" checked={flags.includes(flag.id)} onChange={() => setFlags((current) => current.includes(flag.id) ? current.replace(flag.id, "") : `${current}${flag.id}`)} className="size-3 accent-primary" />{flag.label}</label>)}<code className="ml-auto text-xs text-muted-foreground">/{expression}/{flags}</code></div><input className={inputClass} value={replacement} onChange={(event) => setReplacement(event.target.value)} placeholder={uiText("替换模板，例如 $1 或 $<name>")} /></>}
-        </div><div className="flex flex-wrap items-start gap-2 self-start"><Button variant="outline" onClick={loadSample}>{uiText("载入示例")}</Button>{mode === "regex" && <Button variant="outline" disabled={!previewRunning} onClick={cancelPreview}>{uiText("取消预览")}</Button>}<Button onClick={() => void run()}><Play />{uiText("执行校验")}</Button></div></div>
-        <InputPreflight identity={mode} format={mode} expression={expression} input={input} flags={flags} />
-        {error && <div className="m-4 flex gap-2 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive"><TriangleAlert className="size-4 shrink-0" />{error}</div>}
-        <div className="grid md:grid-cols-2"><label className="border-b md:border-r md:border-b-0"><div className="flex h-10 items-center border-b px-4 text-xs text-muted-foreground">{uiText("待校验数据")}</div><CodeEditor className={cn(inputClass, "h-[24rem] resize-none overflow-auto rounded-none border-0 p-4 font-mono leading-6 focus-visible:ring-0")} aria-label={uiText("待校验数据")} value={input} onChange={(event) => setInput(event.target.value)} spellCheck={false} /></label><div><div className="flex h-10 items-center gap-2 border-b px-4 text-xs text-muted-foreground"><CheckCircle2 className="size-3.5" />{uiText("匹配结果")}</div><pre className="h-[24rem] overflow-auto whitespace-pre-wrap break-words bg-muted/20 p-4 font-mono text-sm leading-6">{output || t("执行后显示结果")}</pre></div></div>
+  const {
+    t,
+    mode,
+    expression,
+    setExpression,
+    input,
+    setInput,
+    flags,
+    setFlags,
+    replacement,
+    setReplacement,
+    output,
+    error,
+    testCases,
+    setTestCases,
+    testResults,
+    generatedLanguage,
+    generatedCode,
+    codeExplanation,
+    selectMode,
+    loadSample,
+    run,
+    runTests,
+    replacementPreview,
+    highlighted,
+    previewRunning,
+    previewReady,
+    previewError,
+    cancelPreview,
+    modes,
+  } = useValidationPageViewModel()
+  return (
+    <section className="page-shell">
+      <div className="mx-auto w-full max-w-7xl">
+        <div className="mb-6">
+          <div className="mb-2 flex items-center gap-2 text-sm text-muted-foreground">
+            <Sparkles className="size-4" />
+            {uiText("开发工具")}
+          </div>
+          <h1 className="text-3xl font-semibold tracking-tight">{uiText("校验工具")}</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            {uiText("运行 JSONPath、XPath、CSS Selector 与正则；批量验证正反及边界样例，并承接 AI 生成的多语言代码。")}
+          </p>
+        </div>
+        <div className="mb-4 flex flex-wrap gap-2">
+          {modes.map(({ id, label, icon: Icon }) => (
+            <Button key={id} variant={mode === id ? "default" : "outline"} onClick={() => selectMode(id)}>
+              <Icon />
+              {label}
+            </Button>
+          ))}
+        </div>
+        <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
+          <div className="grid gap-3 border-b p-4 lg:grid-cols-[minmax(0,1fr)_auto]">
+            <div className="space-y-3">
+              {mode === "json-schema" ? (
+                <JSONSchemaEditor value={expression} onValueChange={setExpression} />
+              ) : (
+                <input
+                  className={inputClass}
+                  value={expression}
+                  onChange={(event) => setExpression(event.target.value)}
+                  aria-label={uiText("表达式")}
+                  placeholder={`${mode} 表达式`}
+                />
+              )}
+              {mode === "regex" && (
+                <>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="mr-1 text-xs text-muted-foreground">Flags</span>
+                    {regexFlags.map((flag) => (
+                      <label
+                        key={flag.id}
+                        title={flag.title}
+                        className={cn(
+                          "app-interactive flex cursor-pointer items-center gap-1.5 rounded-md border px-2.5 py-1.5 font-mono text-xs",
+                          flags.includes(flag.id) && "border-primary bg-primary/8 text-primary",
+                        )}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={flags.includes(flag.id)}
+                          onChange={() =>
+                            setFlags((current) => (current.includes(flag.id) ? current.replace(flag.id, "") : `${current}${flag.id}`))
+                          }
+                          className="size-3 accent-primary"
+                        />
+                        {flag.label}
+                      </label>
+                    ))}
+                    <code className="ml-auto text-xs text-muted-foreground">
+                      /{expression}/{flags}
+                    </code>
+                  </div>
+                  <label className="block space-y-2 text-xs text-muted-foreground">
+                    <span>{uiText("替换模板：$<host> 引用名为 host 的捕获组，例如 (?<host>...)。")}</span>
+                    <input
+                      aria-label={uiText("替换模板")}
+                      className={inputClass}
+                      value={replacement}
+                      onChange={(event) => setReplacement(event.target.value)}
+                      placeholder={uiText("替换模板，例如 $1 或 $<name>")}
+                    />
+                  </label>
+                  <div className="rounded-lg border bg-muted/20">
+                    <div className="flex items-center justify-between border-b px-3 py-2 text-xs">
+                      <span>
+                        {uiText("替换结果预览")}
+                        {previewRunning && ` · ${uiText("处理中…")}`}
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="xs"
+                        disabled={!previewReady || !replacementPreview || previewRunning}
+                        onClick={async () => {
+                          await writeClipboard(replacementPreview)
+                          toast.success(t("已复制"))
+                        }}
+                      >
+                        <Copy />
+                        {uiText("复制替换结果")}
+                      </Button>
+                    </div>
+                    <pre
+                      aria-label={uiText("替换结果预览")}
+                      className="max-h-40 min-h-12 overflow-auto whitespace-pre-wrap break-all p-3 text-sm"
+                    >
+                      {previewError
+                        ? t(previewError)
+                        : previewRunning
+                          ? uiText("正在预览…")
+                          : previewReady
+                            ? replacementPreview || uiText("替换结果为空")
+                            : uiText("编辑表达式、数据或替换模板后自动预览。")}
+                    </pre>
+                  </div>
+                </>
+              )}
+            </div>
+            <div className="flex flex-wrap items-start gap-2 self-start">
+              <Button variant="outline" onClick={loadSample}>
+                {uiText("载入示例")}
+              </Button>
+              {mode === "regex" && (
+                <Button variant="outline" disabled={!previewRunning} onClick={cancelPreview}>
+                  {uiText("取消预览")}
+                </Button>
+              )}
+              <Button onClick={() => void run()}>
+                <Play />
+                {uiText("执行校验")}
+              </Button>
+            </div>
+          </div>
+          <InputPreflight identity={mode} format={mode} expression={expression} input={input} flags={flags} />
+          {error && (
+            <div className="m-4 flex gap-2 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+              <TriangleAlert className="size-4 shrink-0" />
+              {error}
+            </div>
+          )}
+          <div className="grid md:grid-cols-2">
+            <label className="border-b md:border-r md:border-b-0">
+              <div className="flex h-10 items-center border-b px-4 text-xs text-muted-foreground">{uiText("待校验数据")}</div>
+              <CodeEditor
+                className={cn(
+                  inputClass,
+                  "h-[24rem] resize-none overflow-auto rounded-none border-0 p-4 font-mono leading-6 focus-visible:ring-0",
+                )}
+                aria-label={uiText("待校验数据")}
+                value={input}
+                onChange={(event) => setInput(event.target.value)}
+                spellCheck={false}
+              />
+            </label>
+            <div>
+              <div className="flex h-10 items-center gap-2 border-b px-4 text-xs text-muted-foreground">
+                <CheckCircle2 className="size-3.5" />
+                {uiText("匹配结果")}
+              </div>
+              <pre className="h-[24rem] overflow-auto whitespace-pre-wrap break-words bg-muted/20 p-4 font-mono text-sm leading-6">
+                {output || t("执行后显示结果")}
+              </pre>
+            </div>
+          </div>
+        </div>
+        {mode === "regex" && (
+          <div className="mt-4 grid gap-4 xl:grid-cols-2">
+            <article className="overflow-hidden rounded-xl border bg-card shadow-sm">
+              <div className="border-b px-4 py-3 text-sm font-medium">{uiText("匹配高亮")}</div>
+              <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words border-b p-4 font-mono text-sm">
+                {highlighted.map((segment, index) =>
+                  segment.match ? (
+                    <mark key={index} className="rounded bg-amber-300/70 px-0.5 text-foreground">
+                      {segment.value}
+                    </mark>
+                  ) : (
+                    <span key={index}>{segment.value}</span>
+                  ),
+                )}
+              </pre>
+            </article>
+            <article className="overflow-hidden rounded-xl border bg-card shadow-sm">
+              <div className="flex items-center justify-between border-b px-4 py-3">
+                <span className="flex items-center gap-2 text-sm font-medium">
+                  <ListChecks className="size-4" />
+                  {uiText("测试用例")}
+                </span>
+                <div className="flex gap-2">
+                  <Button
+                    variant="ghost"
+                    size="xs"
+                    onClick={() => setTestCases((items) => [...items, { input: "", expected: true, label: "" }])}
+                  >
+                    <Plus />
+                    {uiText("添加")}
+                  </Button>
+                  <Button size="xs" onClick={runTests}>
+                    <Play />
+                    {uiText("运行")}
+                  </Button>
+                </div>
+              </div>
+              <div className="max-h-80 overflow-auto">
+                {testCases.map((item, index) => {
+                  const result = testResults[index]
+                  return (
+                    <div key={index} className="grid grid-cols-[1fr_auto_auto] items-center gap-2 border-b p-2 last:border-0">
+                      <input
+                        className={inputClass}
+                        value={item.input}
+                        onChange={(event) =>
+                          setTestCases((items) =>
+                            items.map((value, itemIndex) => (itemIndex === index ? { ...value, input: event.target.value } : value)),
+                          )
+                        }
+                        placeholder={item.label || `样例 ${index + 1}`}
+                      />
+                      <label
+                        className={cn(
+                          "flex items-center gap-1 rounded-md border px-2 py-2 text-xs",
+                          result &&
+                            (result.passed
+                              ? "border-emerald-500/50 text-emerald-700 dark:text-emerald-300"
+                              : "border-destructive/50 text-destructive"),
+                        )}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={item.expected}
+                          onChange={(event) =>
+                            setTestCases((items) =>
+                              items.map((value, itemIndex) => (itemIndex === index ? { ...value, expected: event.target.checked } : value)),
+                            )
+                          }
+                          className="accent-primary"
+                        />
+                        {uiText("应匹配")}
+                        {result && ` · ${result.passed ? uiText("通过") : uiText("失败")}`}
+                      </label>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => setTestCases((items) => items.filter((_, itemIndex) => itemIndex !== index))}
+                      >
+                        <Trash2 />
+                      </Button>
+                    </div>
+                  )
+                })}
+              </div>
+            </article>
+            <article className="overflow-hidden rounded-xl border bg-card shadow-sm xl:col-span-2">
+              <div className="flex items-center justify-between border-b px-4 py-3">
+                <span className="flex items-center gap-2 text-sm font-medium">
+                  <Code2 className="size-4" />
+                  {uiText("AI 生成的使用代码")}
+                </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground">{generatedLanguage}</span>
+                  <Button
+                    variant="ghost"
+                    size="xs"
+                    disabled={!generatedCode}
+                    onClick={async () => {
+                      await writeClipboard(generatedCode)
+                      toast.success(uiText("代码已复制"))
+                    }}
+                  >
+                    <Copy />
+                    {uiText("复制")}
+                  </Button>
+                </div>
+              </div>
+              {codeExplanation && <div className="border-b bg-muted/20 px-4 py-2 text-xs text-muted-foreground">{codeExplanation}</div>}
+              <pre className="min-h-28 max-h-96 overflow-auto whitespace-pre p-4 font-mono text-sm">
+                {generatedCode || uiText("让小Q根据当前正则生成 JavaScript、TypeScript、Python、C#、Java、Go、Rust 或 PHP 使用代码。")}
+              </pre>
+            </article>
+          </div>
+        )}
       </div>
-      {mode === "regex" && <div className="mt-4 grid gap-4 xl:grid-cols-2">
-        <article className="overflow-hidden rounded-xl border bg-card shadow-sm"><div className="border-b px-4 py-3 text-sm font-medium">{uiText("匹配高亮与替换预览")}</div><pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words border-b p-4 font-mono text-sm">{highlighted.map((segment, index) => segment.match ? <mark key={index} className="rounded bg-amber-300/70 px-0.5 text-foreground">{segment.value}</mark> : <span key={index}>{segment.value}</span>)}</pre><pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words bg-muted/20 p-4 font-mono text-sm">{replacementPreview}</pre></article>
-        <article className="overflow-hidden rounded-xl border bg-card shadow-sm"><div className="flex items-center justify-between border-b px-4 py-3"><span className="flex items-center gap-2 text-sm font-medium"><ListChecks className="size-4" />{uiText("测试用例")}</span><div className="flex gap-2"><Button variant="ghost" size="xs" onClick={() => setTestCases((items) => [...items, { input: "", expected: true, label: "" }])}><Plus />{uiText("添加")}</Button><Button size="xs" onClick={runTests}><Play />{uiText("运行")}</Button></div></div><div className="max-h-80 overflow-auto">{testCases.map((item, index) => { const result = testResults[index]; return <div key={index} className="grid grid-cols-[1fr_auto_auto] items-center gap-2 border-b p-2 last:border-0"><input className={inputClass} value={item.input} onChange={(event) => setTestCases((items) => items.map((value, itemIndex) => itemIndex === index ? { ...value, input: event.target.value } : value))} placeholder={item.label || `样例 ${index + 1}`} /><label className={cn("flex items-center gap-1 rounded-md border px-2 py-2 text-xs", result && (result.passed ? "border-emerald-500/50 text-emerald-700 dark:text-emerald-300" : "border-destructive/50 text-destructive"))}><input type="checkbox" checked={item.expected} onChange={(event) => setTestCases((items) => items.map((value, itemIndex) => itemIndex === index ? { ...value, expected: event.target.checked } : value))} className="accent-primary" />{uiText("应匹配")}{result && ` · ${result.passed ? uiText("通过") : uiText("失败")}`}</label><Button variant="ghost" size="icon" onClick={() => setTestCases((items) => items.filter((_, itemIndex) => itemIndex !== index))}><Trash2 /></Button></div> })}</div></article>
-        <article className="overflow-hidden rounded-xl border bg-card shadow-sm xl:col-span-2"><div className="flex items-center justify-between border-b px-4 py-3"><span className="flex items-center gap-2 text-sm font-medium"><Code2 className="size-4" />{uiText("AI 生成的使用代码")}</span><div className="flex items-center gap-2"><span className="text-xs text-muted-foreground">{generatedLanguage}</span><Button variant="ghost" size="xs" disabled={!generatedCode} onClick={async () => { await writeClipboard(generatedCode); toast.success(uiText("代码已复制")) }}><Copy />{uiText("复制")}</Button></div></div>{codeExplanation && <div className="border-b bg-muted/20 px-4 py-2 text-xs text-muted-foreground">{codeExplanation}</div>}<pre className="min-h-28 max-h-96 overflow-auto whitespace-pre p-4 font-mono text-sm">{generatedCode || uiText("让小Q根据当前正则生成 JavaScript、TypeScript、Python、C#、Java、Go、Rust 或 PHP 使用代码。")}</pre></article>
-      </div>}
-    </div></section>
+    </section>
   )
 }

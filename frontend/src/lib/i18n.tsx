@@ -8,6 +8,20 @@ export type AppLanguage = "zh-CN" | "en-US"
 const STORAGE_KEY = "quick-language"
 
 const ENGLISH: Record<string, string> = {
+  "显示编辑器行号": "Show editor line numbers",
+  "适用于所有带行号的输入与输出框，默认开启。": "Applies to all code input and output fields. Enabled by default.",
+  "允许小Q免确认执行所选文件的批量重命名与撤销；关闭后逐次确认。第三方 MCP 文件操作由 MCP 权限单独控制。": "Let Quick AI rename selected files and undo renames without confirmation. When off, each action requires approval. Third-party MCP file operations use the separate MCP permission.",
+  "粘贴后自动格式化": "Format automatically on paste",
+  "JSON Schema 格式化失败，已保留粘贴内容。可请小Q修复。": "Could not format JSON Schema. The pasted text was kept; you can ask Quick AI to repair it.",
+  "替换模板：$<host> 引用名为 host 的捕获组，例如 (?<host>...)。": "Replacement: $<host> references the named capture group host, such as (?<host>...).",
+  "替换结果预览": "Replacement preview",
+  "复制替换结果": "Copy replacement result",
+  "编辑表达式、数据或替换模板后自动预览。": "Edit the expression, input or replacement template to preview.",
+  "匹配高亮": "Match highlights",
+  "正在预览…": "Previewing…",
+  "替换结果为空": "The replacement result is empty",
+  "预览已取消": "Preview cancelled",
+
   "输入格式提醒": "Input format reminder",
   "已切换工具，原有输入仍保留。请确认数据和表达式适用于当前工具，或点击载入示例。": "The tool has changed and your input was kept. Check the data and expression, or load this tool's sample.",
   "内容较大，已跳过自动检查；执行时仍会校验。": "Automatic checking was skipped for this large input. It will still be validated when run.",

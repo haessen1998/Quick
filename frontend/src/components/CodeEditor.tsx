@@ -1,14 +1,19 @@
 import { Button } from "@/components/ui/button"
 import { uiText } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
-import { useMemo, useRef, type TextareaHTMLAttributes } from "react"
+import { useLineNumbers } from "@/lib/editor-settings"
+import { useLayoutEffect, useMemo, useRef, type TextareaHTMLAttributes } from "react"
 
 type Props = TextareaHTMLAttributes<HTMLTextAreaElement> & { error?: string }
 export function CodeEditor({ className, value = "", error, ...props }: Props) {
   const editor = useRef<HTMLTextAreaElement>(null)
+  const showLineNumbers = useLineNumbers()
   const gutter = useRef<HTMLDivElement>(null)
   const text = String(value)
   const lines = useMemo(() => Math.min(text.split("\n").length, 10000), [text])
+  useLayoutEffect(() => {
+    if (gutter.current && editor.current) gutter.current.style.transform = `translateY(${-editor.current.scrollTop}px)`
+  }, [text, showLineNumbers])
   const location = useMemo(() => {
     if (!error) return null
     const line = error.match(/(?:line|第)\s*(\d+)/i)
@@ -36,17 +41,21 @@ export function CodeEditor({ className, value = "", error, ...props }: Props) {
         </Button>
       )}
       <div className="relative flex min-w-0 overflow-hidden bg-background focus-within:ring-2 focus-within:ring-inset focus-within:ring-ring/50">
-        <div
-          ref={gutter}
-          aria-hidden
-          className="pointer-events-none absolute inset-y-0 left-0 w-12 overflow-hidden border-r bg-muted/30 py-4 pr-2 text-right font-mono text-xs leading-6 text-muted-foreground select-none"
-        >
-          {Array.from({ length: lines }, (_, i) => (
-            <div key={i} className={i + 1 === location ? "bg-destructive/15 text-destructive" : ""}>
-              {i + 1}
+        {showLineNumbers && (
+          <div data-slot="editor-gutter" className="relative w-12 shrink-0 overflow-hidden border-r bg-muted/40" aria-hidden>
+            <div
+              ref={gutter}
+              aria-hidden
+              className="pointer-events-none absolute inset-x-0 top-0 py-4 pr-2 text-right font-mono text-xs leading-6 text-muted-foreground select-none"
+            >
+              {Array.from({ length: lines }, (_, i) => (
+                <div key={i} className={i + 1 === location ? "bg-destructive/15 text-destructive" : ""}>
+                  {i + 1}
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
+          </div>
+        )}
         <textarea
           {...props}
           ref={editor}
@@ -56,10 +65,10 @@ export function CodeEditor({ className, value = "", error, ...props }: Props) {
           className={cn(
             "w-full min-w-0 resize-y bg-transparent py-4 pr-4 pl-14 font-mono text-sm leading-6 outline-none",
             className,
-            "pl-14!",
+            "w-0! flex-1 px-3! py-4!",
           )}
           onScroll={(event) => {
-            if (gutter.current) gutter.current.scrollTop = event.currentTarget.scrollTop
+            if (gutter.current) gutter.current.style.transform = `translateY(${-event.currentTarget.scrollTop}px)`
             props.onScroll?.(event)
           }}
         />

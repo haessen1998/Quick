@@ -7,6 +7,7 @@
     "test": "tsx --test tests/*.test.ts",
     "test:ui": "node tests/cli-smoke.mjs",
     "test:ui:regressions": "node tests/cli-interaction-regressions.mjs",
+    "test:ui:editors": "node tests/cli-editor-regressions.mjs",
     "test:ui:audit": "node tests/cli-ui-audit.mjs",
     "check:release": "node tests/release-check.mjs",
     "dev": "vite",

@@ -7,6 +7,7 @@ const forbidden = [
   "Run headless workflow",
   "approval cancellation passed",
   "quick-smoke-",
+  "quick-editor-regression-",
   "quick-regression-",
   "Check local clipboard",
   "quick-ui-audit-",

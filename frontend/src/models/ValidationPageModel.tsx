@@ -158,6 +158,7 @@ function useValidationPageModel() {
       setExpression("(?<protocol>https?)://(?<host>[^/\\s]+)")
       setInput("访问 https://github.com/haessen1998/Quick 或 https://go.dev")
       setFlags("gi")
+      setReplacement("$<host>")
     }
   }
 
@@ -179,17 +180,28 @@ function useValidationPageModel() {
   const [highlighted, setHighlighted] = useState<{ value: string; match: boolean }[]>([])
   const previewAbort = useRef<AbortController | null>(null)
   const [previewRunning, setPreviewRunning] = useState(false)
+  const [previewReady, setPreviewReady] = useState(false)
+  const [previewError, setPreviewError] = useState("")
   const cancelPreview = () => {
     previewAbort.current?.abort()
     setPreviewRunning(false)
+    setPreviewReady(false)
+    setPreviewError("预览已取消")
   }
   useEffect(() => {
     const controller = new AbortController()
     previewAbort.current = controller
     setPreviewRunning(false)
     setHighlighted([])
+    setPreviewReady(false)
+    setPreviewError("")
     setReplacementPreview("")
-    if (mode !== "regex" || checkInput({ format: "regex", input, expression, flags })) return () => controller.abort()
+    if (mode !== "regex") return () => controller.abort()
+    const issue = checkInput({ format: "regex", input, expression, flags })
+    if (issue) {
+      setPreviewError(issue)
+      return () => controller.abort()
+    }
     setPreviewRunning(true)
     const timer = setTimeout(() => {
       if (controller.signal.aborted) return
@@ -201,11 +213,12 @@ function useValidationPageModel() {
           if (controller.signal.aborted) return
           setHighlighted(result.segments)
           setReplacementPreview(result.replacement)
+          setPreviewReady(true)
         })
         .catch((error) => {
           if (!controller.signal.aborted && error.name !== "AbortError") {
             setHighlighted([])
-            setReplacementPreview(error.message)
+            setPreviewError(error.message)
           }
         })
         .finally(() => {
@@ -338,6 +351,8 @@ function useValidationPageModel() {
     replacementPreview,
     highlighted,
     previewRunning,
+    previewReady,
+    previewError,
     cancelPreview,
     modes,
   }
