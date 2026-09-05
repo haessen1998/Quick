@@ -1,4 +1,5 @@
-import { loadPersistentConfig, savePersistentConfig } from "@/lib/persistent-config"
+import { appStorage, DEVELOPMENT_PROFILE } from "@/lib/app-storage"
+import { loadPersistentConfig,savePersistentConfig } from "@/lib/persistent-config"
 
 export type AIProviderId = "openai" | "azure" | "anthropic" | "google" | "open-responses" | "compatible"
 
@@ -82,7 +83,7 @@ const DEFAULT_AI_PROFILES: AIProfile[] = [
 ]
 
 const DEFAULT_MCP_SERVERS: MCPServerProfile[] = [
-  createMCPServerProfile({ id: QUICK_APP_MCP_ID, name: "Quick App MCP", url: QUICK_APP_MCP_URL }),
+  createMCPServerProfile({ id: QUICK_APP_MCP_ID, name: "Quick App MCP", enabled: false, url: QUICK_APP_MCP_URL }),
 ]
 
 const LEGACY_AI_DEFAULTS = [
@@ -94,7 +95,7 @@ const LEGACY_AI_DEFAULTS = [
 
 function loadList<T>(key: string, fallback: T[], validate: (value: unknown) => value is T) {
   try {
-    const value = JSON.parse(window.localStorage.getItem(key) ?? "null")
+    const value = JSON.parse(appStorage.getItem(key) ?? "null")
     if (Array.isArray(value)) return value.filter(validate)
   } catch {
     // Fall back to built-in profiles when local data is malformed or unavailable.
@@ -136,7 +137,7 @@ function isMCPServerProfile(value: unknown): value is MCPServerProfile {
 }
 
 export function getInitialAIProfiles() {
-  const profiles = parseAIProfiles(window.localStorage.getItem(AI_STORAGE_KEY)) ?? DEFAULT_AI_PROFILES.map((item) => ({ ...item }))
+  const profiles = parseAIProfiles(appStorage.getItem(AI_STORAGE_KEY)) ?? DEFAULT_AI_PROFILES.map((item) => ({ ...item }))
   const isUntouchedLegacyDefaults = profiles.length === LEGACY_AI_DEFAULTS.length && LEGACY_AI_DEFAULTS.every((legacy) => {
     const profile = profiles.find((item) => item.id === legacy.id)
     return profile?.name === legacy.name && profile.provider === legacy.provider && profile.model === legacy.model
@@ -167,7 +168,8 @@ export function getInitialMCPServers() {
 
 function normalizeMCPServers(profiles: MCPServerProfile[]) {
   return profiles.map((profile) => {
-    const enabled = typeof profile.enabled === "boolean" ? profile.enabled : true
+    const builtIn = profile.id === QUICK_APP_MCP_ID || profile.url === QUICK_APP_MCP_URL
+    const enabled = builtIn && !DEVELOPMENT_PROFILE ? false : typeof profile.enabled === "boolean" ? profile.enabled : true
     const legacyBuiltIn = LEGACY_QUICK_APP_MCP_IDS.has(profile.id)
       || (LEGACY_QUICK_APP_MCP_URLS.has(profile.url) && (profile.name === "Quick App MCP" || profile.name === "Wails 3 应用 MCP"))
     if (legacyBuiltIn) {
@@ -197,8 +199,8 @@ export async function persistMCPServers(profiles: MCPServerProfile[]) {
 
 export function clearLegacySensitiveConnectionCache() {
   for (const key of [AI_STORAGE_KEY, MCP_STORAGE_KEY]) {
-    window.localStorage.removeItem(key)
-    window.localStorage.removeItem(`${key}-backup`)
+    appStorage.removeItem(key)
+    appStorage.removeItem(`${key}-backup`)
   }
 }
 
@@ -239,7 +241,7 @@ function mergeAIProfiles(durable: AIProfile[], local: AIProfile[]) {
 
 function saveLocalList(key: string, value: unknown) {
   const serialized = JSON.stringify(value)
-  const previous = window.localStorage.getItem(key)
-  if (previous && previous !== serialized) window.localStorage.setItem(`${key}-backup`, previous)
-  window.localStorage.setItem(key, serialized)
+  const previous = appStorage.getItem(key)
+  if (previous && previous !== serialized) appStorage.setItem(`${key}-backup`, previous)
+  appStorage.setItem(key, serialized)
 }

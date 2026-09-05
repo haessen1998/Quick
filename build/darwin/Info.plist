@@ -12,11 +12,11 @@
         <key>CFBundleIdentifier</key>
             <string>vip.haessen.quick</string>
         <key>CFBundleVersion</key>
-            <string>0.3.3</string>
+            <string>0.4.0</string>
         <key>CFBundleGetInfoString</key>
             <string>A local-first developer toolbox</string>
         <key>CFBundleShortVersionString</key>
-            <string>0.3.3</string>
+            <string>0.4.0</string>
         <key>CFBundleIconFile</key>
             <string>icons</string>
         <key>CFBundleIconName</key>

@@ -23,6 +23,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/haessen1998/Quick/internal/config"
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"golang.org/x/net/html"
 )
@@ -569,13 +570,13 @@ func quickNavigationIconDirectory() (string, error) {
 		if err != nil {
 			return "", fmt.Errorf("resolve user home: %w", err)
 		}
-		return filepath.Join(home, "AppData", "Roaming", "Quick", "navigation-icons"), nil
+		return filepath.Join(home, "AppData", "Roaming", "Quick", config.ProfileSubdirectory, "navigation-icons"), nil
 	}
 	directory, err := os.UserConfigDir()
 	if err != nil {
 		return "", fmt.Errorf("resolve user config directory: %w", err)
 	}
-	return filepath.Join(directory, "Quick", "navigation-icons"), nil
+	return filepath.Join(directory, "Quick", config.ProfileSubdirectory, "navigation-icons"), nil
 }
 
 func (s *NavigationService) downloadAndCacheSiteIcon(site *url.URL, iconURL string) (string, error) {

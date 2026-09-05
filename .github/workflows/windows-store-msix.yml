@@ -18,10 +18,8 @@ jobs:
     name: Build Microsoft Store package
     runs-on: windows-latest
     env:
-      WAILS_VERSION: v3.0.0-beta.14
-      WAILS_MCP: "1"
-      QUICK_MCP_HOST: "127.0.0.1"
-      QUICK_MCP_PORT: "43122"
+      WAILS_VERSION: v3.0.0-beta.16
+
       # Public package identity assigned to QuickDev (Store ID 9P084NQXKDMQ).
       STORE_IDENTITY_NAME: haessen.QuickDev
       STORE_PUBLISHER: CN=248AC9D1-95E3-40D3-B8EF-1D38B72432B7
@@ -86,10 +84,13 @@ jobs:
         run: npm ci --prefix frontend
 
       - name: Test and build frontend
-        run: npm run build --prefix frontend
+        run: |
+          npm test --prefix frontend
+          npm run build --prefix frontend
+          npm run check:release --prefix frontend
 
       - name: Test Go code
-        run: go test -tags mcp ./...
+        run: go test -tags production ./...
 
       - name: Build Windows executable
         run: wails3 build GOOS=windows

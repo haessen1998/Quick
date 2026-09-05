@@ -1,12 +1,76 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react"
+import { appStorage } from "@/lib/app-storage"
+import { createContext,useCallback,useContext,useEffect,useState,type ReactNode } from "react"
 
-import { loadPersistentConfig, savePersistentConfig } from "@/lib/persistent-config"
+import { loadPersistentConfig,savePersistentConfig } from "@/lib/persistent-config"
 
 export type AppLanguage = "zh-CN" | "en-US"
 
 const STORAGE_KEY = "quick-language"
 
 const ENGLISH: Record<string, string> = {
+  "格式化 JSON Schema": "Format JSON Schema",
+  "JSON Schema 格式化失败，已保留原内容。可请小Q修复。": "Could not format JSON Schema. Original content was kept; ask Quick AI to repair it.",
+  "输入格式检查": "Input format check",
+  "等待输入内容": "Waiting for input",
+  "发送到 YAML 格式化": "Send to YAML formatter",
+  "发送到 XML 格式化": "Send to XML formatter",
+  "调整匹配行列宽": "Resize matching columns",
+  "调整匹配行高度": "Resize matching row height",
+  "调整替换行列宽": "Resize replacement columns",
+  "调整替换行高度": "Resize replacement row height",
+  "调整左右区域": "Resize columns",
+  "调整上下区域": "Resize rows",
+  "生成代码": "Generated code",
+  "停止查找": "Stop matching",
+  "停止替换": "Stop replacement",
+  "已停止查找": "Matching stopped",
+  "已停止替换": "Replacement stopped",
+  "匹配高亮与替换": "Match highlights and replacement",
+  "支持 $1、$<name>，留空删除匹配内容；勾选 g 替换全部。": "Supports $1 and $<name>. Leave empty to delete matches; enable g to replace all.",
+  "输入与查找匹配": "Input and matching",
+  "替换与结果": "Replacement and result",
+  "使用输入组的原始文本和查找表达式。支持 $1、$<name>，留空删除匹配内容；g 控制是否替换全部。": "Uses the original text and expression from the input group. Supports $1 and $<name>; leave empty to delete matches. Enable g to replace all.",
+  "查找表达式": "Search expression",
+  "输入替换内容，例如 bar；留空则删除匹配内容": "Enter replacement text, e.g. bar; leave empty to delete matches",
+  "可直接输入文本，也支持 $1、$<name> 捕获组。勾选 g 替换全部，否则只替换首个匹配。": "Enter plain text or use $1 / $<name> capture groups. Enable g to replace all matches; otherwise only the first is replaced.",
+  "查找匹配": "Find matches",
+  "执行替换": "Replace",
+  "替换结果": "Replacement result",
+
+  "显示编辑器行号": "Show editor line numbers",
+  "适用于所有带行号的输入与输出框，默认开启。": "Applies to all code input and output fields. Enabled by default.",
+  "允许小Q免确认执行所选文件的批量重命名与撤销；关闭后逐次确认。第三方 MCP 文件操作由 MCP 权限单独控制。": "Let Quick AI rename selected files and undo renames without confirmation. When off, each action requires approval. Third-party MCP file operations use the separate MCP permission.",
+  "粘贴后自动格式化": "Format automatically on paste",
+  "JSON Schema 格式化失败，已保留粘贴内容。可请小Q修复。": "Could not format JSON Schema. The pasted text was kept; you can ask Quick AI to repair it.",
+  "替换模板：$<host> 引用名为 host 的捕获组，例如 (?<host>...)。": "Replacement: $<host> references the named capture group host, such as (?<host>...).",
+  "替换结果预览": "Replacement preview",
+  "复制替换结果": "Copy replacement result",
+  "编辑表达式、数据或替换模板后自动预览。": "Edit the expression, input or replacement template to preview.",
+  "匹配高亮": "Match highlights",
+  "正在预览…": "Previewing…",
+  "替换结果为空": "The replacement result is empty",
+  "预览已取消": "Preview cancelled",
+
+  "输入格式提醒": "Input format reminder",
+  "已切换工具，原有输入仍保留。请确认数据和表达式适用于当前工具，或点击载入示例。": "The tool has changed and your input was kept. Check the data and expression, or load this tool's sample.",
+  "内容较大，已跳过自动检查；执行时仍会校验。": "Automatic checking was skipped for this large input. It will still be validated when run.",
+  "操作已完成，结果保留在工具页面。": "Operation completed. Results remain on the tool page.",
+  "操作失败，请在工具页面查看错误。": "Operation failed. See the tool page for details.",
+
+  "结果仅保留在当前应用会话，可继续交给其他工具。": "Results stay in this session and can be sent to another tool.",
+  "执行工具后显示记录": "Run a tool to see its results here",
+  "查看工具": "Open tool",
+  "发送到 JSON 格式化": "Send to JSON formatter",
+  "页面加载失败，文档数据仍保留。": "This page could not load. Your document is still available.",
+  "重试": "Retry",
+
+  "搜索工具": "Search tools", "执行记录": "Run history", "清空记录": "Clear history", "定位错误：第": "Go to error: line ", "行": "", "文档已关闭": "Document closed",
+  "按名称或操作搜索；打开工具会保留当前文档。": "Search by name or operation. Opening a tool preserves the current document.",
+  "没有匹配的工具": "No matching tools", "个动作已就绪，无需打开页面": "actions ready without opening pages",
+  "可供小Q读取的页面上下文": "Page context available to Quick AI",
+  "仅在小Q调用上下文工具时发送；密钥等字段已过滤。自由文本仍可能含私人内容，请先检查。": "Sent only when Quick AI calls the context tool. Secret fields are filtered, but free text may still contain private content. Review it first.",
+  "· 仅允许下面这一个操作。": "· Applies only to this operation.",
+ "新建文档": "New document", "工作文档": "Documents", "关闭": "Close", "切页保留 · 关闭应用后清除": "Kept across pages · cleared on exit", "允许此次操作？": "Allow this operation?", "允许本次": "Allow once", "载入示例": "Load sample", "发送 HTTP 请求": "Send HTTP requests", "修改文件": "Modify files", "关闭进程": "Terminate processes", "修改站点导航": "Edit navigation sites", "调用第三方 MCP": "Call third-party MCP", "取消预览": "Cancel preview",
   "首页": "Home",
   "AI 对话": "AI Chat",
   "MCP 测试": "MCP Inspector",
@@ -206,7 +270,7 @@ const ENGLISH: Record<string, string> = {
   "删除": "Delete",
   "编辑": "Edit",
   "保存": "Save",
-  "关闭": "Close",
+
   "刷新": "Refresh",
   "预览": "Preview",
   "连接": "Connect",
@@ -646,73 +710,22 @@ const DYNAMIC_ENGLISH: Array<[RegExp, (...values: string[]) => string]> = [
   [/^网络代理：(.+)$/, (proxy) => `Network proxy: ${proxy}`],
 ]
 
-const originalText = new WeakMap<Text, string>()
-const originalAttributes = new WeakMap<Element, Map<string, string>>()
-const LOCALIZED_ATTRIBUTES = ["aria-label", "placeholder", "title"] as const
+let renderedLanguage: AppLanguage = "zh-CN"
+export function uiText(value: string): string { return translateUiText(value, renderedLanguage) }
 
 export function translateUiText(value: string, language: AppLanguage): string {
   if (language === "zh-CN" || !value) return value
+  if (/^文档 \d+$/.test(value)) return value.replace("文档", "Document")
   const leading = value.match(/^\s*/)?.[0] ?? ""
   const trailing = value.match(/\s*$/)?.[0] ?? ""
   const content = value.slice(leading.length, value.length - trailing.length)
   const exact = ENGLISH[content]
-  if (exact) return `${leading}${exact}${trailing}`
+  if (exact !== undefined) return `${leading}${exact}${trailing}`
   for (const [pattern, replacement] of DYNAMIC_ENGLISH) {
     const match = content.match(pattern)
     if (match) return `${leading}${replacement(...match.slice(1))}${trailing}`
   }
   return value
-}
-
-function shouldSkip(node: Node) {
-  const parent = node instanceof Element ? node : node.parentElement
-  return Boolean(parent?.closest("script, style, pre, code, textarea, [contenteditable='true'], [data-i18n-skip]"))
-}
-
-function localizeNode(root: Node, language: AppLanguage) {
-  const localizeText = (node: Text) => {
-    if (shouldSkip(node)) return
-    if (language === "zh-CN") {
-      const original = originalText.get(node)
-      if (original !== undefined && node.data !== original) node.data = original
-      return
-    }
-    if (/[\u3400-\u9fff]/.test(node.data)) originalText.set(node, node.data)
-    const source = originalText.get(node) ?? node.data
-    const translated = translateUiText(source, language)
-    if (translated !== node.data) node.data = translated
-  }
-  const localizeElement = (element: Element) => {
-    if (element.closest("[data-i18n-skip]")) return
-    let originals = originalAttributes.get(element)
-    for (const attribute of LOCALIZED_ATTRIBUTES) {
-      const current = element.getAttribute(attribute)
-      if (current === null) continue
-      if (language === "zh-CN") {
-        const original = originals?.get(attribute)
-        if (original !== undefined && current !== original) element.setAttribute(attribute, original)
-        continue
-      }
-      if (/[\u3400-\u9fff]/.test(current)) {
-        originals ??= new Map<string, string>()
-        originals.set(attribute, current)
-        originalAttributes.set(element, originals)
-      }
-      const source = originals?.get(attribute) ?? current
-      const translated = translateUiText(source, language)
-      if (translated !== current) element.setAttribute(attribute, translated)
-    }
-  }
-
-  if (root instanceof Text) localizeText(root)
-  if (root instanceof Element) localizeElement(root)
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT)
-  let current = walker.nextNode()
-  while (current) {
-    if (current instanceof Text) localizeText(current)
-    else if (current instanceof Element) localizeElement(current)
-    current = walker.nextNode()
-  }
 }
 
 type LanguageContextValue = {
@@ -724,20 +737,19 @@ type LanguageContextValue = {
 const LanguageContext = createContext<LanguageContextValue | null>(null)
 
 function getInitialLanguage(): AppLanguage {
-  return window.localStorage.getItem(STORAGE_KEY) === "en-US" ? "en-US" : "zh-CN"
+  return appStorage.getItem(STORAGE_KEY) === "en-US" ? "en-US" : "zh-CN"
 }
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
   const [language, setLanguageState] = useState<AppLanguage>(getInitialLanguage)
-  const languageRef = useRef(language)
-  languageRef.current = language
+  renderedLanguage = language
 
   useEffect(() => {
     let cancelled = false
     void loadPersistentConfig("app-language").then((stored) => {
       const saved = JSON.parse(stored || "null")
       if (!cancelled && (saved === "zh-CN" || saved === "en-US")) {
-        window.localStorage.setItem(STORAGE_KEY, saved)
+        appStorage.setItem(STORAGE_KEY, saved)
         setLanguageState(saved)
       }
     }).catch(() => undefined)
@@ -746,20 +758,11 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     document.documentElement.lang = language
-    localizeNode(document.body, language)
-    const observer = new MutationObserver((mutations) => {
-      for (const mutation of mutations) {
-        if (mutation.type === "characterData") localizeNode(mutation.target, languageRef.current)
-        else if (mutation.type === "attributes") localizeNode(mutation.target, languageRef.current)
-        else mutation.addedNodes.forEach((node) => localizeNode(node, languageRef.current))
-      }
-    })
-    observer.observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: [...LOCALIZED_ATTRIBUTES] })
-    return () => observer.disconnect()
+
   }, [language])
 
   const setLanguage = useCallback((nextLanguage: AppLanguage) => {
-    window.localStorage.setItem(STORAGE_KEY, nextLanguage)
+    appStorage.setItem(STORAGE_KEY, nextLanguage)
     setLanguageState(nextLanguage)
     void savePersistentConfig("app-language", nextLanguage).catch((error) => console.warn("Unable to persist app language", error))
   }, [])

@@ -47,7 +47,7 @@ func main() {
 	configService := config.NewConfigService()
 
 	app := application.New(application.Options{
-		Name:        "Quick",
+		Name:        config.ApplicationName,
 		Description: "A local-first cross-platform developer toolkit",
 		Services: []application.Service{
 			application.NewService(&quickai.AIProxyService{}),
@@ -69,7 +69,7 @@ func main() {
 	app.RegisterService(application.NewService(navigation.NewNavigationService(configService, app)))
 
 	window := app.Window.NewWithOptions(application.WebviewWindowOptions{
-		Title:          "Quick",
+		Title:          config.ApplicationName,
 		EnableFileDrop: true,
 		// Window sized to the golden ratio (1000 / 618 ≈ 1.618).
 		Width:  1000,

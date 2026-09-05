@@ -1,3 +1,4 @@
+import { appStorage } from "@/lib/app-storage"
 import { loadPersistentConfig, savePersistentConfig } from "@/lib/persistent-config"
 
 export type NavigationCardSize = "1x1" | "2x2" | "4x2"
@@ -57,9 +58,9 @@ function removeLegacyTemplateSites(groups: NavigationGroup[]) {
 
 function migrateLocalGroups(groups: NavigationGroup[]) {
   if (typeof window === "undefined") return groups
-  const version = Number(window.localStorage.getItem(SCHEMA_VERSION_KEY) ?? 0)
+  const version = Number(appStorage.getItem(SCHEMA_VERSION_KEY) ?? 0)
   if (version >= CURRENT_SCHEMA_VERSION) return groups
-  window.localStorage.setItem(SCHEMA_VERSION_KEY, String(CURRENT_SCHEMA_VERSION))
+  appStorage.setItem(SCHEMA_VERSION_KEY, String(CURRENT_SCHEMA_VERSION))
   migrateDurableGroups = true
   return addOtherGroup(removeLegacyTemplateSites(groups))
 }
@@ -78,7 +79,7 @@ export function normalizeNavigationURL(value: string) {
 
 export function loadNavigationGroups(): NavigationGroup[] {
   if (typeof window === "undefined") return defaultGroups
-  return migrateLocalGroups(parseNavigationGroups(window.localStorage.getItem(STORAGE_KEY)) ?? defaultGroups)
+  return migrateLocalGroups(parseNavigationGroups(appStorage.getItem(STORAGE_KEY)) ?? defaultGroups)
 }
 
 function parseNavigationGroups(raw: string | null): NavigationGroup[] | null {
@@ -109,9 +110,9 @@ export function parseNavigationGroupsPayload(value: unknown): NavigationGroup[] 
 
 export function saveNavigationGroups(groups: NavigationGroup[]) {
   const serialized = JSON.stringify(groups)
-  const previous = window.localStorage.getItem(STORAGE_KEY)
-  if (previous && previous !== serialized) window.localStorage.setItem(`${STORAGE_KEY}-backup`, previous)
-  window.localStorage.setItem(STORAGE_KEY, serialized)
+  const previous = appStorage.getItem(STORAGE_KEY)
+  if (previous && previous !== serialized) appStorage.setItem(`${STORAGE_KEY}-backup`, previous)
+  appStorage.setItem(STORAGE_KEY, serialized)
 }
 
 export function publishNavigationGroups(groups: NavigationGroup[]) {

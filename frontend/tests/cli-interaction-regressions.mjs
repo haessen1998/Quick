@@ -1,0 +1,163 @@
+// Independent, ephemeral CLI browser. Never import test fixtures from application code.
+import { spawnSync } from "node:child_process"
+import { createRequire } from "node:module"
+import { fileURLToPath } from "node:url"
+import path from "node:path"
+import fs from "node:fs"
+
+const require = createRequire(import.meta.url)
+const cli = require.resolve("@playwright/cli/playwright-cli.js")
+const root = fileURLToPath(new URL("../../", import.meta.url))
+const output = path.join(root, "output/playwright")
+fs.mkdirSync(output, { recursive: true })
+const session = `quick-regression-${process.pid}`
+function run(...args) {
+  const result = spawnSync(process.execPath, [cli, `-s=${session}`, ...args], { cwd: root, encoding: "utf8", env: process.env })
+  fs.appendFileSync(path.join(output, "interaction-regressions.log"), result.stdout + result.stderr)
+  if (result.status !== 0 || result.stdout.includes("### Error")) throw new Error(result.stderr || result.stdout)
+  return result.stdout
+}
+function code(callback) {
+  return run("run-code", callback.toString())
+}
+try {
+  run("open", process.env.QUICK_UI_URL || "http://127.0.0.1:43121")
+  run("resize", "1000", "618")
+  run("snapshot")
+  code(async (page) => {
+    await page.getByRole("button", { name: "校验工具", exact: true }).click()
+    await page.getByRole("heading", { name: "校验工具", exact: true }).waitFor()
+    return await page.locator("body").ariaSnapshot()
+  })
+  code(async (page) => {
+    if (await page.getByRole("button", { name: "取消预览", exact: true }).count()) throw Error("Non-regex mode has preview controls")
+    await page.getByRole("button", { name: "执行校验", exact: true }).click()
+    await page.getByRole("button", { name: "执行记录", exact: true }).click()
+    await page.getByRole("dialog").getByText('[\n  "Go"\n]', { exact: true }).waitFor()
+    if ((await page.getByRole("dialog").locator("article").count()) !== 1)
+      throw Error("Manual validation must create exactly one history entry")
+    await page.keyboard.press("Escape")
+    await page.getByRole("button", { name: "XPath", exact: true }).click()
+    await page.getByText("输入格式提醒", { exact: true }).waitFor()
+    await page.locator('[data-slot="input-preflight"]').filter({ hasText: "XML" }).waitFor()
+    if (!(await page.getByRole("textbox", { name: "待校验数据", exact: true }).inputValue()).startsWith('{"store"'))
+      throw Error("Switch overwrote input")
+    await page.screenshot({ animations: "disabled", path: "output/playwright/validation-before-run.png" })
+    await page.getByRole("button", { name: "载入示例", exact: true }).click()
+    await page.locator('[data-slot="input-preflight"]').waitFor({ state: "hidden" })
+    await page.getByRole("button", { name: "正则表达式", exact: true }).click()
+    return await page.locator("body").ariaSnapshot()
+  })
+  code(async (page) => {
+    for (const name of ["载入示例", "查找匹配", "执行替换"]) {
+      const bounds = await page.getByRole("button", { name, exact: true }).boundingBox()
+      if (!bounds || bounds.width > 160 || bounds.height > 40) throw Error("Validation toolbar button stretched")
+    }
+    await page.getByRole("textbox", { name: "表达式", exact: true }).fill("[")
+    await page.locator('[data-slot="input-preflight"]').filter({ hasText: "regex:" }).waitFor()
+    if (await page.getByRole("button", { name: "取消预览", exact: true }).count()) throw Error("Separate preview cancel remains")
+    await page.getByRole("button", { name: "执行记录", exact: true }).click()
+    if ((await page.getByRole("dialog").locator("article").count()) !== 1) throw Error("Live previews polluted history")
+    await page.keyboard.press("Escape")
+    await page.getByRole("textbox", { name: "待校验数据", exact: true }).fill("a".repeat(30000) + "!")
+    await page.getByRole("textbox", { name: "表达式", exact: true }).fill("(a+)+$")
+    for (const [start, stop, other, notice] of [["查找匹配", "停止查找", "执行替换", "已停止查找"], ["执行替换", "停止替换", "查找匹配", "已停止替换"]]) {
+      const oldMatches = await page.locator('pre[aria-label="匹配结果"]').textContent()
+      const oldReplacement = await page.locator('pre[aria-label="替换结果"]').textContent()
+      await page.getByRole("button", { name: start, exact: true }).click()
+      if (!(await page.getByRole("button", { name: other, exact: true }).isDisabled())) throw Error("Conflicting action enabled")
+      await page.getByRole("button", { name: stop, exact: true }).click()
+      await page.getByRole("status").filter({ hasText: notice }).waitFor()
+      await page.getByRole("button", { name: start, exact: true }).waitFor()
+      if (await page.locator('pre[aria-label="匹配结果"]').textContent() !== oldMatches || await page.locator('pre[aria-label="替换结果"]').textContent() !== oldReplacement) throw Error("Cancellation overwrote results")
+    }
+    await page.getByRole("button", { name: "载入示例", exact: true }).click()
+    await page.getByRole("button", { name: "查找匹配", exact: true }).click()
+    await page.waitForFunction(() => document.querySelector('pre[aria-label="匹配结果"]')?.textContent.includes('https://github.com'))
+    await page.getByRole("button", { name: "执行替换", exact: true }).click()
+    await page.waitForFunction(() => document.querySelector('pre[aria-label="替换结果"]')?.textContent.includes('访问 github.com'))
+  })
+  run("resize", "640", "520")
+  code(async (page) => {
+    for (const name of ["载入示例", "查找匹配", "执行替换"]) {
+      const bounds = await page.getByRole("button", { name, exact: true }).boundingBox()
+      if (!bounds || bounds.width > 160 || bounds.x + bounds.width > 640) throw Error("Narrow toolbar overflow")
+    }
+    await page.getByRole("button", { name: "执行替换", exact: true }).scrollIntoViewIfNeeded()
+    await page.screenshot({ animations: "disabled", path: "output/playwright/validation-toolbar-narrow.png" })
+  })
+  run("resize", "1000", "618")
+  code(async (page) => {
+    await page.getByRole("button", { name: "字符串格式化", exact: true }).click()
+    await page.getByRole("button", { name: "新建文档", exact: true }).click()
+    await page.getByRole("tab", { name: "文档 1", exact: true }).click()
+    await page.getByRole("button", { name: "关闭 文档 1", exact: true }).click()
+    await page.getByRole("button", { name: "新建文档", exact: true }).click()
+    await page.getByRole("tab", { name: "文档 3", exact: true }).waitFor()
+    if ((await page.getByRole("tab", { name: "文档 2", exact: true }).count()) !== 1) throw Error("Duplicate document number")
+    const inputBox = page.getByRole("textbox", {name:"输入",exact:true})
+    const relativeTop = () => inputBox.evaluate(el => el.getBoundingClientRect().top - el.closest("section").getBoundingClientRect().top)
+    const before = await relativeTop()
+    await inputBox.fill("<root />")
+    await page.getByRole("button", {name:"输入格式提醒",exact:true}).click()
+    await page.getByRole("status").filter({hasText:"json:"}).waitFor()
+    if (Math.abs(await relativeTop() - before)>1) throw Error("Warning expanded formatter layout")
+    await page.keyboard.press("Escape")
+    await page.getByRole("button", {name:"载入示例",exact:true}).click()
+    await page.getByRole("button", {name:"输入格式提醒",exact:true}).waitFor({state:"hidden"})
+    if (Math.abs(await relativeTop() - before)>1) throw Error("Loading sample shifted formatter layout")
+    await page.screenshot({path:"output/playwright/formatter-stable-layout.png"})
+    await page.getByRole("combobox", { name: "选择工具", exact: true }).selectOption("xml-format")
+    await page.getByRole("button", {name:"输入格式提醒",exact:true}).click()
+    await page.getByText("已切换工具，原有输入仍保留。请确认数据和表达式适用于当前工具，或点击载入示例。", { exact: true }).waitFor()
+    await page.keyboard.press("Escape")
+    await page.getByRole("button", { name: "数据转换", exact: true }).click()
+    return await page.locator("body").ariaSnapshot()
+  })
+  code(async (page) => {
+    await page.getByRole("textbox", { name: "输入", exact: true }).fill("not-json")
+    await page.locator('[data-slot="input-preflight"]').filter({ hasText: "json:" }).waitFor()
+    await page.screenshot({ animations: "disabled", path: "output/playwright/conversion-before-run.png" })
+    await page.getByRole("button", {name:/^文本与行/}).click()
+    return await page.locator("body").ariaSnapshot()
+  })
+  code(async page => {
+    const input = page.getByRole("textbox", {name:"输入",exact:true})
+    await page.getByRole("button", {name:"载入示例",exact:true}).click()
+    await page.locator('[data-slot="input-preflight"]').waitFor({state:"hidden"})
+    await page.getByRole("radio", {name:"行去重",exact:true}).check()
+    if (await input.inputValue() !== "apple\nbanana\napple\nQuick\nbanana") throw Error("Target did not update untouched sample")
+    if (await page.locator('[data-slot="input-preflight"]').count()) throw Error("Text target switch incorrectly warned about format")
+    await page.getByRole("button", {name:"执行转换",exact:true}).click()
+    await page.waitForFunction(() => document.querySelector('textarea[aria-label="输出"]').value === "apple\nbanana\nQuick")
+    await page.getByRole("radio", {name:"Tab 转空格",exact:true}).check()
+    if (!(await input.inputValue()).includes("\t")) throw Error("Tab sample missing tabs")
+    await page.getByRole("radio", {name:"Unicode NFC",exact:true}).check()
+    if (!(await input.inputValue()).includes("e\u0301")) throw Error("NFC sample already normalized")
+    await input.fill("my custom text")
+    await page.getByRole("radio", {name:"升序排列",exact:true}).check()
+    if (await input.inputValue() !== "my custom text") throw Error("Target overwrote custom input")
+    await page.getByRole("button", {name:"载入示例",exact:true}).click()
+    if (await input.inputValue() !== "item10\nitem2\nitem1") throw Error("Wrong sorting sample")
+    await page.getByRole("radio", {name:"逐行去空格",exact:true}).check()
+    const originalSample = await input.inputValue()
+    await page.getByRole("button", {name:/^大小写与命名/}).click()
+    await page.getByRole("button", {name:/^文本与行/}).click()
+    await page.locator('[data-slot="input-preflight"]').waitFor()
+    await page.getByRole("button", {name:"载入示例",exact:true}).click()
+    await page.locator('[data-slot="input-preflight"]').waitFor({state:"hidden"})
+    if (await input.inputValue() !== originalSample) throw Error("Same-sample acknowledgement changed text")
+    await page.screenshot({path:"output/playwright/text-operation-samples.png"})
+
+  })
+  run("goto", new URL("/tests/harness.html", process.env.QUICK_UI_URL || "http://127.0.0.1:43121").href)
+  run("snapshot")
+  code(async (page) => {
+    await page.context().grantPermissions(["clipboard-read", "clipboard-write"])
+    await page.getByRole("button", { name: "Check local clipboard", exact: true }).click()
+    await page.getByRole("status").filter({ hasText: "local clipboard suppression passed" }).waitFor()
+  })
+  console.log("PASS: manual validation history, find/replace stop buttons and restart, preflight across three tools, unique document names.")
+} finally {
+  run("close")
+}

@@ -18,10 +18,8 @@ jobs:
     name: Build, notarize, and release macOS DMG
     runs-on: macos-15
     env:
-      WAILS_VERSION: v3.0.0-beta.14
-      WAILS_MCP: "1"
-      QUICK_MCP_HOST: "127.0.0.1"
-      QUICK_MCP_PORT: "43122"
+      WAILS_VERSION: v3.0.0-beta.16
+
       SIGN_IDENTITY: "Developer ID Application: Haessen Yu (FRR4S244RD)"
       KEYCHAIN_PROFILE: quick-notary
 
@@ -96,10 +94,13 @@ jobs:
         run: npm ci --prefix frontend
 
       - name: Test frontend
-        run: npm run build --prefix frontend
+        run: |
+          npm test --prefix frontend
+          npm run build --prefix frontend
+          npm run check:release --prefix frontend
 
       - name: Test Go code
-        run: go test -tags mcp ./...
+        run: go test -tags production ./...
 
       - name: Import Developer ID and configure notarization
         shell: bash

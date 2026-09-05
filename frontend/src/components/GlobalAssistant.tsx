@@ -1,39 +1,31 @@
-import { type CSSProperties, type FormEvent, type KeyboardEvent, type PointerEvent as ReactPointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { useChat } from "@ai-sdk/react"
-import { ArrowDown, Bot, LoaderCircle, RefreshCw, Send, Settings, ShieldCheck, Square, Trash2, Wrench } from "lucide-react"
-import { DirectChatTransport, ToolLoopAgent, isToolUIPart, jsonSchema, stepCountIs, tool, type UIMessage } from "ai"
-import * as NavigationService from "@/../bindings/github.com/haessen1998/Quick/internal/navigation/navigationservice"
+import { AssistantContextPreview } from "@/components/AssistantContextPreview"
+import { appStorage, DEVELOPMENT_PROFILE } from "@/lib/app-storage"
+import { shouldSendOnEnter } from "@/lib/chat-input"
+import { useAINetwork,useConversationChat } from "@/lib/chat-session"
+import { uiText } from "@/lib/i18n"
+import { CONVERSION_MODULES,CRYPTO_OPERATIONS,FILE_RENAME_ACTIONS,FILE_RENAME_OPERATIONS,FORMATTER_OPERATIONS,FRONTEND_OPERATIONS,HTTP_METHODS,NAVIGATION_ACTIONS,NETWORK_OPERATIONS,SIDEBAR_ACTIONS,TIME_OPERATIONS,TOOL_INPUT_SCHEMAS,VALIDATION_ACTIONS,VALIDATION_MODES } from "@/lib/tool-catalog"
+import { redactToolData } from "@/lib/tool-policy"
+import { findToolRun } from "@/lib/tool-results"
+import { runWorkflow,type WorkflowStep } from "@/lib/workflow"
+import { useDraftState } from "@/lib/workspace-store"
+import { DirectChatTransport,ToolLoopAgent,isToolUIPart,jsonSchema,stepCountIs,tool,type UIMessage } from "ai"
+import { ArrowDown,Bot,LoaderCircle,RefreshCw,Send,Settings,Square,Trash2,Wrench } from "lucide-react"
+import { useCallback,useEffect,useMemo,useRef,useState,type CSSProperties,type FormEvent,type KeyboardEvent,type PointerEvent as ReactPointerEvent } from "react"
 
 import { AssistantMessageFlow } from "@/components/AssistantMessageFlow"
 import { MarkdownRenderer } from "@/components/MarkdownRenderer"
 import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { createLanguageModel, isAIProfileReady, type ChatSettings } from "@/lib/ai-provider"
-import { createNativeAIFetch } from "@/lib/ai-native-proxy"
-import { buildQuickAssistantInstructions, buildQuickAssistantStarters } from "@/lib/assistant-manifest"
-import { useLanguage } from "@/lib/i18n"
+import { createLanguageModel,isAIProfileReady,type ChatSettings } from "@/lib/ai-provider"
 import { useAssistantCapabilityRegistry } from "@/lib/assistant-capabilities"
-import { PAGE_IDS, PAGE_LABELS, type PageId } from "@/lib/pages"
-import { parseNavigationGroupsPayload, publishNavigationGroups } from "@/lib/navigation-sites"
+import { buildQuickAssistantInstructions,buildQuickAssistantStarters } from "@/lib/assistant-manifest"
+import { useLanguage } from "@/lib/i18n"
+import { PAGE_IDS,PAGE_LABELS,type PageId } from "@/lib/pages"
 import type { ProxySettings } from "@/lib/proxy"
-import { QUICK_APP_MCP_ID, QUICK_APP_MCP_URL, type AIProfile, type MCPServerProfile } from "@/lib/saved-connections"
-import { DEFAULT_SIDEBAR_ORDER, isSidebarMovablePage, moveSidebarPage, normalizeSidebarOrder } from "@/lib/sidebar-order"
+import { QUICK_APP_MCP_ID,QUICK_APP_MCP_URL,type AIProfile,type MCPServerProfile } from "@/lib/saved-connections"
+import { DEFAULT_SIDEBAR_ORDER,isSidebarMovablePage,moveSidebarPage,normalizeSidebarOrder } from "@/lib/sidebar-order"
 import { useStickToBottom } from "@/lib/use-stick-to-bottom"
 import { cn } from "@/lib/utils"
 
-const FORMATTER_OPERATIONS = ["json-format", "json-minify", "yaml-format", "xml-format", "xml-minify", "html-format", "html-minify", "css-format", "css-minify", "javascript-format", "javascript-minify"] as const
-const HTTP_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"] as const
-const CONVERSION_MODULES = ["text", "naming", "standard", "encoding", "bytes", "code", "radix"] as const
-const TIME_OPERATIONS = ["timestamp-to-date", "date-to-timestamp", "timezone", "difference", "duration", "parse-duration", "generate", "cron"] as const
-const VALIDATION_MODES = ["jsonpath", "json-schema", "xpath", "selector", "glob", "regex"] as const
-const VALIDATION_ACTIONS = ["run", "test-cases", "show-code"] as const
-const CRYPTO_OPERATIONS = ["hash", "hmac", "aes-encrypt", "aes-decrypt", "rsa-generate-encryption", "rsa-generate-signing", "rsa-encrypt", "rsa-decrypt", "rsa-sign", "rsa-verify", "jwt-parse", "jwt-sign", "jwt-verify"] as const
-const NETWORK_OPERATIONS = ["ping", "dns", "port", "cidr", "url-inspect", "http-prepare", "http-execute", "curl-to-http", "http-to-curl", "process-search", "process-terminate"] as const
-const FILE_RENAME_ACTIONS = ["prepare", "execute", "undo", "inspect"] as const
-const FRONTEND_OPERATIONS = ["color", "contrast", "gradient", "units", "svg-data-url"] as const
-const FILE_RENAME_OPERATIONS = ["reset", "replace", "prefix", "suffix"] as const
-const NAVIGATION_ACTIONS = ["list", "open", "prepare", "add", "update", "move", "batch-update", "delete"] as const
-const SIDEBAR_ACTIONS = ["list", "move"] as const
 const ASSISTANT_PANEL_WIDTH_KEY = "quick-assistant-panel-width"
 const DEFAULT_ASSISTANT_PANEL_WIDTH = 336
 const MIN_ASSISTANT_PANEL_WIDTH = 288
@@ -49,18 +41,8 @@ function clampAssistantPanelWidth(width: number) {
 
 function getInitialAssistantPanelWidth() {
   if (typeof window === "undefined") return DEFAULT_ASSISTANT_PANEL_WIDTH
-  const savedWidth = Number(window.localStorage.getItem(ASSISTANT_PANEL_WIDTH_KEY))
+  const savedWidth = Number(appStorage.getItem(ASSISTANT_PANEL_WIDTH_KEY))
   return clampAssistantPanelWidth(Number.isFinite(savedWidth) && savedWidth > 0 ? savedWidth : DEFAULT_ASSISTANT_PANEL_WIDTH)
-}
-
-type MCPCallRequest = {
-  server: MCPServerProfile
-  toolName: string
-  args: Record<string, unknown>
-}
-
-type PendingMCPCall = MCPCallRequest & {
-  resolve: (approved: boolean) => void
 }
 
 function messageText(message: UIMessage) {
@@ -71,12 +53,12 @@ function messageText(message: UIMessage) {
 }
 
 function isQuickAppMCP(server: MCPServerProfile) {
-  return server.id === QUICK_APP_MCP_ID || server.url === QUICK_APP_MCP_URL
+  return DEVELOPMENT_PROFILE && server.id === QUICK_APP_MCP_ID && server.url === QUICK_APP_MCP_URL && server.transport !== "stdio"
 }
 
 function isAutomaticMCPCall(server: MCPServerProfile, toolName: string, args: Record<string, unknown>) {
   if (!isQuickAppMCP(server)) return false
-  if (["app_info", "windows_list", "dom_html", "dom_query"].includes(toolName)) return true
+  if (["app_info", "windows_list"].includes(toolName)) return true
   if (toolName !== "call_bound_method" || typeof args.name !== "string") return false
   return [
     "github.com/haessen1998/Quick/internal/network.NetworkService.FindProcesses",
@@ -87,16 +69,16 @@ function isAutomaticMCPCall(server: MCPServerProfile, toolName: string, args: Re
   ].includes(args.name)
 }
 
-function AssistantSession({ profile, activePage, onNavigate, sidebarOrder, onSidebarOrderChange, mcpServers, proxy, autoApproveOperations, confirmMCPCall, open }: { profile: AIProfile; activePage: PageId; onNavigate: (page: PageId) => void; sidebarOrder: PageId[]; onSidebarOrderChange: (order: PageId[]) => void; mcpServers: MCPServerProfile[]; proxy: ProxySettings; autoApproveOperations: boolean; confirmMCPCall: (request: MCPCallRequest) => Promise<boolean>; open: boolean }) {
+function AssistantSession({ profile, activePage, onNavigate, sidebarOrder, onSidebarOrderChange, mcpServers, proxy, autoApproveOperations, open }: { profile: AIProfile; activePage: PageId; onNavigate: (page: PageId) => void; sidebarOrder: PageId[]; onSidebarOrderChange: (order: PageId[]) => void; mcpServers: MCPServerProfile[]; proxy: ProxySettings; autoApproveOperations: boolean; open: boolean }) {
   const { language } = useLanguage()
   const registry = useAssistantCapabilityRegistry()
+  const executionAbort = useRef(new AbortController())
   const activePageRef = useRef(activePage)
   const navigateRef = useRef(onNavigate)
   activePageRef.current = activePage
   navigateRef.current = onNavigate
   const settings: ChatSettings = profile
-  const aiNetwork = useMemo(() => createNativeAIFetch(proxy), [proxy.mode, proxy.url])
-  useEffect(() => () => { void aiNetwork.close() }, [aiNetwork])
+  const aiNetwork = useAINetwork(proxy)
 
   const transport = useMemo(() => {
     const navigate = (page: PageId) => {
@@ -104,8 +86,7 @@ function AssistantSession({ profile, activePage, onNavigate, sidebarOrder, onSid
       return { success: true, page, label: PAGE_LABELS[page] }
     }
     const usePage = (page: PageId, action: string, input: Record<string, unknown>) => {
-      navigate(page)
-      return registry.execute(page, action, input)
+      return registry.execute(page, action, input, {signal: executionAbort.current.signal})
     }
     const findMCPServer = (name: string) => {
       const normalized = name.trim().toLocaleLowerCase()
@@ -137,51 +118,33 @@ function AssistantSession({ profile, activePage, onNavigate, sidebarOrder, onSid
       onSidebarOrderChange(next)
       return { success: true, executed: true, moved: input.page, order: describe(next) }
     }
-    const useNavigationService = async (action: typeof NAVIGATION_ACTIONS[number], input: Record<string, unknown>) => {
-      if (action === "list") {
-        try {
-          const groups = parseNavigationGroupsPayload(await NavigationService.GetNavigationGroups())
-          if (!groups) throw new Error("Go Service 返回了无效的导航数据")
-          publishNavigationGroups(groups)
-          return { success: true, source: "go-service", groups: groups.map((group) => ({ name: group.name, lists: [...new Set(group.items.map((item) => item.list).filter(Boolean))], sites: group.items.map(({ id, title, url, description, list, size }) => ({ id, title, url, description, list, size })) })) }
-        } catch {
-          return usePage("navigation", "list", input)
-        }
-      }
-      if (action !== "update" && action !== "move" && action !== "batch-update") return usePage("navigation", action, { ...input, operationAutoApproved: autoApproveOperations })
-      if (!autoApproveOperations) {
-        if (action === "batch-update") return { success: false, executed: false, requiresConfirmation: true, message: "批量修改会写入长期配置，请先在设置中开启操作自动审核" }
-        return usePage("navigation", action, { ...input, operationAutoApproved: false })
-      }
-      const has = (key: string) => Object.prototype.hasOwnProperty.call(input, key)
-      const names = Array.isArray(input.names) ? input.names.map(String).filter((value) => value.trim()) : []
-      if (typeof input.name === "string" && input.name.trim()) names.push(input.name)
-      const listKey = has("targetList") ? "targetList" : "list"
-      const result = await NavigationService.BatchUpdateSites({
-        ids: Array.isArray(input.ids) ? input.ids.map(String) : undefined,
-        titles: names.length ? names : undefined,
-        sourceGroup: String(input.sourceGroup ?? ""),
-        sourceList: String(input.sourceList ?? ""),
-        matchSourceList: has("sourceList") || Boolean(input.matchSourceList),
-        targetGroup: String(input.targetGroup ?? input.group ?? ""),
-        targetList: String(input[listKey] ?? ""),
-        setTargetList: has(listKey),
-        title: String(input.title ?? ""),
-        setTitle: has("title"),
-        url: String(input.url ?? ""),
-        setUrl: has("url"),
-        icon: String(input.icon ?? ""),
-        setIcon: has("icon"),
-        description: String(input.description ?? ""),
-        setDescription: has("description"),
-        size: String(input.size ?? ""),
-        setSize: has("size"),
-      })
-      const groups = parseNavigationGroupsPayload(result.groups)
-      if (groups) publishNavigationGroups(groups)
-      return { success: true, executed: true, source: "go-service", updated: result.updated, sites: result.sites }
-    }
+    const useNavigationService = (action: typeof NAVIGATION_ACTIONS[number], input: Record<string, unknown>) => usePage("navigation", action, input)
     const tools = {
+      list_quick_tools: tool({
+        description: "列出 Quick 注册的全部工具动作；这些动作无需打开对应页面即可执行。",
+        inputSchema: jsonSchema<Record<string, never>>({type: "object", properties: {}, additionalProperties: false}),
+        execute: async () => ({tools: registry.catalog().map(({id,page,action,label}) => ({id,page,action,label})), hint: "用 describe_quick_tool 获取单个动作的参数 Schema。"}),
+      }),
+      describe_quick_tool: tool({
+        description: "读取一个已注册动作的完整参数 Schema 和权限说明，用于构造工作流步骤。",
+        inputSchema: jsonSchema<{page: PageId; action: string}>({type: "object", properties: {page: {type: "string", enum: PAGE_IDS}, action: {type: "string"}}, required: ["page", "action"], additionalProperties: false}),
+        execute: async ({page, action}) => registry.catalog().find(item => item.page === page && item.action === action) ?? {success: false, error: "未注册的工具动作"},
+      }),
+      run_quick_workflow: tool({
+        description: "按顺序执行 1–12 个 Quick 工具步骤，每步仍检查权限。先 list_quick_tools 获取 page/action。fromPrevious 将上一步完整结果在本地传给当前步骤 input，避免经模型转抄或截断。失败或取消立即停止后续步骤。",
+        inputSchema: jsonSchema<{steps: WorkflowStep[]}>({type: "object", properties: {steps: {type: "array", minItems: 1, maxItems: 12, items: {type: "object", properties: {page: {type: "string", enum: PAGE_IDS}, action: {type: "string"}, input: {type: "object", additionalProperties: true}, fromPrevious: {type: "boolean"}}, required: ["page", "action", "input"], additionalProperties: false}}}, required: ["steps"], additionalProperties: false}),
+        execute: async ({steps}) => runWorkflow(steps, registry.execute, executionAbort.current.signal),
+      }),
+      read_quick_result: tool({
+        description: "读取本次应用会话的工具结果。默认返回脱敏摘要；可用 offset 分段读取。后续工具直接引用 sourceResultId，无需重新输出全文。",
+        inputSchema: jsonSchema<{artifactId: string; offset?: number}>({type: "object", properties: {artifactId: {type: "string"}, offset: {type: "integer", minimum: 0}}, required: ["artifactId"], additionalProperties: false}),
+        execute: async ({artifactId, offset = 0}) => {
+          const result = findToolRun(artifactId)
+          if (!result) return {success: false, error: "结果已过期"}
+          const safe = JSON.stringify(redactToolData(result.result) ?? null)
+          return {success: true, artifactId, text: safe.slice(offset, offset + 12000), totalCharacters: safe.length, truncated: offset + 12000 < safe.length}
+        },
+      }),
       navigate_to_page: tool({
         description: "切换 Quick 当前页面。只切换页面，不修改页面内容。",
         inputSchema: jsonSchema<{ page: PageId }>({ type: "object", properties: { page: { type: "string", enum: PAGE_IDS, description: "目标页面 ID" } }, required: ["page"], additionalProperties: false }),
@@ -210,127 +173,68 @@ function AssistantSession({ profile, activePage, onNavigate, sidebarOrder, onSid
       }),
       format_text: tool({
         description: "在字符串格式化页面执行 JSON/YAML/XML/HTML/CSS/JavaScript 格式化或压缩，并把输入与结果同步到页面。",
-        inputSchema: jsonSchema<{ operation: typeof FORMATTER_OPERATIONS[number]; input: string }>({
-          type: "object",
-          properties: {
-            operation: { type: "string", enum: [...FORMATTER_OPERATIONS], description: "格式化页面的操作 ID" },
-            input: { type: "string", description: "写入格式化页面的完整输入" },
-          },
-          required: ["operation", "input"],
-          additionalProperties: false,
-        }),
+        inputSchema: jsonSchema<{ operation: typeof FORMATTER_OPERATIONS[number]; input: string }>(TOOL_INPUT_SCHEMAS["formatter"]),
         execute: async (input) => usePage("formatter", "run", input),
       }),
       convert_data: tool({
         description: "执行 Quick 数据转换：文本与行清理、命名风格、标准数据格式、字符串编码、文本与字节、JSON 代码模型或整数进制转换。文本模块 target 支持 trim-lines/remove-empty/dedupe/sort-asc/sort-desc/reverse/number-lines/lf/crlf/tabs-to-spaces/nfc/nfd/visible/stats。",
-        inputSchema: jsonSchema<{ module: typeof CONVERSION_MODULES[number]; source: string; target: string; input: string }>({
-          type: "object",
-          properties: {
-            module: { type: "string", enum: [...CONVERSION_MODULES], description: "naming/standard/encoding/bytes/code/radix" },
-            source: { type: "string", description: "来源格式 ID；例如 json、yaml、text、hex、10" },
-            target: { type: "string", description: "目标格式 ID；例如 yaml、camel、base64、go、16" },
-            input: { type: "string", description: "待转换的完整内容" },
-          },
-          required: ["module", "source", "target", "input"],
-          additionalProperties: false,
-        }),
+        inputSchema: jsonSchema<{ module: typeof CONVERSION_MODULES[number]; source: string; target: string; input: string }>(TOOL_INPUT_SCHEMAS["converter"]),
         execute: async (input) => usePage("converter", "convert", input),
       }),
       time_and_identifiers: tool({
         description: "执行时间戳/日期、时区、日期差值、数值到可读时间段或可读时间段反向解析、Cron 解析，或通过 Quick Go 安全随机源生成 UUID/GUID/ULID/雪花 ID/随机内容。parse-duration 支持 1d 2h 3m 4s 500ms 和 HH:MM:SS。密码只显示在 Quick 页面。",
-        inputSchema: jsonSchema<{ operation: typeof TIME_OPERATIONS[number]; value?: string; unit?: string; durationUnit?: string; sourceZone?: string; targetZone?: string; start?: string; end?: string; generator?: string; length?: number; cron?: string; zone?: string }>({
-          type: "object",
-          properties: {
-            operation: { type: "string", enum: [...TIME_OPERATIONS] }, value: { type: "string", description: "时间戳、ISO 日期时间或时长数值" }, unit: { type: "string", enum: ["seconds", "milliseconds"] }, durationUnit: { type: "string", enum: ["milliseconds", "seconds", "minutes"], description: "duration 操作的输入单位" },
-            sourceZone: { type: "string" }, targetZone: { type: "string" }, start: { type: "string" }, end: { type: "string" },
-            generator: { type: "string", enum: ["uuid", "guid", "ulid", "snowflake", "string", "number", "password"] }, length: { type: "number", minimum: 1, maximum: 4096 }, cron: { type: "string" }, zone: { type: "string" },
-          },
-          required: ["operation"], additionalProperties: false,
-        }),
+        inputSchema: jsonSchema<{ operation: typeof TIME_OPERATIONS[number]; value?: string; unit?: string; durationUnit?: string; sourceZone?: string; targetZone?: string; start?: string; end?: string; generator?: string; length?: number; cron?: string; zone?: string }>(TOOL_INPUT_SCHEMAS["time-ids"]),
         execute: async (input) => usePage("time-ids", "run", input),
       }),
       validate_content: tool({
         description: "校验工作台。run 可实际执行 JSONPath、JSON Schema、XPath、CSS Selector、Glob 或 JavaScript 正则；生成规则时应先根据用户约束自行生成 expression/flags，再调用 run。JSON Schema 的 expression 是完整 Schema JSON。test-cases 用正例、反例、边界、空值、Unicode 和近似错误输入验证正则逻辑。show-code 把你根据当前表达式生成的 JavaScript/TypeScript/Python/C#/Java/Go/Rust/PHP 使用代码同步到页面；注意目标语言正则方言差异并在 explanation 说明。",
-        inputSchema: jsonSchema<{ action?: typeof VALIDATION_ACTIONS[number]; mode: typeof VALIDATION_MODES[number]; expression?: string; input?: string; flags?: string; replacement?: string; testCases?: Array<{ label?: string; input: string; expected: boolean }>; language?: string; code?: string; explanation?: string }>({
-          type: "object", properties: { action: { type: "string", enum: [...VALIDATION_ACTIONS] }, mode: { type: "string", enum: [...VALIDATION_MODES] }, expression: { type: "string", description: "表达式；show-code 也应传入当前表达式" }, input: { type: "string", description: "run 时的完整输入" }, flags: { type: "string", description: "JavaScript 正则 Flags，仅 dgimsuvy" }, replacement: { type: "string" }, testCases: { type: "array", maxItems: 100, items: { type: "object", properties: { label: { type: "string" }, input: { type: "string" }, expected: { type: "boolean" } }, required: ["input", "expected"], additionalProperties: false } }, language: { type: "string", enum: ["javascript", "typescript", "python", "csharp", "java", "go", "rust", "php"] }, code: { type: "string" }, explanation: { type: "string" } },
-          required: ["mode"], additionalProperties: false,
-        }),
+        inputSchema: jsonSchema<{ action?: typeof VALIDATION_ACTIONS[number]; mode: typeof VALIDATION_MODES[number]; expression?: string; input?: string; flags?: string; replacement?: string; testCases?: Array<{ label?: string; input: string; expected: boolean }>; language?: string; code?: string; explanation?: string }>(TOOL_INPUT_SCHEMAS["validation"]),
         execute: async (input) => usePage("validation", "run", input),
       }),
       frontend_utilities: tool({
         description: "使用颜色与前端工具转换颜色、检查 WCAG 对比度、生成渐变、换算 px/rem/vw，或编码 SVG Data URL。",
-        inputSchema: jsonSchema<{ operation: typeof FRONTEND_OPERATIONS[number]; foreground?: string; background?: string; angle?: number; pixels?: number; baseSize?: number; viewportWidth?: number; svg?: string }>({ type: "object", properties: { operation: { type: "string", enum: [...FRONTEND_OPERATIONS] }, foreground: { type: "string", description: "HEX 颜色" }, background: { type: "string", description: "HEX 颜色" }, angle: { type: "number" }, pixels: { type: "number" }, baseSize: { type: "number" }, viewportWidth: { type: "number" }, svg: { type: "string" } }, required: ["operation"], additionalProperties: false }),
+        inputSchema: jsonSchema<{ operation: typeof FRONTEND_OPERATIONS[number]; foreground?: string; background?: string; angle?: number; pixels?: number; baseSize?: number; viewportWidth?: number; svg?: string }>(TOOL_INPUT_SCHEMAS["frontend"]),
         execute: async (input) => usePage("frontend", "run", input),
       }),
       crypto_operation: tool({
         description: "使用 Quick 加密页，由绑定的 Go Service 执行实际密码学操作并把结果同步回页面。普通 Hash 和 JWT 解析可直接执行；HMAC、AES、RSA、JWT 签名/验证只填写非敏感字段，密钥或密码必须由用户在页面输入并确认。RSA 密钥可在页面生成但不会返回给助手。",
-        inputSchema: jsonSchema<{ operation: typeof CRYPTO_OPERATIONS[number]; input?: string; algorithm?: string; signature?: string; publicKey?: string }>({
-          type: "object", properties: { operation: { type: "string", enum: [...CRYPTO_OPERATIONS] }, input: { type: "string" }, algorithm: { type: "string", enum: ["MD5", "SHA-1", "SHA-256", "SHA-512"] }, signature: { type: "string" }, publicKey: { type: "string", description: "仅公钥；不要提供私钥" } },
-          required: ["operation"], additionalProperties: false,
-        }),
+        inputSchema: jsonSchema<{ operation: typeof CRYPTO_OPERATIONS[number]; input?: string; algorithm?: string; signature?: string; publicKey?: string }>(TOOL_INPUT_SCHEMAS["crypto"]),
         execute: async (input) => usePage("crypto", "run", input),
       }),
       network_operation: tool({
-        description: `使用网络工具。Ping、DNS、TCP 端口、CIDR、URL 拆解、cURL/HTTP 互转和带条件进程搜索均可自动执行；url-inspect 只解析 URL，不发请求。${autoApproveOperations ? "操作自动审核已开启：用户明确要求时可发送 HTTP 请求；关闭进程前必须先按端口、PID 或程序名搜索，并且只能关闭该搜索结果中的 PID。" : "操作自动审核未开启：HTTP 只准备不发送，进程不能关闭。"}`,
-        inputSchema: jsonSchema<{ operation: typeof NETWORK_OPERATIONS[number]; host?: string; count?: number; timeoutMS?: number; packetSize?: number; port?: number; recordType?: string; cidr?: string; method?: typeof HTTP_METHODS[number]; url?: string; headers?: string; body?: string; curl?: string; searchType?: string; query?: string; pid?: number }>({
-          type: "object", properties: {
-            operation: { type: "string", enum: [...NETWORK_OPERATIONS] }, host: { type: "string" }, count: { type: "number", minimum: 1, maximum: 20, description: "Ping 次数" }, timeoutMS: { type: "number", minimum: 100, maximum: 60000, description: "Ping 总超时毫秒数" }, packetSize: { type: "number", minimum: 1, maximum: 65500, description: "Ping 数据包字节数" }, port: { type: "number", minimum: 1, maximum: 65535 }, recordType: { type: "string", enum: ["A", "AAAA", "CNAME", "MX", "NS", "TXT"] }, cidr: { type: "string" },
-            method: { type: "string", enum: [...HTTP_METHODS] }, url: { type: "string" }, headers: { type: "string", description: "每行 Header: value；不要放入秘密" }, body: { type: "string" }, curl: { type: "string" }, searchType: { type: "string", enum: ["port", "pid", "name"] }, query: { type: "string" }, pid: { type: "number", minimum: 1, description: "仅用于关闭刚刚通过带条件搜索得到的进程" },
-          }, required: ["operation"], additionalProperties: false,
-        }),
+        description: `使用网络工具。Ping、DNS、TCP 端口、CIDR、URL 拆解、cURL/HTTP 互转和带条件进程搜索均可自动执行；url-inspect 只解析 URL，不发请求。${autoApproveOperations ? "操作自动审核已开启：用户明确要求时可发送 HTTP 请求；关闭进程前必须先按端口、PID 或程序名搜索，并且只能关闭该搜索结果中的 PID。" : "HTTP 发送和关闭进程会按类型权限审核；默认逐次确认，确认后执行。"}`,
+        inputSchema: jsonSchema<{ operation: typeof NETWORK_OPERATIONS[number]; host?: string; count?: number; timeoutMS?: number; packetSize?: number; port?: number; recordType?: string; cidr?: string; method?: typeof HTTP_METHODS[number]; url?: string; headers?: string; body?: string; curl?: string; searchType?: string; query?: string; pid?: number }>(TOOL_INPUT_SCHEMAS["network"]),
         execute: async (input) => usePage("network", "run", { ...input, operationAutoApproved: autoApproveOperations }),
       }),
       open_text_workbench: tool({
         description: "打开文本工作台并填写 Markdown/Mermaid 预览，或准备行/单词/字符级文本对比。Mermaid 使用 fenced code block：```mermaid。",
-        inputSchema: jsonSchema<{ mode: "markdown" | "diff"; markdown?: string; left?: string; right?: string; granularity?: "line" | "word" | "char"; ignoreWhitespace?: boolean }>({
-          type: "object", properties: { mode: { type: "string", enum: ["markdown", "diff"] }, markdown: { type: "string" }, left: { type: "string" }, right: { type: "string" }, granularity: { type: "string", enum: ["line", "word", "char"] }, ignoreWhitespace: { type: "boolean" } },
-          required: ["mode"], additionalProperties: false,
-        }),
+        inputSchema: jsonSchema<{ mode: "markdown" | "diff"; markdown?: string; left?: string; right?: string; granularity?: "line" | "word" | "char"; ignoreWhitespace?: boolean }>(TOOL_INPUT_SCHEMAS["text-workbench"]),
         execute: useTextWorkbench,
       }),
       file_rename: tool({
-        description: `使用文件工具准备和预览批量重命名规则，或对用户已经选择的文件执行只读摘要/元信息检查。文件范围必须由用户在页面选择或拖入，助手不能填写绝对路径。${autoApproveOperations ? "操作自动审核已开启：用户明确要求且当前预览无冲突时，可以执行重命名或撤销。" : "操作自动审核未开启：只能准备规则和生成预览，执行或撤销需要用户在页面确认。"}`,
-        inputSchema: jsonSchema<{ action: typeof FILE_RENAME_ACTIONS[number]; algorithm?: string; matchMode?: "all" | "wildcard" | "regex"; matchPattern?: string; matchFullName?: boolean; operation?: typeof FILE_RENAME_OPERATIONS[number]; find?: string; replacement?: string; useRegex?: boolean; prefix?: string; suffix?: string; start?: number; step?: number; width?: number; includeExtension?: boolean; sortBy?: "name" | "modified" | "size" }>({
-          type: "object", properties: {
-            action: { type: "string", enum: [...FILE_RENAME_ACTIONS] }, algorithm: { type: "string", enum: ["MD5", "SHA-256", "SHA-512"] }, matchMode: { type: "string", enum: ["all", "wildcard", "regex"] }, matchPattern: { type: "string" }, matchFullName: { type: "boolean" }, operation: { type: "string", enum: [...FILE_RENAME_OPERATIONS] }, find: { type: "string" }, replacement: { type: "string" }, useRegex: { type: "boolean" }, prefix: { type: "string" }, suffix: { type: "string" }, start: { type: "number" }, step: { type: "number" }, width: { type: "number", minimum: 1, maximum: 12 }, includeExtension: { type: "boolean" }, sortBy: { type: "string", enum: ["name", "modified", "size"] },
-          }, required: ["action"], additionalProperties: false,
-        }),
+        description: `使用文件工具准备和预览批量重命名规则，或对用户已经选择的文件执行只读摘要/元信息检查。文件范围必须由用户在页面选择或拖入，助手不能填写绝对路径。${autoApproveOperations ? "操作自动审核已开启：用户明确要求且当前预览无冲突时，可以执行重命名或撤销。" : "执行或撤销会请求用户确认，确认后可执行。"}`,
+        inputSchema: jsonSchema<{ action: typeof FILE_RENAME_ACTIONS[number]; algorithm?: string; matchMode?: "all" | "wildcard" | "regex"; matchPattern?: string; matchFullName?: boolean; operation?: typeof FILE_RENAME_OPERATIONS[number]; find?: string; replacement?: string; useRegex?: boolean; prefix?: string; suffix?: string; start?: number; step?: number; width?: number; includeExtension?: boolean; sortBy?: "name" | "modified" | "size" }>(TOOL_INPUT_SCHEMAS["file-tools"]),
         execute: async ({ action, ...input }) => usePage("file-tools", action, { ...input, operationAutoApproved: autoApproveOperations }),
       }),
       navigation_sites: tool({
-        description: `通过 Quick Go Service 管理持久化站点导航，不依赖导航页面是否已打开。update/move 操作一个准确名称；batch-update 可按 names/ids，或按 sourceGroup 与可选 sourceList 批量筛选。targetGroup/targetList 表示目标位置，targetList 传空字符串表示移出 list。读取和打开可自动执行。自动获取的图标由 Go 校验后缓存；本地图标和 CSV 文件必须由用户在页面通过原生对话框选择，不能提供本地路径。${autoApproveOperations ? "操作自动审核已开启：用户明确要求时可以直接批量修改长期配置。" : "新增、单项编辑和移动会打开表单；批量修改需要先开启操作自动审核；删除会打开确认框。"}`,
-        inputSchema: jsonSchema<{ action: typeof NAVIGATION_ACTIONS[number]; name?: string; names?: string[]; ids?: string[]; sourceGroup?: string; sourceList?: string; targetGroup?: string; targetList?: string; group?: string; list?: string; title?: string; url?: string; icon?: string; description?: string; size?: "1x1" | "2x2" | "4x2" }>({
-          type: "object", properties: {
-            action: { type: "string", enum: [...NAVIGATION_ACTIONS] },
-            name: { type: "string", description: "open/update/move/delete 时用于定位记录的当前准确站点名称" },
-            names: { type: "array", items: { type: "string" }, description: "batch-update 要处理的一组准确站点名称" },
-            ids: { type: "array", items: { type: "string" }, description: "batch-update 要处理的一组站点 ID；优先使用 list 返回的 ID" },
-            sourceGroup: { type: "string", description: "batch-update 的来源 group；不提供 names/ids 时表示选择该 group 下的全部站点" },
-            sourceList: { type: "string", description: "batch-update 的来源 list；与 sourceGroup 组合筛选，空字符串可匹配未分 list 的站点" },
-            targetGroup: { type: "string", description: "batch-update 移动到的现有 group" },
-            targetList: { type: "string", description: "batch-update 移动到的 list；空字符串表示移出 list" },
-            group: { type: "string", description: "新增或单项移动后的一级 Tab 分组名称" },
-            list: { type: "string", description: "新增或单项移动后的 list；空字符串表示移出 list" },
-            title: { type: "string", description: "新增站点标题，或只选择一个站点时的新标题" }, url: { type: "string" }, icon: { type: "string" }, description: { type: "string", description: "站点说明；批量操作时会应用到全部匹配项，空字符串表示清空" }, size: { type: "string", enum: ["1x1", "2x2", "4x2"] },
-          }, required: ["action"], additionalProperties: false,
-        }),
+        description: `通过 Quick Go Service 管理持久化站点导航，不依赖导航页面是否已打开。update/move 操作一个准确名称；batch-update 可按 names/ids，或按 sourceGroup 与可选 sourceList 批量筛选。targetGroup/targetList 表示目标位置，targetList 传空字符串表示移出 list。读取和打开可自动执行。自动获取的图标由 Go 校验后缓存；本地图标和 CSV 文件必须由用户在页面通过原生对话框选择，不能提供本地路径。${autoApproveOperations ? "操作自动审核已开启：用户明确要求时可以直接批量修改长期配置。" : "所有持久修改都经过导航权限审核，默认逐次确认。"}`,
+        inputSchema: jsonSchema<{ action: typeof NAVIGATION_ACTIONS[number]; name?: string; names?: string[]; ids?: string[]; sourceGroup?: string; sourceList?: string; targetGroup?: string; targetList?: string; group?: string; list?: string; title?: string; url?: string; icon?: string; description?: string; size?: "1x1" | "2x2" | "4x2" }>(TOOL_INPUT_SCHEMAS["navigation"]),
         execute: async ({ action, ...input }) => useNavigationService(action, input),
       }),
       prepare_mcp_inspector: tool({
         description: "在 MCP 测试页选择一个设置中已保存的 Server，或只填写不含凭据的远程/STDIO 连接参数。不会连接 Server，也不会调用 Tool。",
-        inputSchema: jsonSchema<{ profileName?: string; transport?: "streamable-http" | "sse" | "stdio"; url?: string; command?: string; argsJSON?: string; cwd?: string }>({
-          type: "object", properties: { profileName: { type: "string", description: "设置页保存的 MCP 名称" }, transport: { type: "string", enum: ["streamable-http", "sse", "stdio"] }, url: { type: "string" }, command: { type: "string" }, argsJSON: { type: "string", description: "STDIO 参数 JSON 数组" }, cwd: { type: "string" } }, additionalProperties: false,
-        }),
+        inputSchema: jsonSchema<{ profileName?: string; transport?: "streamable-http" | "sse" | "stdio"; url?: string; command?: string; argsJSON?: string; cwd?: string }>(TOOL_INPUT_SCHEMAS["mcp-inspector"]),
         execute: async (input) => usePage("mcp-inspector", "prepare", input),
       }),
       ...(mcpServers.length ? {
         inspect_saved_mcp_server: tool<{ serverName: string; toolName?: string }, Record<string, unknown>, Record<string, unknown>>({
-          description: "按名称临时连接设置页中已保存的 MCP Server 并立即断开。不传 toolName 时列出 Tools；传入准确 toolName 时返回该 Tool 的完整输入 Schema。仅在用户明确要求使用该 MCP 时调用。",
+          description: "按名称连接设置页中已保存的 MCP Server，短时复用连接。不传 toolName 时列出 Tools；传入准确 toolName 时返回该 Tool 的完整输入 Schema。仅在用户明确要求使用该 MCP 时调用。",
           inputSchema: jsonSchema<{ serverName: string; toolName?: string }>({
             type: "object", properties: { serverName: { type: "string", description: "设置页中保存的 MCP Server 名称" }, toolName: { type: "string", description: "可选；需要查看参数时传入准确 Tool 名称" } }, required: ["serverName"], additionalProperties: false,
           }),
           execute: async ({ serverName, toolName }): Promise<Record<string, unknown>> => {
             const server = findMCPServer(serverName)
+            if (!await registry.requestApproval("mcp", {server: server.name, operation: "connect-and-list"}, executionAbort.current.signal)) return {success: false, cancelled: true}
             const { listSavedMCPTools } = await import("@/lib/mcp-assistant-client")
             const details = await listSavedMCPTools(server, proxy)
             if (toolName) {
@@ -367,10 +271,10 @@ function AssistantSession({ profile, activePage, onNavigate, sidebarOrder, onSid
           execute: async ({ serverName, toolName, arguments: args }) => {
             const server = findMCPServer(serverName)
             const automatic = isAutomaticMCPCall(server, toolName, args)
-            const approved = automatic || autoApproveOperations || await confirmMCPCall({ server, toolName, args })
+            const approved = automatic || await registry.requestApproval("mcp", { server: server.name, toolName, args }, executionAbort.current.signal)
             if (!approved) return { success: false, cancelled: true, executed: false, message: "用户取消了 MCP Tool 调用" }
             const { callSavedMCPTool, summarizeMCPResult } = await import("@/lib/mcp-assistant-client")
-            const result = await callSavedMCPTool(server, proxy, toolName, args)
+            const result = await callSavedMCPTool(server, proxy, toolName, args, executionAbort.current.signal)
             return { success: !result.isError, executed: true, autoApproved: automatic || autoApproveOperations, approvalReason: automatic ? "quick-read-only" : autoApproveOperations ? "user-setting" : "user-confirmed", server: server.name, tool: toolName, result: summarizeMCPResult(result) }
           },
         }),
@@ -384,13 +288,15 @@ function AssistantSession({ profile, activePage, onNavigate, sidebarOrder, onSid
       maxOutputTokens: 2048,
     })
     return new DirectChatTransport({ agent })
-  }, [profile.id, profile.provider, profile.model, profile.apiKey, profile.baseURL, profile.systemPrompt, registry, sidebarOrder, onSidebarOrderChange, mcpServers, proxy.mode, proxy.url, autoApproveOperations, confirmMCPCall, language, aiNetwork])
+  }, [profile.id, profile.provider, profile.model, profile.apiKey, profile.baseURL, profile.systemPrompt, registry, sidebarOrder, onSidebarOrderChange, mcpServers, proxy.mode, proxy.url, autoApproveOperations, language, aiNetwork])
 
-  const [input, setInput] = useState("")
+  const [input, setInput] = useDraftState("assistant", `input:${profile.id}`, "")
   const [starterPrompts, setStarterPrompts] = useState<string[]>([])
   const starterVariant = useRef(0)
   const startersInitialized = useRef(false)
-  const { messages, sendMessage, status, stop, setMessages, error, clearError } = useChat({ transport, throttle: 40 })
+  const { messages, sendMessage, status, stop: stopChat, setMessages, error, clearError } = useConversationChat(transport, `assistant:${profile.id}`)
+  const stop = () => { executionAbort.current.abort(); void stopChat() }
+  useEffect(() => () => { executionAbort.current.abort() }, [])
   const busy = status === "submitted" || status === "streaming"
   const { scrollRef, atBottom, handleScroll, scrollToBottom } = useStickToBottom(messages, busy)
   const refreshStarterPrompts = () => {
@@ -407,14 +313,15 @@ function AssistantSession({ profile, activePage, onNavigate, sidebarOrder, onSid
   const send = async () => {
     const text = input.trim()
     if (!text || busy) return
+    executionAbort.current = new AbortController()
     clearError()
     setInput("")
     scrollToBottom("auto")
-    await sendMessage({ text })
+    try { await sendMessage({ text }) } catch { setInput(text) }
   }
   const submit = (event: FormEvent) => { event.preventDefault(); void send() }
   const keyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void send() }
+    if (shouldSendOnEnter(event)) { event.preventDefault(); void send() }
   }
 
   return <>
@@ -434,27 +341,28 @@ function AssistantSession({ profile, activePage, onNavigate, sidebarOrder, onSid
                 ? <span data-i18n-skip className="whitespace-pre-wrap">{text}</span>
                 : <div data-i18n-skip><MarkdownRenderer value={text} streaming={isStreaming} className="text-sm" /></div>
               : !user && !message.parts.some((part) => part.type === "reasoning" || isToolUIPart(part) || part.type === "source-url" || part.type === "source-document") && (isPending
-                ? <div className="flex items-center gap-2 py-1 text-xs text-muted-foreground"><LoaderCircle className="size-3.5 animate-spin" />正在调用页面能力…</div>
-                : <div className="flex items-center gap-2 py-1 text-xs text-muted-foreground"><Wrench className="size-3.5" />工具调用已完成</div>)}
+                ? <div className="flex items-center gap-2 py-1 text-xs text-muted-foreground"><LoaderCircle className="size-3.5 animate-spin" />{uiText("正在调用页面能力…")}</div>
+                : <div className="flex items-center gap-2 py-1 text-xs text-muted-foreground"><Wrench className="size-3.5" />{uiText("工具调用已完成")}</div>)}
           </div>
         </div>
-      }) : <div className="flex h-full min-h-64 flex-col items-center justify-center p-5 text-center"><h3 className="text-sm font-medium">我是小Q</h3><p className="mt-2 text-xs leading-5 text-muted-foreground">我了解整个工具箱，可以执行本地转换与校验、准备页面内容，并在你明确要求时运行网络诊断或已保存的 MCP Tools。</p><div className="mt-4 w-full"><div className="mb-2 text-left text-[10px] font-medium uppercase tracking-wider text-muted-foreground">为当前页面推荐</div><div className="grid gap-2">{starterPrompts.map((prompt) => <button key={prompt} type="button" className="rounded-lg border bg-background px-3 py-2 text-left text-xs leading-5 transition-colors hover:bg-muted" onClick={() => setInput(prompt)}>{prompt}</button>)}</div></div></div>}
+      }) : <div className="flex h-full min-h-64 flex-col items-center justify-center p-5 text-center"><h3 className="text-sm font-medium">{uiText("我是小Q")}</h3><p className="mt-2 text-xs leading-5 text-muted-foreground">{uiText("我了解整个工具箱，可以执行本地转换与校验、准备页面内容，并在你明确要求时运行网络诊断或已保存的 MCP Tools。")}</p><div className="mt-4 w-full"><div className="mb-2 text-left text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{uiText("为当前页面推荐")}</div><div className="grid gap-2">{starterPrompts.map((prompt) => <button key={prompt} type="button" className="rounded-lg border bg-background px-3 py-2 text-left text-xs leading-5 transition-colors hover:bg-muted" onClick={() => setInput(prompt)}>{prompt}</button>)}</div></div></div>}
     </div>
-    {!atBottom && <Button type="button" variant="secondary" size="icon-lg" className="absolute bottom-3 left-1/2 z-10 -translate-x-1/2 rounded-full border bg-background shadow-lg" onClick={() => scrollToBottom()} aria-label="回到对话底部" title="回到底部并继续跟随"><ArrowDown className="size-4" /></Button>}
+    {!atBottom && <Button type="button" variant="secondary" size="icon-lg" className="absolute bottom-3 left-1/2 z-10 -translate-x-1/2 rounded-full border bg-background shadow-lg" onClick={() => scrollToBottom()} aria-label={uiText("回到对话底部")} title={uiText("回到底部并继续跟随")}><ArrowDown className="size-4" /></Button>}
     </div>
     <div className="shrink-0 border-t bg-background p-3">
-      {error && <div className="mb-2 rounded-lg border border-destructive/30 bg-destructive/8 p-2 text-xs text-destructive">{error.message || "AI 请求失败"}</div>}
+      <AssistantContextPreview context={registry.getPageContext(activePage)} />
+      {error && <div className="mb-2 rounded-lg border border-destructive/30 bg-destructive/8 p-2 text-xs text-destructive">{error.message || uiText("AI 请求失败")}</div>}
       <form onSubmit={submit} className="rounded-xl border bg-background p-2 shadow-sm focus-within:ring-3 focus-within:ring-ring/25">
-        <textarea value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={keyDown} disabled={busy} className="block max-h-28 min-h-14 w-full resize-none bg-transparent px-1.5 py-1 text-sm leading-5 outline-none" placeholder="问问题，或让我调用 Quick 工具…" />
+        <textarea value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={keyDown} disabled={busy} className="block max-h-28 min-h-14 w-full resize-none bg-transparent px-1.5 py-1 text-sm leading-5 outline-none" placeholder={uiText("问问题，或让我调用 Quick 工具…")} />
         <div className="flex items-center justify-between pt-1">
           <details className="group relative">
-            <summary className="app-interactive flex size-7 cursor-pointer list-none items-center justify-center rounded-md text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/30" aria-label="刷新与清空"><RefreshCw className="size-3.5" /></summary>
+            <summary className="app-interactive flex size-7 cursor-pointer list-none items-center justify-center rounded-md text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/30" aria-label={uiText("刷新与清空")}><RefreshCw className="size-3.5" /></summary>
             <div className="absolute bottom-full left-0 z-20 mb-2 w-44 overflow-hidden rounded-lg border bg-popover p-1 text-popover-foreground shadow-xl">
-              <button type="button" className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs hover:bg-muted" onClick={(event) => { refreshStarterPrompts(); event.currentTarget.closest("details")?.removeAttribute("open") }}><RefreshCw className="size-3.5" />换一组智能提示</button>
-              <button type="button" disabled={!messages.length} className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs hover:bg-muted disabled:pointer-events-none disabled:opacity-45" onClick={(event) => { stop(); setMessages([]); clearError(); scrollToBottom("auto"); event.currentTarget.closest("details")?.removeAttribute("open") }}><Trash2 className="size-3.5" />清空对话</button>
+              <button type="button" className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs hover:bg-muted" onClick={(event) => { refreshStarterPrompts(); event.currentTarget.closest("details")?.removeAttribute("open") }}><RefreshCw className="size-3.5" />{uiText("换一组智能提示")}</button>
+              <button type="button" disabled={!messages.length} className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs hover:bg-muted disabled:pointer-events-none disabled:opacity-45" onClick={(event) => { stop(); setMessages([]); clearError(); scrollToBottom("auto"); event.currentTarget.closest("details")?.removeAttribute("open") }}><Trash2 className="size-3.5" />{uiText("清空对话")}</button>
             </div>
           </details>
-          {busy ? <Button type="button" size="icon-sm" variant="outline" onClick={stop} aria-label="停止生成"><Square className="size-3.5 fill-current" /></Button> : <Button type="submit" size="icon-sm" disabled={!input.trim()} aria-label="发送"><Send className="size-3.5" /></Button>}
+          {busy ? <Button type="button" size="icon-sm" variant="outline" onClick={stop} aria-label={uiText("停止生成")}><Square className="size-3.5 fill-current" /></Button> : <Button type="submit" size="icon-sm" disabled={!input.trim()} aria-label={uiText("发送")}><Send className="size-3.5" /></Button>}
         </div>
       </form>
     </div>
@@ -464,10 +372,8 @@ function AssistantSession({ profile, activePage, onNavigate, sidebarOrder, onSid
 export function GlobalAssistant({ profiles, mcpServers, proxy, autoApproveOperations, activePage, onNavigate, sidebarOrder, onSidebarOrderChange, open, onOpenChange }: { profiles: AIProfile[]; mcpServers: MCPServerProfile[]; proxy: ProxySettings; autoApproveOperations: boolean; activePage: PageId; onNavigate: (page: PageId) => void; sidebarOrder: PageId[]; onSidebarOrderChange: (order: PageId[]) => void; open: boolean; onOpenChange: (open: boolean) => void }) {
   const { language } = useLanguage()
   const [selectedID, setSelectedID] = useState(() => profiles.find((profile) => isAIProfileReady(profile))?.id ?? profiles[0]?.id ?? "")
-  const [pendingMCPCall, setPendingMCPCall] = useState<PendingMCPCall | null>(null)
   const [panelWidth, setPanelWidth] = useState(getInitialAssistantPanelWidth)
   const [resizing, setResizing] = useState(false)
-  const pendingMCPRef = useRef<PendingMCPCall | null>(null)
   const panelWidthRef = useRef(panelWidth)
   const resizeRef = useRef<{ pointerId: number; startX: number; startWidth: number } | null>(null)
   const selected = profiles.find((profile) => profile.id === selectedID)
@@ -476,11 +382,11 @@ export function GlobalAssistant({ profiles, mcpServers, proxy, autoApproveOperat
     const nextWidth = clampAssistantPanelWidth(width)
     panelWidthRef.current = nextWidth
     setPanelWidth(nextWidth)
-    if (persist) window.localStorage.setItem(ASSISTANT_PANEL_WIDTH_KEY, String(nextWidth))
+    if (persist) appStorage.setItem(ASSISTANT_PANEL_WIDTH_KEY, String(nextWidth))
   }, [])
 
   const beginPanelResize = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
-    if (event.button !== 0 || !window.matchMedia("(min-width: 920px)").matches) return
+    if (event.button !== 0 || !window.matchMedia("(min-width: 1280px)").matches) return
     resizeRef.current = { pointerId: event.pointerId, startX: event.clientX, startWidth: panelWidthRef.current }
     event.currentTarget.setPointerCapture(event.pointerId)
     document.documentElement.style.cursor = "col-resize"
@@ -501,7 +407,7 @@ export function GlobalAssistant({ profiles, mcpServers, proxy, autoApproveOperat
     document.documentElement.style.cursor = ""
     document.documentElement.style.userSelect = ""
     setResizing(false)
-    window.localStorage.setItem(ASSISTANT_PANEL_WIDTH_KEY, String(panelWidthRef.current))
+    appStorage.setItem(ASSISTANT_PANEL_WIDTH_KEY, String(panelWidthRef.current))
   }, [])
 
   const resizePanelWithKeyboard = useCallback((event: KeyboardEvent<HTMLDivElement>) => {
@@ -509,25 +415,6 @@ export function GlobalAssistant({ profiles, mcpServers, proxy, autoApproveOperat
     event.preventDefault()
     updatePanelWidth(panelWidthRef.current + (event.key === "ArrowLeft" ? 16 : -16), true)
   }, [updatePanelWidth])
-
-  const confirmMCPCall = useCallback((request: MCPCallRequest) => new Promise<boolean>((resolve) => {
-    pendingMCPRef.current?.resolve(false)
-    const pending = { ...request, resolve }
-    pendingMCPRef.current = pending
-    setPendingMCPCall(pending)
-  }), [])
-
-  const finishMCPCall = useCallback((approved: boolean) => {
-    const pending = pendingMCPRef.current
-    pendingMCPRef.current = null
-    setPendingMCPCall(null)
-    pending?.resolve(approved)
-  }, [])
-
-  useEffect(() => () => {
-    pendingMCPRef.current?.resolve(false)
-    pendingMCPRef.current = null
-  }, [])
 
   useEffect(() => {
     if (selected) return
@@ -548,18 +435,18 @@ export function GlobalAssistant({ profiles, mcpServers, proxy, autoApproveOperat
 
   return (
     <>
-    {open && <button type="button" className="fixed bottom-0 left-0 right-0 top-[calc(var(--window-safe-top)+3.5rem)] z-40 bg-black/45 min-[920px]:hidden" onClick={() => onOpenChange(false)} aria-label="收起小Q" />}
-    <aside data-wails-no-drag style={panelStyle} className={cn("assistant-panel fixed bottom-0 right-0 top-[calc(var(--window-safe-top)+3.5rem)] z-50 flex h-[calc(100svh-var(--window-safe-top)-3.5rem)] w-[min(22rem,calc(100vw-0.75rem))] flex-col overflow-hidden rounded-l-2xl border-l bg-background text-foreground shadow-2xl transition-transform duration-200", open ? "translate-x-0" : "pointer-events-none translate-x-full", "min-[920px]:sticky min-[920px]:top-[var(--window-safe-top)] min-[920px]:z-20 min-[920px]:h-[calc(100svh-var(--window-safe-top))] min-[920px]:w-0 min-[920px]:shrink-0 min-[920px]:translate-x-0 min-[920px]:self-start min-[920px]:rounded-none min-[920px]:border-l-0 min-[920px]:shadow-none min-[920px]:transition-[width]", open && "min-[920px]:w-[var(--assistant-panel-width)] min-[920px]:border-l", resizing && "min-[920px]:transition-none") }>
+    {open && <button type="button" className="fixed bottom-0 left-0 right-0 top-[calc(var(--window-safe-top)+3.5rem)] z-40 bg-black/45 min-[1280px]:hidden" onClick={() => onOpenChange(false)} aria-label={uiText("收起小Q")} />}
+    <aside inert={!open} data-wails-no-drag style={panelStyle} className={cn("assistant-panel fixed bottom-0 right-0 top-[calc(var(--window-safe-top)+3.5rem)] z-50 flex h-[calc(100svh-var(--window-safe-top)-3.5rem)] w-[min(22rem,calc(100vw-0.75rem))] flex-col overflow-hidden rounded-l-2xl border-l bg-background text-foreground shadow-2xl transition-transform duration-200", open ? "translate-x-0" : "pointer-events-none translate-x-full", "min-[1280px]:sticky min-[1280px]:top-[var(--window-safe-top)] min-[1280px]:z-20 min-[1280px]:h-[calc(100svh-var(--window-safe-top))] min-[1280px]:w-0 min-[1280px]:shrink-0 min-[1280px]:translate-x-0 min-[1280px]:self-start min-[1280px]:rounded-none min-[1280px]:border-l-0 min-[1280px]:shadow-none min-[1280px]:transition-[width]", open && "min-[1280px]:w-[var(--assistant-panel-width)] min-[1280px]:border-l", resizing && "min-[1280px]:transition-none") }>
       <div
         role="separator"
         tabIndex={open ? 0 : -1}
-        aria-label="调整小Q侧栏宽度"
+        aria-label={uiText("调整小Q侧栏宽度")}
         aria-orientation="vertical"
         aria-valuemin={MIN_ASSISTANT_PANEL_WIDTH}
         aria-valuemax={maxAssistantPanelWidth()}
         aria-valuenow={panelWidth}
-        title="拖动调整小Q宽度"
-        className="app-interactive absolute inset-y-0 left-0 z-30 hidden w-2 cursor-col-resize touch-none items-center justify-center outline-none hover:bg-primary/10 focus-visible:bg-primary/10 min-[920px]:flex"
+        title={uiText("拖动调整小Q宽度")}
+        className="app-interactive absolute inset-y-0 left-0 z-30 hidden w-2 cursor-col-resize touch-none items-center justify-center outline-none hover:bg-primary/10 focus-visible:bg-primary/10 min-[1280px]:flex"
         onPointerDown={beginPanelResize}
         onPointerMove={movePanelResize}
         onPointerUp={finishPanelResize}
@@ -568,36 +455,20 @@ export function GlobalAssistant({ profiles, mcpServers, proxy, autoApproveOperat
       >
         <span className={cn("h-10 w-1 rounded-full bg-border transition-colors", resizing && "bg-primary")} />
       </div>
-      <div className="flex h-full w-full min-w-0 flex-col min-[920px]:w-[var(--assistant-panel-width)] min-[920px]:shrink-0">
+      <div className="flex h-full w-full min-w-0 flex-col min-[1280px]:w-[var(--assistant-panel-width)] min-[1280px]:shrink-0">
       <header className="flex h-14 shrink-0 select-none items-center gap-2 border-b px-3">
         <div className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground"><Bot className="size-4" /></div>
-        <div className="min-w-0 flex-1"><div className="text-sm font-medium">小Q</div><div className="truncate text-[10px] text-muted-foreground">当前：{PAGE_LABELS[activePage]}</div></div>
+        <div className="min-w-0 flex-1"><div className="text-sm font-medium">{uiText("小Q")}</div><div className="truncate text-[10px] text-muted-foreground">{uiText("当前：")}{PAGE_LABELS[activePage]}</div></div>
       </header>
       <div className="flex shrink-0 items-center gap-2 border-b px-3 py-2">
-        <select className="h-8 min-w-0 flex-1 rounded-lg border bg-background px-2 text-xs" value={selectedID} onChange={(event) => setSelectedID(event.target.value)}><option value="">选择 AI 配置</option>{profiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.name} · {profile.model}</option>)}</select>
-        {mcpServers.length > 0 && <span className={cn("flex h-8 shrink-0 items-center gap-1 rounded-lg border bg-muted/25 px-2 text-[10px] text-muted-foreground", autoApproveOperations && "border-amber-500/40 bg-amber-500/8 text-amber-700 dark:text-amber-200")} title={`${mcpServers.length} 个 MCP Server 已注册到小Q${autoApproveOperations ? "；操作自动审核已开启" : ""}`}><Wrench className="size-3" />MCP {mcpServers.length}{autoApproveOperations && " Auto"}</span>}
-        <Button type="button" variant="outline" size="icon-sm" onClick={() => { onOpenChange(false); onNavigate("settings") }} aria-label="打开 AI 设置"><Settings className="size-3.5" /></Button>
+        <select className="h-8 min-w-0 flex-1 rounded-lg border bg-background px-2 text-xs" value={selectedID} onChange={(event) => setSelectedID(event.target.value)}><option value="">{uiText("选择 AI 配置")}</option>{profiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.name} · {profile.model}</option>)}</select>
+        {mcpServers.length > 0 && <span className={cn("flex h-8 shrink-0 items-center gap-1 rounded-lg border bg-muted/25 px-2 text-[10px] text-muted-foreground", autoApproveOperations && "border-amber-500/40 bg-amber-500/8 text-amber-700 dark:text-amber-200")} title={`${mcpServers.length} 个 MCP Server 已注册到小Q${autoApproveOperations ? uiText("；操作自动审核已开启") : ""}`}><Wrench className="size-3" />MCP {mcpServers.length}{autoApproveOperations && " Auto"}</span>}
+        <Button type="button" variant="outline" size="icon-sm" onClick={() => { onOpenChange(false); onNavigate("settings") }} aria-label={uiText("打开 AI 设置")}><Settings className="size-3.5" /></Button>
       </div>
-      {!selected ? <div className="flex flex-1 flex-col items-center justify-center p-6 text-center"><Bot className="size-8 text-muted-foreground" /><p className="mt-3 text-sm font-medium">还没有 AI 配置</p><p className="mt-1 text-xs text-muted-foreground">请先在设置页新增一个 Provider。</p><Button className="mt-4" size="sm" onClick={() => { onOpenChange(false); onNavigate("settings") }}>打开设置</Button></div> : !isAIProfileReady(selected) ? <div className="flex flex-1 flex-col items-center justify-center p-6 text-center"><Bot className="size-8 text-muted-foreground" /><p className="mt-3 text-sm font-medium">配置尚未完成</p><p className="mt-1 text-xs leading-5 text-muted-foreground">{language === "en-US" ? <>Add an API key for {selected.name}; compatible providers also require a base URL.</> : <>请为 {selected.name} 补充 API Key；Compatible Provider 还需要 Base URL。</>}</p><Button className="mt-4" size="sm" onClick={() => { onOpenChange(false); onNavigate("settings") }}>完善配置</Button></div> : <AssistantSession key={selected.id} profile={selected} activePage={activePage} onNavigate={onNavigate} sidebarOrder={sidebarOrder} onSidebarOrderChange={onSidebarOrderChange} mcpServers={mcpServers} proxy={proxy} autoApproveOperations={autoApproveOperations} confirmMCPCall={confirmMCPCall} open={open} />}
+      {!selected ? <div className="flex flex-1 flex-col items-center justify-center p-6 text-center"><Bot className="size-8 text-muted-foreground" /><p className="mt-3 text-sm font-medium">{uiText("还没有 AI 配置")}</p><p className="mt-1 text-xs text-muted-foreground">{uiText("请先在设置页新增一个 Provider。")}</p><Button className="mt-4" size="sm" onClick={() => { onOpenChange(false); onNavigate("settings") }}>{uiText("打开设置")}</Button></div> : !isAIProfileReady(selected) ? <div className="flex flex-1 flex-col items-center justify-center p-6 text-center"><Bot className="size-8 text-muted-foreground" /><p className="mt-3 text-sm font-medium">{uiText("配置尚未完成")}</p><p className="mt-1 text-xs leading-5 text-muted-foreground">{language === "en-US" ? <>Add an API key for {selected.name}; compatible providers also require a base URL.</> : <>{uiText("请为")}{selected.name} {uiText("补充 API Key；Compatible Provider 还需要 Base URL。")}</>}</p><Button className="mt-4" size="sm" onClick={() => { onOpenChange(false); onNavigate("settings") }}>{uiText("完善配置")}</Button></div> : <AssistantSession key={selected.id} profile={selected} activePage={activePage} onNavigate={onNavigate} sidebarOrder={sidebarOrder} onSidebarOrderChange={onSidebarOrderChange} mcpServers={mcpServers} proxy={proxy} autoApproveOperations={autoApproveOperations} open={open} />}
       </div>
     </aside>
-    <Dialog open={Boolean(pendingMCPCall)} onOpenChange={(nextOpen) => { if (!nextOpen) finishMCPCall(false) }}>
-      <DialogContent className="max-w-xl">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2"><Wrench className="size-4" />确认调用 MCP Tool</DialogTitle>
-          <DialogDescription>该调用不属于 Quick 已知的只读查询。请检查 Server、Tool 和完整参数后再授权。</DialogDescription>
-        </DialogHeader>
-        {pendingMCPCall && <div className="space-y-4 p-5">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="rounded-lg border bg-muted/25 p-3"><div className="text-[10px] uppercase tracking-wide text-muted-foreground">Server</div><div className="mt-1 text-sm font-medium">{pendingMCPCall.server.name}</div><div className="mt-1 text-xs text-muted-foreground">{pendingMCPCall.server.transport}</div></div>
-            <div className="rounded-lg border bg-muted/25 p-3"><div className="text-[10px] uppercase tracking-wide text-muted-foreground">Tool</div><code className="mt-1 block break-all text-sm">{pendingMCPCall.toolName}</code></div>
-          </div>
-          <div><div className="mb-2 text-xs font-medium text-muted-foreground">调用参数</div><pre className="max-h-72 overflow-auto whitespace-pre-wrap break-all rounded-lg border bg-muted/30 p-3 font-mono text-xs leading-5">{JSON.stringify(pendingMCPCall.args, null, 2)}</pre></div>
-          <div className="flex gap-2 rounded-lg border border-amber-500/30 bg-amber-500/8 p-3 text-xs leading-5 text-amber-800 dark:text-amber-200"><ShieldCheck className="mt-0.5 size-4 shrink-0" /><span>确认后 Quick 会临时连接该 Server、调用一次 Tool，然后关闭连接。Tool 的实际副作用由对应 MCP Server 决定。</span></div>
-        </div>}
-        <DialogFooter><Button type="button" variant="outline" onClick={() => finishMCPCall(false)}>取消</Button><Button type="button" onClick={() => finishMCPCall(true)}>确认调用</Button></DialogFooter>
-      </DialogContent>
-    </Dialog>
+
     </>
   )
 }

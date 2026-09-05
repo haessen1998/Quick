@@ -29,7 +29,7 @@ tasks:
     vars:
       # Default to CGO_ENABLED=0 if not explicitly set
       CGO_ENABLED: '{{.CGO_ENABLED | default "0"}}'
-      MCP_BUILD_TAGS: 'mcp{{if .EXTRA_TAGS}},{{.EXTRA_TAGS}}{{end}}'
+      MCP_BUILD_TAGS: '{{if eq .QUICK_DEBUG_MCP "true"}}mcp{{if .EXTRA_TAGS}},{{end}}{{end}}{{.EXTRA_TAGS}}'
 
   build:native:
     summary: Builds the application using native Go cross-compilation
@@ -152,7 +152,7 @@ tasks:
       ARCH: '{{.ARCH | default ARCH}}'
       IDENTITY_NAME: '{{.IDENTITY_NAME | default "haessen.QuickDev"}}'
       PUBLISHER: '{{.PUBLISHER | default "CN=248AC9D1-95E3-40D3-B8EF-1D38B72432B7"}}'
-      VERSION: '{{.VERSION | default "0.3.3"}}'
+      VERSION: '{{.VERSION | default "0.4.0"}}'
 
   run:
     cmds:

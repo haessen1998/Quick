@@ -1,8 +1,8 @@
 import assistantInstructionsTemplate from "@/assistant/AGENTS.md?raw"
 
-import { PAGE_LABELS, type PageId } from "@/lib/pages"
 import type { AppLanguage } from "@/lib/i18n"
-import { QUICK_APP_MCP_ID, QUICK_APP_MCP_URL, type MCPServerProfile } from "@/lib/saved-connections"
+import { PAGE_LABELS,type PageId } from "@/lib/pages"
+import { QUICK_APP_MCP_ID,QUICK_APP_MCP_URL,type MCPServerProfile } from "@/lib/saved-connections"
 
 export type QuickCapabilitySummary = {
   page: PageId

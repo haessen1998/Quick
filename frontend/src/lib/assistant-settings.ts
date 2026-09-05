@@ -1,24 +1,13 @@
-export type AssistantSettings = {
-  autoApproveOperations: boolean
-}
-
-const storageKey = "quick-assistant-settings-v1"
-
-const defaults: AssistantSettings = {
-  autoApproveOperations: false,
-}
-
+import { appStorage } from "@/lib/app-storage"
+import { DEFAULT_TOOL_PERMISSIONS,type ToolPermissions } from "./tool-policy";
+export type AssistantSettings = { autoApproveOperations: boolean; permissions: ToolPermissions }
+const storageKey = "quick-assistant-settings-v2"
 export function getInitialAssistantSettings(): AssistantSettings {
   try {
-    const stored = JSON.parse(window.localStorage.getItem(storageKey) ?? "null") as (Partial<AssistantSettings> & { autoApproveMCP?: boolean }) | null
-    if (stored && typeof stored.autoApproveOperations === "boolean") return { autoApproveOperations: stored.autoApproveOperations }
-    if (stored && typeof stored.autoApproveMCP === "boolean") return { autoApproveOperations: stored.autoApproveMCP }
-  } catch {
-    // Ignore malformed local settings and keep the safer default.
-  }
-  return { ...defaults }
+    const stored = JSON.parse(appStorage.getItem(storageKey) ?? "null")
+    const permissions = { ...DEFAULT_TOOL_PERMISSIONS }
+    for (const key of Object.keys(permissions) as (keyof ToolPermissions)[]) permissions[key] = stored?.permissions?.[key] === true
+    return { autoApproveOperations: false, permissions }
+  } catch { return { autoApproveOperations: false, permissions: { ...DEFAULT_TOOL_PERMISSIONS } } }
 }
-
-export function saveAssistantSettings(settings: AssistantSettings) {
-  window.localStorage.setItem(storageKey, JSON.stringify(settings))
-}
+export function saveAssistantSettings(settings: AssistantSettings) { appStorage.setItem(storageKey, JSON.stringify(settings)) }

@@ -1,6 +1,7 @@
-import * as React from "react"
+import { uiText } from "@/lib/i18n"
 import { X } from "lucide-react"
 import { Dialog as DialogPrimitive } from "radix-ui"
+import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
@@ -20,7 +21,7 @@ function DialogContent({ className, children, ...props }: React.ComponentProps<t
         {...props}
       >
         {children}
-        <DialogPrimitive.Close className="app-interactive absolute right-4 top-4 flex size-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground" aria-label="关闭">
+        <DialogPrimitive.Close className="app-interactive absolute right-4 top-4 flex size-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground" aria-label={uiText("关闭")}>
           <X className="size-4" />
         </DialogPrimitive.Close>
       </DialogPrimitive.Content>
@@ -29,7 +30,11 @@ function DialogContent({ className, children, ...props }: React.ComponentProps<t
 }
 
 function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
-  return <div className={cn("border-b px-5 py-4 pr-14", className)} {...props} />
+  return <div className={cn("shrink-0 border-b px-5 py-4 pr-14", className)} {...props} />
+}
+
+function DialogBody({ className, ...props }: React.ComponentProps<"div">) {
+  return <div data-slot="dialog-body" className={cn("min-h-0 min-w-0 overflow-y-auto px-5 py-4", className)} {...props} />
 }
 
 function DialogTitle({ className, ...props }: React.ComponentProps<typeof DialogPrimitive.Title>) {
@@ -41,7 +46,7 @@ function DialogDescription({ className, ...props }: React.ComponentProps<typeof 
 }
 
 function DialogFooter({ className, ...props }: React.ComponentProps<"div">) {
-  return <div className={cn("flex flex-col-reverse gap-2 border-t px-5 py-4 sm:flex-row sm:justify-end", className)} {...props} />
+  return <div className={cn("flex shrink-0 flex-col-reverse gap-2 border-t px-5 py-4 sm:flex-row sm:justify-end", className)} {...props} />
 }
 
-export { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger }
+export { Dialog,DialogBody,DialogClose,DialogContent,DialogDescription,DialogFooter,DialogHeader,DialogTitle,DialogTrigger }

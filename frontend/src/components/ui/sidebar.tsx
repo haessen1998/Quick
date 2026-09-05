@@ -1,8 +1,9 @@
-import * as React from "react"
+import { uiText } from "@/lib/i18n"
 import { PanelLeft } from "lucide-react"
+import * as React from "react"
 
-import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
 
 type SidebarContextValue = {
   open: boolean
@@ -71,7 +72,7 @@ function Sidebar({ className, children, ...props }: React.ComponentProps<"aside"
         <button
           type="button"
           className="fixed inset-0 z-40 bg-black/60 md:hidden"
-          aria-label="关闭侧栏"
+          aria-label={uiText("关闭侧栏")}
           onClick={() => setMobileOpen(false)}
         />
       )}
@@ -180,7 +181,7 @@ function SidebarTrigger({ className, ...props }: React.ComponentProps<typeof But
       }}
     >
       <PanelLeft />
-      <span className="sr-only">切换侧栏</span>
+      <span className="sr-only">{uiText("切换侧栏")}</span>
     </Button>
   )
 }
@@ -196,18 +197,18 @@ function SidebarInset({ className, ...props }: React.ComponentProps<"main">) {
 }
 
 export {
-  Sidebar,
-  SidebarContent,
-  SidebarFooter,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
-  SidebarHeader,
-  SidebarInset,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  SidebarProvider,
-  SidebarTrigger,
-  useSidebar,
+Sidebar,
+SidebarContent,
+SidebarFooter,
+SidebarGroup,
+SidebarGroupContent,
+SidebarGroupLabel,
+SidebarHeader,
+SidebarInset,
+SidebarMenu,
+SidebarMenuButton,
+SidebarMenuItem,
+SidebarProvider,
+SidebarTrigger,
+useSidebar
 }

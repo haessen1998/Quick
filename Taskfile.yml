@@ -3,7 +3,7 @@ version: '3'
 env:
   # Quick-specific runtime endpoint. main.go applies the same defaults to
   # packaged binaries; explicit process environment values still win.
-  WAILS_MCP: "1"
+
   QUICK_MCP_HOST: "127.0.0.1"
   QUICK_MCP_PORT: "43122"
 

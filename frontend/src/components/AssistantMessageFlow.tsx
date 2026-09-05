@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from "react"
-import { BookOpen, BrainCircuit, Check, CheckCircle2, ChevronDown, CircleAlert, Clipboard, Code2, LoaderCircle, ShieldQuestion, Sparkles } from "lucide-react"
-import { getToolName, isToolUIPart, type UIMessage } from "ai"
+import { uiText } from "@/lib/i18n"
+import { getToolName,isToolUIPart,type UIMessage } from "ai"
+import { BookOpen,BrainCircuit,Check,CheckCircle2,ChevronDown,CircleAlert,Clipboard,Code2,LoaderCircle,ShieldQuestion,Sparkles } from "lucide-react"
+import { useEffect,useMemo,useRef,useState } from "react"
 
 import { MarkdownRenderer } from "@/components/MarkdownRenderer"
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
+import { Accordion,AccordionContent,AccordionItem,AccordionTrigger } from "@/components/ui/accordion"
 import { writeClipboard } from "@/lib/clipboard"
 import { cn } from "@/lib/utils"
 
@@ -44,7 +45,7 @@ function CopyValueButton({ value }: { value: string }) {
         setCopied(true)
         window.setTimeout(() => setCopied(false), 1200)
       }}
-      aria-label="复制内容"
+      aria-label={uiText("复制内容")}
     >
       {copied ? <Check className="size-3.5 text-emerald-600" /> : <Clipboard className="size-3.5" />}
     </button>
@@ -160,22 +161,22 @@ export function AssistantMessageFlow({ message, streaming }: { message: UIMessag
           {streaming ? <LoaderCircle className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block font-medium text-foreground">{streaming ? "正在处理" : "执行过程"}</span>
+          <span className="block font-medium text-foreground">{streaming ? uiText("正在处理") : uiText("执行过程")}</span>
           <span className="mt-0.5 block truncate text-[10px] text-muted-foreground">
-            {toolCount ? completedTools + "/" + toolCount + " 个工具已完成" : reasoningCount ? "模型思考过程" : sourceParts.length + " 个引用来源"}
-            {sourceParts.length && (toolCount || reasoningCount) ? " · " + sourceParts.length + " 个来源" : ""}
+            {toolCount ? completedTools + "/" + toolCount + uiText(" 个工具已完成") : reasoningCount ? uiText("模型思考过程") : sourceParts.length + uiText(" 个引用来源")}
+            {sourceParts.length && (toolCount || reasoningCount) ? " · " + sourceParts.length + uiText(" 个来源") : ""}
           </span>
         </span>
         {!streaming && (failedTools
-          ? <span className="rounded-full bg-destructive/10 px-2 py-1 text-[10px] font-medium text-destructive">{failedTools} 个异常</span>
-          : <span className="rounded-full bg-emerald-500/10 px-2 py-1 text-[10px] font-medium text-emerald-700 dark:text-emerald-300">完成</span>)}
+          ? <span className="rounded-full bg-destructive/10 px-2 py-1 text-[10px] font-medium text-destructive">{failedTools} {uiText("个异常")}</span>
+          : <span className="rounded-full bg-emerald-500/10 px-2 py-1 text-[10px] font-medium text-emerald-700 dark:text-emerald-300">{uiText("完成")}</span>)}
         <ChevronDown className={cn("size-4 shrink-0 text-muted-foreground transition-transform duration-200", processOpen && "rotate-180")} />
       </button>
 
       {processOpen && <Accordion id={detailsID} type="multiple" value={expanded} onValueChange={setExpanded} className="animate-in fade-in slide-in-from-top-1 border-t border-border/60 px-1.5 py-1 duration-150">
         {groups.map((group) => (
           <div key={group.step}>
-            {groups.length > 1 && <div className="flex items-center gap-2 px-2.5 pb-1 pt-2 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground"><span className="size-1.5 rounded-full bg-primary/55" />步骤 {group.step}</div>}
+            {groups.length > 1 && <div className="flex items-center gap-2 px-2.5 pb-1 pt-2 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground"><span className="size-1.5 rounded-full bg-primary/55" />{uiText("步骤")}{group.step}</div>}
             {group.items.map(({ part, index }) => {
               if (part.type === "reasoning") {
                 const id = "reasoning-" + (part.id ?? index)
@@ -187,16 +188,16 @@ export function AssistantMessageFlow({ message, streaming }: { message: UIMessag
                         {thinking ? <LoaderCircle className="size-3.5 animate-spin" /> : <BrainCircuit className="size-3.5" />}
                       </span>
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate text-xs font-medium text-foreground">{thinking ? "正在思考" : "思考过程"}</span>
-                        <span className="mt-0.5 block truncate text-[10px] font-normal text-muted-foreground">{part.text ? part.text.replace(/\s+/g, " ").slice(0, 80) : "当前 Provider 未返回可显示的思考文本"}</span>
+                        <span className="block truncate text-xs font-medium text-foreground">{thinking ? uiText("正在思考") : uiText("思考过程")}</span>
+                        <span className="mt-0.5 block truncate text-[10px] font-normal text-muted-foreground">{part.text ? part.text.replace(/\s+/g, " ").slice(0, 80) : uiText("当前 Provider 未返回可显示的思考文本")}</span>
                       </span>
-                      <span className="shrink-0 text-[10px] text-muted-foreground">{thinking ? "生成中" : "已完成"}</span>
+                      <span className="shrink-0 text-[10px] text-muted-foreground">{thinking ? uiText("生成中") : uiText("已完成")}</span>
                     </AccordionTrigger>
                     <AccordionContent>
                       <div className="space-y-2 rounded-lg border bg-background/75 p-3">
                         {part.text
                           ? <MarkdownRenderer value={part.text} streaming={thinking} className="text-xs leading-5" />
-                          : <p className="text-xs leading-5 text-muted-foreground">当前模型或 Provider 没有返回可展示的思考文本。部分模型只返回最终答案，或仅在开启 reasoning 配置后返回摘要。</p>}
+                          : <p className="text-xs leading-5 text-muted-foreground">{uiText("当前模型或 Provider 没有返回可展示的思考文本。部分模型只返回最终答案，或仅在开启 reasoning 配置后返回摘要。")}</p>}
                         {!part.text && part.providerMetadata && <DataPanel label="Provider Metadata" value={part.providerMetadata} />}
                       </div>
                     </AccordionContent>
@@ -215,9 +216,9 @@ export function AssistantMessageFlow({ message, streaming }: { message: UIMessag
               const error = part.state === "output-error"
                 ? part.errorText
                 : part.state === "output-denied"
-                  ? part.approval.reason || "用户拒绝了本次调用"
+                  ? part.approval.reason || uiText("用户拒绝了本次调用")
                   : part.state === "approval-responded" && !part.approval.approved
-                    ? part.approval.reason || "用户拒绝了本次调用"
+                    ? part.approval.reason || uiText("用户拒绝了本次调用")
                     : undefined
 
               return (
@@ -239,10 +240,10 @@ export function AssistantMessageFlow({ message, streaming }: { message: UIMessag
                     <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium", status.tone === "error" ? "bg-destructive/10 text-destructive" : "bg-muted text-muted-foreground")}>{status.label}</span>
                   </AccordionTrigger>
                   <AccordionContent className="space-y-2">
-                    <DataPanel label={part.state === "input-streaming" && streaming ? "正在接收参数" : "调用参数"} value={input ?? (part.state === "input-streaming" && streaming ? "参数仍在生成…" : undefined)} />
-                    <DataPanel label={part.state === "output-available" && part.preliminary ? "临时结果" : "调用结果"} value={part.state === "output-available" && output === undefined ? "（无返回值）" : output} />
-                    <DataPanel label="错误信息" value={error} tone="error" />
-                    {part.state === "approval-requested" && <div className="flex items-start gap-2 rounded-lg border border-amber-500/25 bg-amber-500/8 p-2.5 text-[11px] leading-5 text-amber-800 dark:text-amber-200"><ShieldQuestion className="mt-0.5 size-3.5 shrink-0" />等待你确认后才会执行该工具。</div>}
+                    <DataPanel label={part.state === "input-streaming" && streaming ? uiText("正在接收参数") : uiText("调用参数")} value={input ?? (part.state === "input-streaming" && streaming ? uiText("参数仍在生成…") : undefined)} />
+                    <DataPanel label={part.state === "output-available" && part.preliminary ? uiText("临时结果") : uiText("调用结果")} value={part.state === "output-available" && output === undefined ? uiText("（无返回值）") : output} />
+                    <DataPanel label={uiText("错误信息")} value={error} tone="error" />
+                    {part.state === "approval-requested" && <div className="flex items-start gap-2 rounded-lg border border-amber-500/25 bg-amber-500/8 p-2.5 text-[11px] leading-5 text-amber-800 dark:text-amber-200"><ShieldQuestion className="mt-0.5 size-3.5 shrink-0" />{uiText("等待你确认后才会执行该工具。")}</div>}
                   </AccordionContent>
                 </AccordionItem>
               )
@@ -255,8 +256,8 @@ export function AssistantMessageFlow({ message, streaming }: { message: UIMessag
             <AccordionTrigger>
               <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-sky-500/10 text-sky-600 dark:text-sky-300"><BookOpen className="size-3.5" /></span>
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-xs font-medium text-foreground">参考来源</span>
-                <span className="mt-0.5 block truncate text-[10px] font-normal text-muted-foreground">本次回答使用了 {sourceParts.length} 个来源</span>
+                <span className="block truncate text-xs font-medium text-foreground">{uiText("参考来源")}</span>
+                <span className="mt-0.5 block truncate text-[10px] font-normal text-muted-foreground">{uiText("本次回答使用了")}{sourceParts.length} {uiText("个来源")}</span>
               </span>
               <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">{sourceParts.length}</span>
             </AccordionTrigger>
