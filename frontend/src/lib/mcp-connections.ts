@@ -61,7 +61,7 @@ async function connect(profile: MCPServerProfile, proxy: ProxySettings): Promise
   const headers = new Headers()
   let proxyId = ""
   let transport: Transport | null = null
-  const client = new Client({ name: "quick", version: "0.3.3" })
+  const client = new Client({ name: "quick", version: "0.4.0" })
   const close = async () => {
     try {
       await client.close()
