@@ -5,23 +5,25 @@ import { Info, TriangleAlert } from "lucide-react"
 import { checkInput, type PreflightInput } from "@/lib/input-preflight"
 import { useLanguage } from "@/lib/i18n"
 
-export function InputPreflight({ identity, compact = false, ...value }: PreflightInput & { identity: string; compact?: boolean }) {
+export function InputPreflight({ identity, compact = false, resetKey = 0, ...value }: PreflightInput & { identity: string; compact?: boolean; resetKey?: number }) {
   const { t } = useLanguage()
   const signature = JSON.stringify([value.input, value.expression, value.flags])
-  const previous = useRef({ identity, signature })
+  const previous = useRef({ identity, signature, resetKey })
   const [retained, setRetained] = useState<string | null>(null)
   const [result, setResult] = useState<{ key: string; message: string | null } | null>(null)
   const key = identity + signature
   useEffect(() => {
-    if (previous.current.identity !== identity && previous.current.signature === signature) {
+    if (previous.current.resetKey !== resetKey) {
+      setRetained(null)
+    } else if (previous.current.identity !== identity && previous.current.signature === signature) {
       setRetained(signature)
     } else if (previous.current.signature !== signature) {
       setRetained(null)
     }
-    previous.current = { identity, signature }
+    previous.current = { identity, signature, resetKey }
     const timer = setTimeout(() => setResult({ key, message: checkInput(value) }), 250)
     return () => clearTimeout(timer)
-  }, [identity, signature, key])
+  }, [identity, signature, key, resetKey])
   const issue = result?.key === key ? result.message : null
   const switched = retained === signature && Boolean(value.input || value.expression)
   if (compact)

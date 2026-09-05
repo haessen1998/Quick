@@ -8,7 +8,7 @@ import { camelCase, constantCase, dotCase, kebabCase, pascalCase, snakeCase } fr
 import { XMLBuilder, XMLParser, XMLValidator } from "fast-xml-parser"
 import { AlignLeft, ArrowLeftRight, Binary, Braces, CaseSensitive, CodeXml, Hash, TextQuote } from "lucide-react"
 import Papa from "papaparse"
-import { createContext, useContext, useMemo, type ReactNode } from "react"
+import { createContext, useContext, useMemo, useState, type ReactNode } from "react"
 import { parse as parseToml, stringify as stringifyToml } from "smol-toml"
 import { toast } from "sonner"
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml"
@@ -254,6 +254,23 @@ export const textOperations = [
   { id: "stats", label: "文本统计" },
 ]
 
+export const textSamples: Record<string, string> = {
+  "trim-lines": "  apple  \n banana \n  Quick  ",
+  "remove-empty": "apple\n\nbanana\n   \nQuick",
+  dedupe: "apple\nbanana\napple\nQuick\nbanana",
+  "sort-asc": "item10\nitem2\nitem1",
+  "sort-desc": "item1\nitem10\nitem2",
+  reverse: "first\nsecond\nthird",
+  "number-lines": "Install Quick\nOpen a tool\nRun the conversion",
+  lf: "Windows line 1\r\nWindows line 2\r\n",
+  crlf: "Unix line 1\nUnix line 2\n",
+  "tabs-to-spaces": "function demo() {\n\treturn \"Quick\";\n}",
+  nfc: "Cafe\u0301 / A\u030A",
+  nfd: "Café / Å",
+  visible: "Quick Tools\tready\r\n next line ",
+  stats: "Hello Quick\n你好，世界！\n12345",
+}
+
 export const modules: ConversionModule[] = [
   {
     id: "text",
@@ -455,6 +472,24 @@ function useDataConversionPageModel() {
   const [input, setInput] = useDraftState("converter", "input", '{"name":"Quick","ready":true}')
   const [output, setOutput] = useDraftState("converter", "output", "")
   const [error, setError] = useDraftState("converter", "error", "")
+  const [sampleRevision, setSampleRevision] = useState(0)
+  const sample = moduleId === "text" ? textSamples[target] : module.samples[source]
+  const loadSample = () => {
+    if (sample === undefined) return
+    setInput(sample)
+    setOutput("")
+    setError("")
+    setSampleRevision(value => value + 1)
+  }
+  const chooseTarget = (next: string) => {
+    if (moduleId === "text" && (input === sample || !input)) {
+      setInput(textSamples[next] ?? "")
+      setSampleRevision(value => value + 1)
+    }
+    setTarget(next)
+    setOutput("")
+    setError("")
+  }
 
   useSmartInput("converter", (values) => {
     const nextModule = modules.find((item) => item.id === String(values.module ?? ""))
@@ -545,6 +580,10 @@ function useDataConversionPageModel() {
     source,
     target,
     setTarget,
+    chooseTarget,
+    sample,
+    sampleRevision,
+    loadSample,
     input,
     setInput,
     output,
