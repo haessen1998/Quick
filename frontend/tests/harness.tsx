@@ -1,3 +1,4 @@
+import { ToolRunHistory } from "../src/components/ToolRunHistory"
 import ValidationPage from "../src/pages/ValidationPage"
 import { writeClipboard } from "../src/lib/clipboard"
 import { clipboardObserver } from "../src/lib/clipboard-observer"
@@ -11,7 +12,7 @@ import { AssistantCapabilityProvider, useAssistantCapabilityRegistry } from "../
 import { LanguageProvider } from "../src/lib/i18n"
 import { ToolModels } from "../src/models/ToolModels"
 import { runWorkflow } from "../src/lib/workflow"
-import { findToolRun } from "../src/lib/tool-results"
+import { recordManualOperation, recordToolRun, replayDetails, clearToolRuns, findToolRun } from "../src/lib/tool-results"
 
 function BrokenPage() {
   throw new Error("UI review: " + "long-error-detail/".repeat(30))
@@ -55,6 +56,20 @@ function Harness() {
   }
   return (
     <>
+      <ToolRunHistory onNavigate={() => {}} />
+      <button onClick={async () => {
+        clearToolRuns()
+        await recordManualOperation("network", "cidr", () => "native result visible", { input: { operation: "cidr", cidr: "192.168.1.0/24" }, replayAction: "run" })
+        setStatus("native history ready")
+      }}>Seed native history</button>
+      <button onClick={() => {
+        clearToolRuns()
+        recordToolRun({page:"network", action:"run", startedAt:Date.now(), durationMs:1, success:true, text:"prior HTTP result", result:{success:true}}, {
+          input:{operation:"http-execute", method:"POST", url:"https://example.invalid", body:"saved body"}, result:"prior HTTP result",
+          replay:replayDetails("run", {operation:"http-execute", method:"POST", url:"https://example.invalid", body:"saved body", operationAutoApproved:true}),
+        })
+        setStatus("approval history ready")
+      }}>Seed approval history</button>
       <button onClick={async () => {
         try {
           await registry.execute("validation", "run", {mode:"regex", expression:"foo", input:"foo", flags:"m"})

@@ -12,7 +12,7 @@ import {
   type ToolEffect,
   type ToolPermissions,
 } from "./tool-policy"
-import { findToolRun, modelResult, recordToolRun } from "./tool-results"
+import { findToolRun, modelResult, recordToolRun, replayDetails } from "./tool-results"
 type CapabilityAction = (input: Record<string, unknown>, options?: ExecutionOptions) => unknown | Promise<unknown>
 export type AssistantPageCapability = { page: PageId; getContext: () => Record<string, unknown>; actions: Record<string, CapabilityAction> }
 type Approval = { effect: Exclude<ToolEffect, "local">; input: unknown; resolve: (approved: boolean) => void }
@@ -82,6 +82,8 @@ export function AssistantCapabilityProvider({
         if (!(await requestApproval(effect, { page, action, ...validated }, options.signal)))
           return { success: false, cancelled: true, executed: false }
         if (options.signal?.aborted) return { success: false, cancelled: true, executed: false }
+        const savedReplay = replayDetails(action, validated)
+        const savedInput = redactToolData(validated, 0, Infinity) as Record<string, unknown>
         const args = { ...validated, operationAutoApproved: effect !== "local" }
         const startedAt = Date.now()
         let result: unknown
@@ -103,6 +105,12 @@ export function AssistantCapabilityProvider({
           success: record.success !== false,
           text,
           result,
+        }, {
+          input: savedInput,
+          result: redactToolData(result, 0, Infinity),
+          replay: !["file-tools", "navigation", "mcp-inspector"].includes(page) && validated.operation !== "process-terminate"
+            ? savedReplay : undefined,
+          replayUnavailable: "此操作依赖当前文件、站点或连接状态，请回到工具页面确认后执行。",
         })
         await new Promise((resolve) => setTimeout(resolve, 0))
         return { ...(modelResult(result) as object), artifactId: entry.id, durationMs: entry.durationMs, success: entry.success }

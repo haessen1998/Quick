@@ -124,7 +124,7 @@ function useFileToolsPageModel() {
 
   const previewClick = async () => {
     try {
-      const result = await recordManualOperation("file-tools", "preview", () => runPreview())
+      const result = await recordManualOperation("file-tools", "preview", () => runPreview(), { input: { paths: sourcePaths, ...rules } })
       if (result.conflicts) toast.error(`发现 ${result.conflicts} 个冲突`)
       else toast.success(`预览完成，${result.ready} 个文件待重命名`)
     } catch (error) {
@@ -136,7 +136,7 @@ function useFileToolsPageModel() {
     setConfirmOpen(false)
     setBusy(true)
     try {
-      const result = await recordManualOperation("file-tools", "rename", () => ExecuteRename(requestFor(sourcePaths, rules)))
+      const result = await recordManualOperation("file-tools", "rename", () => ExecuteRename(requestFor(sourcePaths, rules)), { input: { paths: sourcePaths, ...rules } })
       setCanUndo(result.canUndo)
       toast.success(result.message)
       await loadSources(remapSourcePaths(sourcePaths, result.items))
@@ -150,7 +150,7 @@ function useFileToolsPageModel() {
   const undo = async () => {
     setBusy(true)
     try {
-      const result = await recordManualOperation("file-tools", "undo", () => UndoLastRename())
+      const result = await recordManualOperation("file-tools", "undo", () => UndoLastRename(), { input: { operation: "undo", paths: sourcePaths }, replayUnavailable: "撤销针对当前最近一次重命名，不能重放历史撤销。" })
       result.success ? toast.success(result.message) : toast.info(result.message)
       setCanUndo(result.canUndo)
       if (sourcePaths.length) await loadSources(remapSourcePaths(sourcePaths, result.items))
@@ -280,7 +280,7 @@ function useFileToolsPageModel() {
     previewClick,
     execute,
     undo,
-    inspectFiles: (...args: Parameters<typeof inspectFiles>) => recordManualOperation("file-tools", "inspect", () => inspectFiles(...args)),
+    inspectFiles: (...args: Parameters<typeof inspectFiles>) => recordManualOperation("file-tools", "inspect", () => inspectFiles(...args), { input: { paths: sourcePaths, recursive: rules.recursive, algorithm: args[0] ?? digestAlgorithm } }),
     rootLabel,
   }
 }

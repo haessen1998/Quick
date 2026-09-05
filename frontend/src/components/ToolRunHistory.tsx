@@ -1,3 +1,4 @@
+import { useAssistantCapabilityRegistry } from "@/lib/assistant-capabilities"
 import { historyTargets } from "@/lib/history-targets"
 import { writeClipboard } from "@/lib/clipboard"
 import { toast } from "sonner"
@@ -16,12 +17,39 @@ import {
 import { useLanguage } from "@/lib/i18n"
 import { PAGE_LABELS, type PageId } from "@/lib/pages"
 import { sendSmartInput } from "@/lib/smart-input"
-import { clearToolRuns, useToolRuns } from "@/lib/tool-results"
+import { clearToolRuns, useToolRuns, toolRunDetails } from "@/lib/tool-results"
 import { History, CircleCheck, CircleAlert } from "lucide-react"
-import { useMemo, useState } from "react"
+import { useMemo, useState, useRef } from "react"
 export function ToolRunHistory({ onNavigate }: { onNavigate: (page: PageId) => void }) {
   const { t } = useLanguage()
   const runs = useToolRuns()
+  const registry = useAssistantCapabilityRegistry()
+  const [replaying, setReplaying] = useState(false)
+  const busy = useRef(false)
+  const replay = async (id: string, page: PageId) => {
+    const saved = toolRunDetails(id)?.replay
+    if (!saved || busy.current) return
+    busy.current = true
+    setReplaying(true)
+    setOpen(false)
+    try {
+      const result = (await registry.execute(page, saved.action, structuredClone(saved.input))) as {
+        success?: boolean
+        cancelled?: boolean
+      }
+      if (result.cancelled) toast.info(t("已取消重放"))
+      else {
+        onNavigate(page)
+        result.success === false ? toast.error(t("重放失败，请查看执行结果")) : toast.success(t("重放完成"))
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error))
+    } finally {
+      busy.current = false
+      setReplaying(false)
+      setOpen(true)
+    }
+  }
   const targets = useMemo(() => new Map(runs.map((run) => [run.id, historyTargets(run)])), [runs])
   const [open, setOpen] = useState(false)
   return (
@@ -36,7 +64,7 @@ export function ToolRunHistory({ onNavigate }: { onNavigate: (page: PageId) => v
         <DialogContent className="flex max-w-3xl flex-col overflow-hidden">
           <DialogHeader>
             <DialogTitle>{t("执行记录")}</DialogTitle>
-            <DialogDescription>{t("结果仅保留在当前应用会话，可继续交给其他工具。")}</DialogDescription>
+            <DialogDescription>{t("参数和结果仅保留在当前会话。重放会恢复当次参数并重新执行，敏感操作仍需确认。")}</DialogDescription>
           </DialogHeader>
           <DialogBody className="space-y-3">
             {runs.map((run) => (
@@ -52,12 +80,34 @@ export function ToolRunHistory({ onNavigate }: { onNavigate: (page: PageId) => v
                   </span>
                   <span className="ml-auto text-xs text-muted-foreground">{run.durationMs} ms</span>
                 </div>
-                <pre
-                  data-i18n-skip
-                  className="my-3 max-h-36 overflow-auto whitespace-pre-wrap break-all rounded-lg bg-muted/40 p-3 text-xs leading-5"
-                >
-                  {run.transferable === false ? t(run.text) : run.text.slice(0, 4000)}
-                </pre>
+                <div className="my-3 space-y-3">
+                  <div>
+                    <p className="mb-1.5 text-xs font-medium text-muted-foreground">{t("参数")}</p>
+                    <pre
+                      data-i18n-skip
+                      aria-label={t("执行参数")}
+                      className="max-h-40 overflow-auto whitespace-pre-wrap break-all rounded-md border bg-muted/30 p-3 text-xs leading-5"
+                    >
+                      {toolRunDetails(run.id)
+                        ? JSON.stringify(toolRunDetails(run.id)!.input, null, 2)
+                        : t("旧记录未保存参数，请重新执行工具。")}
+                    </pre>
+                  </div>
+                  <div>
+                    <p className="mb-1.5 text-xs font-medium text-muted-foreground">{t("结果")}</p>
+                    <pre
+                      data-i18n-skip
+                      aria-label={t("执行结果")}
+                      className="max-h-48 overflow-auto whitespace-pre-wrap break-all rounded-md border bg-muted/30 p-3 text-xs leading-5"
+                    >
+                      {run.transferable === false && toolRunDetails(run.id)
+                        ? typeof toolRunDetails(run.id)!.result === "string"
+                          ? (toolRunDetails(run.id)!.result as string)
+                          : JSON.stringify(toolRunDetails(run.id)!.result, null, 2)
+                        : run.text}
+                    </pre>
+                  </div>
+                </div>
                 <div className="flex flex-wrap gap-2 text-xs">
                   <Button
                     variant="outline"
@@ -67,7 +117,10 @@ export function ToolRunHistory({ onNavigate }: { onNavigate: (page: PageId) => v
                       setOpen(false)
                     }}
                   >
-                    {t("查看工具")}
+                    {t("打开工具")}
+                  </Button>
+                  <Button size="sm" disabled={replaying || !toolRunDetails(run.id)?.replay} onClick={() => void replay(run.id, run.page)}>
+                    {t(replaying ? "正在重放…" : "重放")}
                   </Button>
                   {run.transferable !== false && (
                     <Button
@@ -96,6 +149,11 @@ export function ToolRunHistory({ onNavigate }: { onNavigate: (page: PageId) => v
                     </Button>
                   ))}
                 </div>
+                {!toolRunDetails(run.id)?.replay && (
+                  <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                    {t(toolRunDetails(run.id)?.replayUnavailable ?? "旧记录未保存参数，无法重放。")}
+                  </p>
+                )}
               </article>
             ))}
             {!runs.length && (
@@ -109,7 +167,7 @@ export function ToolRunHistory({ onNavigate }: { onNavigate: (page: PageId) => v
           </DialogBody>
           {runs.length > 0 && (
             <DialogFooter>
-              <Button variant="outline" size="sm" onClick={clearToolRuns}>
+              <Button variant="outline" size="sm" disabled={replaying} onClick={clearToolRuns}>
                 {t("清空记录")}
               </Button>
             </DialogFooter>

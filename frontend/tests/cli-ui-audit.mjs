@@ -94,7 +94,7 @@ try {
   })
   code(async (page) => {
     const dialog = page.getByRole("dialog")
-    await dialog.getByRole("button", { name: "查看工具", exact: true }).first().waitFor()
+    await dialog.getByRole("button", { name: "打开工具", exact: true }).first().waitFor()
     await page.screenshot({ animations: "disabled", path: "output/playwright/history-filled.png" })
     await dialog.getByRole("button", { name: "清空记录", exact: true }).click()
     await page.getByText("执行工具后显示记录", { exact: true }).waitFor()

@@ -508,7 +508,7 @@ function useMCPInspectorPageModel({
     try {
       const args = rawMode ? JSON.parse(rawArguments) : argumentsValue
       if (!args || Array.isArray(args) || typeof args !== "object") throw new Error("工具参数必须是 JSON 对象")
-      const response = await recordManualOperation("mcp-inspector", selectedTool.name, () => leaseRef.current!.connection.call(selectedTool.name, args))
+      const response = await recordManualOperation("mcp-inspector", selectedTool.name, () => leaseRef.current!.connection.call(selectedTool.name, args), { input: { tool: selectedTool.name, arguments: args }, replayUnavailable: "请在 MCP 调试页面确认当前连接与参数后调用。" })
       setResult(response)
       addHistory("tools/call", startedAt, !response.isError, selectedTool.name, { arguments: args, result: response })
     } catch (error) {
