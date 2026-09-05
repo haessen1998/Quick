@@ -184,13 +184,8 @@ export function FormatterModelProvider({ children }: { children: ReactNode }) {
       assistantPage="formatter"
       activeToolOptions={{
         "json-format": (
-          <label className="flex cursor-pointer items-center justify-between gap-4 rounded-lg border bg-background px-3 py-2.5 sm:max-w-md">
-            <span className="min-w-0">
-              <span className="block text-xs font-medium">{uiText("展开嵌套 JSON 字符串")}</span>
-              <span className="mt-0.5 block text-[11px] leading-4 text-muted-foreground">
-                {uiText("递归识别字符串中的 JSON 对象和数组，并转换为可缩进的结构。")}
-              </span>
-            </span>
+          <label title={uiText("递归识别字符串中的 JSON 对象和数组，并转换为可缩进的结构。")} className="mr-2 flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
+            <span>{uiText("展开嵌套 JSON 字符串")}</span>
             <Switch checked={formatEmbeddedJSON} onCheckedChange={setFormatEmbeddedJSON} aria-label={uiText("展开嵌套 JSON 字符串")} />
           </label>
         ),

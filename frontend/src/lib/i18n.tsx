@@ -8,6 +8,12 @@ export type AppLanguage = "zh-CN" | "en-US"
 const STORAGE_KEY = "quick-language"
 
 const ENGLISH: Record<string, string> = {
+  "格式化 JSON Schema": "Format JSON Schema",
+  "JSON Schema 格式化失败，已保留原内容。可请小Q修复。": "Could not format JSON Schema. Original content was kept; ask Quick AI to repair it.",
+  "输入格式检查": "Input format check",
+  "等待输入内容": "Waiting for input",
+  "发送到 YAML 格式化": "Send to YAML formatter",
+  "发送到 XML 格式化": "Send to XML formatter",
   "调整匹配行列宽": "Resize matching columns",
   "调整匹配行高度": "Resize matching row height",
   "调整替换行列宽": "Resize replacement columns",

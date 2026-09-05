@@ -1,3 +1,6 @@
+import { historyTargets } from "@/lib/history-targets"
+import { writeClipboard } from "@/lib/clipboard"
+import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Empty, EmptyMedia, EmptyDescription } from "@/components/ui/empty"
 import {
@@ -15,23 +18,17 @@ import { PAGE_LABELS, type PageId } from "@/lib/pages"
 import { sendSmartInput } from "@/lib/smart-input"
 import { clearToolRuns, useToolRuns } from "@/lib/tool-results"
 import { History, CircleCheck, CircleAlert } from "lucide-react"
-import { useState } from "react"
+import { useMemo, useState } from "react"
 export function ToolRunHistory({ onNavigate }: { onNavigate: (page: PageId) => void }) {
   const { t } = useLanguage()
   const runs = useToolRuns()
+  const targets = useMemo(() => new Map(runs.map((run) => [run.id, historyTargets(run)])), [runs])
   const [open, setOpen] = useState(false)
   return (
     <>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogTrigger asChild>
-          <Button
-            type="button"
-            variant="outline"
-            size="default"
-            data-wails-no-drag
-            aria-haspopup="dialog"
-            aria-label={t("执行记录")}
-          >
+          <Button type="button" variant="outline" size="default" data-wails-no-drag aria-haspopup="dialog" aria-label={t("执行记录")}>
             <History className="size-4" />
             {runs.length > 0 && <span className="text-xs tabular-nums">{runs.length}</span>}
           </Button>
@@ -72,30 +69,32 @@ export function ToolRunHistory({ onNavigate }: { onNavigate: (page: PageId) => v
                   >
                     {t("查看工具")}
                   </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={run.transferable === false}
-                    onClick={() => {
-                      sendSmartInput("formatter", { operation: "json-format", input: run.text })
-                      onNavigate("formatter")
-                      setOpen(false)
-                    }}
-                  >
-                    {t("发送到 JSON 格式化")}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={run.transferable === false}
-                    onClick={() => {
-                      sendSmartInput("converter", { module: "standard", source: "json", target: "yaml", input: run.text })
-                      onNavigate("converter")
-                      setOpen(false)
-                    }}
-                  >
-                    JSON → YAML
-                  </Button>
+                  {run.transferable !== false && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={async () => {
+                        await writeClipboard(run.text)
+                        toast.success(t("已复制"))
+                      }}
+                    >
+                      {t("复制结果")}
+                    </Button>
+                  )}
+                  {targets.get(run.id)?.map((target) => (
+                    <Button
+                      key={target.label}
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        sendSmartInput(target.page, target.payload)
+                        onNavigate(target.page)
+                        setOpen(false)
+                      }}
+                    >
+                      {t(target.label)}
+                    </Button>
+                  ))}
                 </div>
               </article>
             ))}
