@@ -8,6 +8,10 @@ export type AppLanguage = "zh-CN" | "en-US"
 const STORAGE_KEY = "quick-language"
 
 const ENGLISH: Record<string, string> = {
+  "调整匹配行列宽": "Resize matching columns",
+  "调整匹配行高度": "Resize matching row height",
+  "调整替换行列宽": "Resize replacement columns",
+  "调整替换行高度": "Resize replacement row height",
   "调整左右区域": "Resize columns",
   "调整上下区域": "Resize rows",
   "生成代码": "Generated code",

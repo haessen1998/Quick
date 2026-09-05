@@ -1,4 +1,4 @@
-import { ResizableRegexGrid } from "@/components/ResizableRegexGrid"
+import { ResizableRegexRow } from "@/components/ResizableRegexRow"
 import { CodeEditor } from "@/components/CodeEditor"
 import { InputPreflight } from "@/components/InputPreflight"
 import { Button } from "@/components/ui/button"
@@ -90,94 +90,98 @@ export function RegexWorkspace({ model }: { model: ReturnType<typeof useValidati
           {error}
         </div>
       )}
-      <ResizableRegexGrid>
-        <section aria-label={uiText("原始文本")} className="flex min-h-0 min-w-0 flex-col border-b md:border-r">
-          <h2 className={cellHeader}>{uiText("原始文本")}</h2>
-          <CodeEditor
-            aria-label={uiText("待校验数据")}
-            fill
-            className="h-56 resize-none md:h-full"
-            value={input}
-            onChange={(event) => setInput(event.target.value)}
-            spellCheck={false}
-          />
-        </section>
-        <section aria-label={uiText("匹配结果")} className="flex min-h-0 min-w-0 flex-col border-b">
-          <h2 className={cellHeader}>{uiText("匹配结果")}</h2>
-          <pre
-            aria-label={uiText("匹配结果")}
-            className="h-56 min-h-0 md:h-auto md:flex-1 overflow-auto whitespace-pre-wrap break-all bg-muted/20 p-4 font-mono text-sm leading-6"
-          >
-            {matchResult ?? t("执行后显示结果")}
-          </pre>
-        </section>
-        <section aria-label={uiText("匹配高亮与替换")} className="flex min-h-0 min-w-0 flex-col border-b md:border-r md:border-b-0">
-          <h2 className={cellHeader}>{uiText("匹配高亮与替换")}</h2>
-          <div className="flex h-80 min-h-0 flex-col gap-3 overflow-auto p-4 md:h-auto md:flex-1">
+      <div data-slot="regex-grid" className="space-y-4 p-4">
+        <ResizableRegexRow row="match">
+          <section aria-label={uiText("原始文本")} className="flex min-h-0 min-w-0 flex-col border-b md:border-r md:border-b-0">
+            <h2 className={cellHeader}>{uiText("原始文本")}</h2>
+            <CodeEditor
+              aria-label={uiText("待校验数据")}
+              fill
+              className="h-56 resize-none md:h-full"
+              value={input}
+              onChange={(event) => setInput(event.target.value)}
+              spellCheck={false}
+            />
+          </section>
+          <section aria-label={uiText("匹配结果")} className="flex min-h-0 min-w-0 flex-col">
+            <h2 className={cellHeader}>{uiText("匹配结果")}</h2>
             <pre
-              aria-label={uiText("匹配高亮")}
-              className="min-h-12 flex-1 overflow-auto whitespace-pre-wrap break-all font-mono text-sm leading-6"
+              aria-label={uiText("匹配结果")}
+              className="h-56 min-h-0 md:h-auto md:flex-1 overflow-auto whitespace-pre-wrap break-all bg-muted/20 p-4 font-mono text-sm leading-6"
             >
-              {previewError
-                ? t(previewError)
-                : previewRunning
-                  ? uiText("正在预览…")
-                  : highlighted.map((segment, index) =>
-                      segment.match ? (
-                        <mark key={index} className="rounded bg-amber-300/70 text-foreground">
-                          {segment.value}
-                        </mark>
-                      ) : (
-                        <span key={index}>{segment.value}</span>
-                      ),
-                    )}
+              {matchResult ?? t("执行后显示结果")}
             </pre>
-            <label className="block space-y-2 text-xs font-medium">
-              <span>{uiText("替换为")}</span>
-              <textarea
-                aria-label={uiText("替换为")}
-                className={cn(inputClass, "h-16 resize-none overflow-auto focus-visible:ring-0 focus-visible:border-ring")}
-                value={replacement}
-                onChange={(event) => setReplacement(event.target.value)}
-                placeholder={uiText("输入替换内容，例如 bar；留空则删除匹配内容")}
-                spellCheck={false}
-              />
-            </label>
-            <p className="text-xs leading-relaxed text-muted-foreground">
-              {uiText("支持 $1、$<name>，留空删除匹配内容；勾选 g 替换全部。")}
-            </p>
-            <div>
-              <Button disabled={running && activeAction !== "replace"} onClick={() => void run("replace")}>
-                {activeAction === "replace" ? <Square /> : <Play />}
-                {uiText(activeAction === "replace" ? "停止替换" : "执行替换")}
+          </section>
+        </ResizableRegexRow>
+        <ResizableRegexRow row="replace">
+          <section aria-label={uiText("匹配高亮与替换")} className="flex min-h-0 min-w-0 flex-col border-b md:border-r md:border-b-0">
+            <h2 className={cellHeader}>{uiText("匹配高亮与替换")}</h2>
+            <div className="flex h-80 min-h-0 flex-col gap-3 overflow-auto p-4 md:h-auto md:flex-1">
+              <pre
+                aria-label={uiText("匹配高亮")}
+                className="min-h-12 flex-1 overflow-auto whitespace-pre-wrap break-all font-mono text-sm leading-6"
+              >
+                {previewError
+                  ? t(previewError)
+                  : previewRunning
+                    ? uiText("正在预览…")
+                    : highlighted.map((segment, index) =>
+                        segment.match ? (
+                          <mark key={index} className="rounded bg-amber-300/70 text-foreground">
+                            {segment.value}
+                          </mark>
+                        ) : (
+                          <span key={index}>{segment.value}</span>
+                        ),
+                      )}
+              </pre>
+              <label className="block space-y-2 text-xs font-medium">
+                <span>{uiText("替换为")}</span>
+                <textarea
+                  aria-label={uiText("替换为")}
+                  className={cn(inputClass, "h-16 resize-none overflow-auto focus-visible:ring-0 focus-visible:border-ring")}
+                  value={replacement}
+                  onChange={(event) => setReplacement(event.target.value)}
+                  placeholder={uiText("输入替换内容，例如 bar；留空则删除匹配内容")}
+                  spellCheck={false}
+                />
+              </label>
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                {uiText("支持 $1、$<name>，留空删除匹配内容；勾选 g 替换全部。")}
+              </p>
+              <div>
+                <Button disabled={running && activeAction !== "replace"} onClick={() => void run("replace")}>
+                  {activeAction === "replace" ? <Square /> : <Play />}
+                  {uiText(activeAction === "replace" ? "停止替换" : "执行替换")}
+                </Button>
+              </div>
+            </div>
+          </section>
+          <section aria-label={uiText("替换结果")} className="flex min-h-0 min-w-0 flex-col">
+            <div className={cellHeader}>
+              <h2>{uiText("替换结果")}</h2>
+              <Button
+                variant="ghost"
+                size="xs"
+                disabled={replaceResult === null}
+                onClick={async () => {
+                  await writeClipboard(replaceResult ?? "")
+                  toast.success(t("已复制"))
+                }}
+              >
+                <Copy />
+                {uiText("复制结果")}
               </Button>
             </div>
-          </div>
-        </section>
-        <section aria-label={uiText("替换结果")} className="flex min-h-0 min-w-0 flex-col">
-          <div className={cellHeader}>
-            <h2>{uiText("替换结果")}</h2>
-            <Button
-              variant="ghost"
-              size="xs"
-              disabled={replaceResult === null}
-              onClick={async () => {
-                await writeClipboard(replaceResult ?? "")
-                toast.success(t("已复制"))
-              }}
+            <pre
+              aria-label={uiText("替换结果")}
+              className="h-80 min-h-0 md:h-auto md:flex-1 overflow-auto whitespace-pre-wrap break-all bg-muted/20 p-4 font-mono text-sm leading-6"
             >
-              <Copy />
-              {uiText("复制结果")}
-            </Button>
-          </div>
-          <pre
-            aria-label={uiText("替换结果")}
-            className="h-80 min-h-0 md:h-auto md:flex-1 overflow-auto whitespace-pre-wrap break-all bg-muted/20 p-4 font-mono text-sm leading-6"
-          >
-            {replaceResult === null ? t("执行后显示结果") : replaceResult || uiText("替换结果为空")}
-          </pre>
-        </section>
-      </ResizableRegexGrid>
+              {replaceResult === null ? t("执行后显示结果") : replaceResult || uiText("替换结果为空")}
+            </pre>
+          </section>
+        </ResizableRegexRow>
+      </div>
     </div>
   )
 }

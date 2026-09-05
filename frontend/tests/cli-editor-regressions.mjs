@@ -113,7 +113,7 @@ try {
     await page.getByRole("textbox", { name: "替换为", exact: true }).fill("[$<host>]")
     if (await page.getByRole("textbox", { name: "替换为", exact: true }).evaluate(el => getComputedStyle(el).resize) !== "none") throw Error("Replacement input can resize")
     const replaceGroup = page.getByRole("region", { name: "替换结果", exact: true })
-    const cells = await page.locator('[data-slot="regex-grid"] > section').evaluateAll(els => els.map(el => { const r = el.getBoundingClientRect(); return { x:r.x, y:r.y, width:r.width, height:r.height, name:el.getAttribute("aria-label") } }))
+    const cells = await page.locator('[data-slot="regex-row"] > section').evaluateAll(els => els.map(el => { const r = el.getBoundingClientRect(); return { x:r.x, y:r.y, width:r.width, height:r.height, name:el.getAttribute("aria-label") } }))
     if (cells.map(c => c.name).join("|") !== "原始文本|匹配结果|匹配高亮与替换|替换结果") throw Error("Wrong quadrant order")
     if (Math.abs(cells[0].y-cells[1].y)>1 || Math.abs(cells[2].y-cells[3].y)>1 || cells[1].x<=cells[0].x || cells[2].y<=cells[0].y) throw Error("Not a 2x2 grid")
     await page.getByRole("button", { name: "执行替换", exact: true }).click()
@@ -143,9 +143,14 @@ try {
     await page.getByRole("button", { name: "执行替换", exact: true }).click()
     await page.waitForFunction(() => document.querySelector('pre[aria-label="替换结果"]')?.textContent === "bar foo")
     if (await page.locator('pre[aria-label="匹配结果"]').textContent() !== previousMatches) throw Error("Replacement overwrote matches")
-    const vertical = page.getByRole("separator", { name: "调整左右区域", exact: true })
-    const horizontal = page.getByRole("separator", { name: "调整上下区域", exact: true })
-    for (const [handle, dx, dy] of [[vertical, 60, 0], [horizontal, 0, -50]]) {
+    const vertical = page.getByRole("separator", { name: "调整匹配行列宽", exact: true })
+    const horizontal = page.getByRole("separator", { name: "调整匹配行高度", exact: true })
+    const otherVertical = page.getByRole("separator", { name: "调整替换行列宽", exact: true })
+    const otherHorizontal = page.getByRole("separator", { name: "调整替换行高度", exact: true })
+    for (const [handle, dx, dy] of [[vertical, 50, 0], [horizontal, 0, 50], [otherVertical, -50, 0], [otherHorizontal, 0, 50]]) {
+      const otherRow = page.locator(`[data-slot="regex-row"][data-row="${handle === vertical || handle === horizontal ? "replace" : "match"}"]`)
+      const otherBefore = await otherRow.boundingBox()
+      const otherWidthBefore = await otherRow.locator(":scope > section").first().boundingBox()
       await handle.scrollIntoViewIfNeeded()
       const before = Number(await handle.getAttribute("aria-valuenow"))
       const box = await handle.boundingBox()
@@ -153,14 +158,17 @@ try {
       await page.mouse.down()
       await page.mouse.move(box.x + box.width / 2 + dx, box.y + box.height / 2 + dy, {steps:6})
       await page.mouse.up()
-      if (Math.abs(Number(await handle.getAttribute("aria-valuenow")) - before) < 3) throw Error("Grid divider did not move")
+      if (Math.abs(Number(await handle.getAttribute("aria-valuenow")) - before) < 3) throw Error("Row divider did not move")
+      const otherAfter = await otherRow.boundingBox()
+      const otherWidthAfter = await otherRow.locator(":scope > section").first().boundingBox()
+      if (Math.abs(otherAfter.height - otherBefore.height) > 1 || Math.abs(otherWidthAfter.width - otherWidthBefore.width) > 1) throw Error("Resizing changed the other row")
     }
     await vertical.focus()
     const beforeKey = Number(await vertical.getAttribute("aria-valuenow"))
     await vertical.press("ArrowLeft")
     if (Number(await vertical.getAttribute("aria-valuenow")) >= beforeKey) throw Error("Keyboard resize failed")
-    const widths = await page.locator('[data-slot="regex-grid"] > section').evaluateAll(els => els.map(el => el.getBoundingClientRect().width))
-    if (Math.abs(widths[0] - widths[2]) > 1 || Math.abs(widths[1] - widths[3]) > 1) throw Error("Rows lost column alignment")
+    const widths = await page.locator('[data-slot="regex-row"] > section').evaluateAll(els => els.map(el => el.getBoundingClientRect().width))
+    if (Math.abs(widths[0] - widths[2]) < 20) throw Error("Independent column widths were not retained")
     await page.getByRole("textbox", { name: "表达式", exact: true }).scrollIntoViewIfNeeded()
     await page.waitForFunction(() => document.querySelector('pre[aria-label="匹配高亮"]')?.textContent === "foo foo")
     await source.focus()
@@ -189,7 +197,7 @@ try {
     await page.screenshot({path:"output/playwright/regex-generated-code.png"})
   })
   console.log(
-    "PASS: gutter scroll/toggle/persistence, adaptive Mermaid panning, schema paste success/failure, 2x2 regex layout, unified editor focus, fixed replacement input, independent matching/replacement results, draggable dividers, headless generated-code display/persistence.",
+    "PASS: gutter scroll/toggle/persistence, adaptive Mermaid panning, schema paste success/failure, two independent regex rows, unified editor focus, fixed replacement input, independent matching/replacement results, independent column and height dividers, headless generated-code display/persistence.",
   )
 } finally {
   run("close")
