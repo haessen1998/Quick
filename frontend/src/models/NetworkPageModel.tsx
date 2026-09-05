@@ -535,7 +535,7 @@ function useNetworkPageModel({ proxy }: { proxy: ProxySettings }) {
       proxy.mode,
       proxy.url,
       15000,
-    ))) as unknown as HTTPResult
+    ), { input: { ...request, proxy }, replayAction: "run", replayInput: { operation: "http-execute", ...request } })) as unknown as HTTPResult
     setOutput(`${result.status || "请求失败"} · ${result.durationMs} ms\n\n${JSON.stringify(result.headers, null, 2)}\n\n${result.body}`)
     if (!result.success) toast.error("HTTP 请求失败")
   }
@@ -545,7 +545,7 @@ function useNetworkPageModel({ proxy }: { proxy: ProxySettings }) {
     setOutput("")
     try {
       if (mode === "cidr") {
-        setOutput(await recordManualOperation("network", "cidr", () => calculateCIDR(cidr)))
+        setOutput(await recordManualOperation("network", "cidr", () => calculateCIDR(cidr), { input: { operation: "cidr", cidr }, replayAction: "run" }))
         return
       }
       if (mode === "http") {
@@ -560,9 +560,9 @@ function useNetworkPageModel({ proxy }: { proxy: ProxySettings }) {
           parameters.count,
           parameters.timeoutMS,
           parameters.packetSize,
-        ))) as unknown as NetworkResult
-      } else if (mode === "dns") result = (await recordManualOperation("network", "DNSQuery", () => NetworkService.DNSQuery(host, recordType, 5000))) as unknown as NetworkResult
-      else result = (await recordManualOperation("network", "CheckPort", () => NetworkService.CheckPort(host, port, 5000))) as unknown as NetworkResult
+        ), { input: { operation: "ping", host, ...parameters }, replayAction: "run" })) as unknown as NetworkResult
+      } else if (mode === "dns") result = (await recordManualOperation("network", "DNSQuery", () => NetworkService.DNSQuery(host, recordType, 5000), { input: { operation: "dns", host, recordType }, replayAction: "run" })) as unknown as NetworkResult
+      else result = (await recordManualOperation("network", "CheckPort", () => NetworkService.CheckPort(host, port, 5000), { input: { operation: "port", host, port }, replayAction: "run" })) as unknown as NetworkResult
       setOutput(`${result.success ? "成功" : "失败"} · ${result.durationMs} ms\n\n${result.output}`)
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : String(caught)
@@ -597,7 +597,7 @@ function useNetworkPageModel({ proxy }: { proxy: ProxySettings }) {
   const findProcesses = async () => {
     setRunning(true)
     try {
-      const result = (await recordManualOperation("network", "FindProcesses", () => NetworkService.FindProcesses(processSearchType, processQuery))) as unknown as ProcessResult
+      const result = (await recordManualOperation("network", "FindProcesses", () => NetworkService.FindProcesses(processSearchType, processQuery), { input: { operation: "process-search", searchType: processSearchType, query: processQuery }, replayAction: processQuery.trim() ? "run" : undefined })) as unknown as ProcessResult
       if (!result.success) throw new Error(result.output)
       setProcesses(result.processes ?? [])
       setProcessCanTerminate(Boolean(processQuery.trim()))
@@ -616,7 +616,7 @@ function useNetworkPageModel({ proxy }: { proxy: ProxySettings }) {
     if (!processCanTerminate) return
     setTerminatingPID(process.pid)
     try {
-      const result = (await recordManualOperation("network", "TerminateProcess", () => NetworkService.TerminateProcess(process.pid))) as unknown as NetworkResult
+      const result = (await recordManualOperation("network", "TerminateProcess", () => NetworkService.TerminateProcess(process.pid), { input: { pid: process.pid, name: process.name }, replayUnavailable: "进程可能已退出或 PID 已复用，请重新查询后确认关闭。" })) as unknown as NetworkResult
       if (!result.success) throw new Error(result.output)
       setPendingTermination(null)
       toast.success(`已关闭 ${process.name}`)

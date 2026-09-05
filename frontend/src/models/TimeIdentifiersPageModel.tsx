@@ -205,7 +205,7 @@ function useTimeIdentifiersPageModel() {
 
   const runGenerator = async () => {
     try {
-      setGenerated(await recordManualOperation("time-ids", generator, () => CryptoService.GenerateIdentifier(generator, length)))
+      setGenerated(await recordManualOperation("time-ids", generator, () => CryptoService.GenerateIdentifier(generator, length), { input: { operation: "generate", generator, length }, replayAction: "run" }))
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       toast.error(t("生成失败"), { description: t(message) })
@@ -214,7 +214,7 @@ function useTimeIdentifiersPageModel() {
 
   const parseCron = async () => {
     try {
-      setCronResults(await recordManualOperation("time-ids", "cron", () => nextCronRuns(cron, cronZone)))
+      setCronResults(await recordManualOperation("time-ids", "cron", () => nextCronRuns(cron, cronZone), { input: { operation: "cron", cron, zone: cronZone }, replayAction: "run" }))
       setCronError("")
     } catch (error) {
       setCronResults([])

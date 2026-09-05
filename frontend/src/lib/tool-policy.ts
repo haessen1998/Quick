@@ -15,7 +15,7 @@ export function toolEffect(page: string, action: string, input: Record<string, u
   if (page === "navigation" && ["add", "update", "move", "batch-update", "delete"].includes(action)) return "navigation"
   return "local"
 }
-export function redactToolData(value: unknown, depth = 0): unknown {
+export function redactToolData(value: unknown, depth = 0, maxArrayItems = 100): unknown {
   if (depth > 12) return "[深层数据省略]"
   if (typeof value === "string")
     return value
@@ -24,12 +24,12 @@ export function redactToolData(value: unknown, depth = 0): unknown {
       .replace(/\b(Bearer\s+)[^\s"',]+/gi, "$1[已隐藏]")
       .replace(/((?:authorization|cookie|set-cookie|api[-_]?key|password|secret|token)\s*[=:]\s*)([^\r\n&]+)/gi, "$1[已隐藏]")
       .replace(/([?&](?:token|key|api_key|password|secret)=)[^&#\s]+/gi, "$1[已隐藏]")
-  if (Array.isArray(value)) return value.slice(0, 100).map((item) => redactToolData(item, depth + 1))
+  if (Array.isArray(value)) return value.slice(0, maxArrayItems).map((item) => redactToolData(item, depth + 1, maxArrayItems))
   if (value && typeof value === "object")
     return Object.fromEntries(
       Object.entries(value).map(([key, item]) => [
         key,
-        /authorization|cookie|api.?key|password|private.?key|secret|^env$|token/i.test(key) ? "[已隐藏]" : redactToolData(item, depth + 1),
+        /authorization|cookie|api.?key|password|private.?key|secret|^env$|token/i.test(key) ? "[已隐藏]" : redactToolData(item, depth + 1, maxArrayItems),
       ]),
     )
   return value
